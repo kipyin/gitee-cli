@@ -22,6 +22,18 @@ pub struct Label {
     pub color: Option<String>,
 }
 
+/// Gitee returns PR `head`/`base` as objects `{ ref, label, sha, repo, user }`,
+/// not plain strings (the swagger model is wrong on this point).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct PrBranch {
+    #[serde(default, rename = "ref")]
+    pub git_ref: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub sha: Option<String>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct PullRequest {
     #[serde(default)]
@@ -35,9 +47,9 @@ pub struct PullRequest {
     #[serde(default)]
     pub html_url: String,
     #[serde(default)]
-    pub head: String,
+    pub head: PrBranch,
     #[serde(default)]
-    pub base: String,
+    pub base: PrBranch,
     #[serde(default)]
     pub user: Option<UserBasic>,
     #[serde(default)]

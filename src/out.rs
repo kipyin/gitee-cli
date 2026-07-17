@@ -30,7 +30,7 @@ pub fn pr_table(items: &[PullRequest]) {
             number: p.number,
             state: p.state.clone(),
             title: p.title.clone(),
-            branch: format!("{} -> {}", p.head, p.base),
+            branch: format!("{} -> {}", p.head.git_ref, p.base.git_ref),
             author: p.user.as_ref().map(|u| u.login.clone()).unwrap_or_default(),
         })
         .collect();
@@ -67,7 +67,7 @@ pub fn issue_table(items: &[Issue]) {
 pub fn one_pr(p: &PullRequest) {
     println!(
         "!{}  {}  [{}]\n{} -> {}\n{}",
-        p.number, p.title, p.state, p.head, p.base, p.html_url
+        p.number, p.title, p.state, p.head.git_ref, p.base.git_ref, p.html_url
     );
 }
 
