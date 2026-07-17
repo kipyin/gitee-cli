@@ -2,45 +2,106 @@ use crate::error::{GiteeError, Result};
 use reqwest::blocking::Client as Http;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::time::Duration;
 
 pub struct Client {
     http: Http,
     base: String,
     token: String,
+    debug: bool,
 }
 
 impl Client {
     pub fn new(base: String, token: String) -> Self {
         let http = Http::builder()
             .gzip(true)
+            .timeout(Duration::from_secs(30))
             .user_agent("gitee-cli/0.1")
             .build()
-            .unwrap_or_default();
-        Client { http, base, token }
+            .expect("reqwest client");
+        Client {
+            http,
+            base,
+            token,
+            debug: false,
+        }
+    }
+
+    pub fn set_debug(&mut self, debug: bool) {
+        self.debug = debug;
+    }
+
+    /// Gitee accepts `Authorization: token <T>`. Sending the token in the header
+    /// keeps it out of URLs/query strings, and therefore out of reqwest error
+    /// messages and server/proxy access logs.
+    fn auth(&self) -> String {
+        format!("token {}", self.token)
     }
 
     fn full(&self, path: &str) -> String {
         format!("{}{}", self.base, path)
     }
 
-    fn check(&self, resp: reqwest::blocking::Response) -> Result<reqwest::blocking::Response> {
-        let status = resp.status().as_u16();
-        if resp.status().is_success() {
-            Ok(resp)
-        } else {
-            let msg = resp.text().unwrap_or_default();
-            Err(GiteeError::Api {
-                status,
-                message: msg,
+    /// Map a non-2xx response onto a typed error. Gitee error bodies are JSON
+    /// envelopes like `{"message":"..."}`; we extract the human message so users
+    /// see something actionable instead of a raw JSON blob. 401 and 404 get
+    /// dedicated variants for clearer guidance.
+    fn check(
+        &self,
+        resp: reqwest::blocking::Response,
+        method: &str,
+        path: &str,
+    ) -> Result<reqwest::blocking::Response> {
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp);
+        }
+        let code = status.as_u16();
+        let body = resp.text().unwrap_or_default();
+        let message = serde_json::from_str::<Value>(&body)
+            .ok()
+            .and_then(|v| {
+                v.get("message")
+                    .and_then(|m| m.as_str())
+                    .map(str::to_owned)
+                    .or_else(|| v.get("error").and_then(|m| m.as_str()).map(str::to_owned))
             })
+            .unwrap_or_else(|| {
+                let t = body.trim();
+                if t.len() > 300 {
+                    format!("{}…", &t[..300])
+                } else {
+                    t.to_string()
+                }
+            });
+        if self.debug {
+            eprintln!("<- {method} {path} -> {code}: {message}");
+        }
+        Err(match code {
+            401 => GiteeError::Unauthorized,
+            404 => GiteeError::NotFound(path.to_string()),
+            _ => GiteeError::Api {
+                status: code,
+                message,
+            },
+        })
+    }
+
+    fn trace(&self, method: &str, path: &str) {
+        if self.debug {
+            eprintln!("-> {method} {path}");
         }
     }
 
     pub fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T> {
-        let mut q: Vec<(&str, &str)> = vec![("access_token", &self.token)];
-        q.extend(query.iter().copied());
-        let resp = self.http.get(self.full(path)).query(&q).send()?;
-        self.check(resp)?.json().map_err(GiteeError::Http)
+        self.trace("GET", path);
+        let resp = self
+            .http
+            .get(self.full(path))
+            .header("Authorization", self.auth())
+            .query(query)
+            .send()?;
+        self.check(resp, "GET", path)?.json().map_err(GiteeError::Http)
     }
 
     pub fn get_paged<T: DeserializeOwned>(
@@ -54,7 +115,6 @@ impl Client {
         let per = 100;
         while out.len() < limit {
             let mut q: Vec<(&str, String)> = vec![
-                ("access_token", self.token.clone()),
                 ("page", page.to_string()),
                 ("per_page", per.to_string()),
             ];
@@ -90,27 +150,33 @@ impl Client {
         path: &str,
         form: &[(&str, &str)],
     ) -> Result<T> {
-        let mut f: Vec<(&str, &str)> = vec![("access_token", &self.token)];
-        f.extend(form.iter().copied());
+        self.trace(method, path);
         let req = match method {
             "POST" => self.http.post(self.full(path)),
             "PATCH" => self.http.patch(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req.form(&f).send()?;
-        self.check(resp)?.json().map_err(GiteeError::Http)
+        let resp = req
+            .header("Authorization", self.auth())
+            .form(form)
+            .send()?;
+        self.check(resp, method, path)?
+            .json()
+            .map_err(GiteeError::Http)
     }
 
-    /// Issue create/update require a JSON body (Gitee rejects form on these);
-    /// auth via `access_token` query param.
+    /// Issue create/update require a JSON body (Gitee rejects form on these).
     pub fn patch_json<T: DeserializeOwned>(&self, path: &str, body: &Value) -> Result<T> {
+        self.trace("PATCH", path);
         let resp = self
             .http
             .patch(self.full(path))
-            .query(&[("access_token", self.token.as_str())])
+            .header("Authorization", self.auth())
             .json(body)
             .send()?;
-        self.check(resp)?.json().map_err(GiteeError::Http)
+        self.check(resp, "PATCH", path)?
+            .json()
+            .map_err(GiteeError::Http)
     }
 
     /// For endpoints that return an empty body on success (e.g. PR review/merge).
@@ -123,14 +189,16 @@ impl Client {
     }
 
     fn send_ok(&self, method: &str, path: &str, form: &[(&str, &str)]) -> Result<()> {
-        let mut f: Vec<(&str, &str)> = vec![("access_token", &self.token)];
-        f.extend(form.iter().copied());
+        self.trace(method, path);
         let req = match method {
             "POST" => self.http.post(self.full(path)),
             "PUT" => self.http.put(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req.form(&f).send()?;
-        self.check(resp).map(|_| ())
+        let resp = req
+            .header("Authorization", self.auth())
+            .form(form)
+            .send()?;
+        self.check(resp, method, path).map(|_| ())
     }
 }

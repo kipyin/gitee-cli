@@ -109,6 +109,40 @@ pub struct Comment {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct RepoDetails {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub full_name: String,
+    #[serde(default)]
+    pub human_name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub html_url: String,
+    #[serde(default)]
+    pub ssh_url: Option<String>,
+    #[serde(default)]
+    pub clone_url: Option<String>,
+    #[serde(default)]
+    pub default_branch: Option<String>,
+    #[serde(default)]
+    pub private: Option<bool>,
+    #[serde(default)]
+    pub stargazers_count: Option<i64>,
+    #[serde(default)]
+    pub fork_count: Option<i64>,
+    #[serde(default)]
+    pub open_issues_count: Option<i64>,
+    #[serde(default)]
+    pub owner: Option<UserBasic>,
+    #[serde(default)]
+    pub parent: Option<Box<RepoDetails>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct RepoInfo {
     #[serde(default)]
     pub default_branch: Option<String>,

@@ -23,11 +23,13 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             let qref: Vec<(&str, &str)> = q.iter().map(|(k, v)| (*k, v.as_str())).collect();
             let path = format!("/repos/{o}/{r}/issues");
             let items: Vec<Issue> = ctx.client.get_paged(&path, &qref, limit)?;
-            if ctx.out.json {
-                out::json(&items);
-            } else {
-                out::issue_table(&items);
-            }
+            ctx.out.render(&items, || out::issue_table(&items));
+        }
+        IssueCmd::View { number } => {
+            let issue: Issue = ctx
+                .client
+                .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
+            ctx.out.render(&issue, || out::one_issue(&issue));
         }
         IssueCmd::Create {
             title,
@@ -49,30 +51,15 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             }
             let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
             let issue: Issue = ctx.client.post(&format!("/repos/{o}/issues"), &form)?;
-            if ctx.out.json {
-                out::json(&issue);
-            } else {
-                out::one_issue(&issue);
-            }
+            ctx.out.render(&issue, || out::one_issue(&issue));
         }
         IssueCmd::Close { number } => {
-            // Gitee quirk: PATCH /repos/{owner}/issues/{number} with JSON {repo, title, state}.
-            let cur: Issue = ctx
-                .client
-                .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
-            let body = serde_json::json!({
-                "repo": ctx.repo.name,
-                "title": cur.title,
-                "state": "closed",
-            });
-            let issue: Issue = ctx
-                .client
-                .patch_json(&format!("/repos/{o}/issues/{number}"), &body)?;
-            if ctx.out.json {
-                out::json(&issue);
-            } else {
-                out::one_issue(&issue);
-            }
+            let issue = set_state(ctx, &number, "closed")?;
+            ctx.out.render(&issue, || out::one_issue(&issue));
+        }
+        IssueCmd::Reopen { number } => {
+            let issue = set_state(ctx, &number, "open")?;
+            ctx.out.render(&issue, || out::one_issue(&issue));
         }
         IssueCmd::Link { number, pr } => {
             let cur: Issue = ctx
@@ -101,12 +88,26 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             let c: Comment = ctx
                 .client
                 .post(&format!("/repos/{o}/{r}/issues/{number}/comments"), &form)?;
-            if ctx.out.json {
-                out::json(&c);
-            } else {
-                out::comment_line(&c);
-            }
+            ctx.out.render(&c, || out::comment_line(&c));
         }
     }
     Ok(())
+}
+
+/// Gitee quirk: issue state changes are PATCH /repos/{owner}/issues/{number}
+/// with a JSON body `{repo, title, state}`. The current title must be echoed
+/// back or Gitee blanks it.
+fn set_state(ctx: &Ctx, number: &str, state: &str) -> Result<Issue> {
+    let o = ctx.repo.owner.as_str();
+    let name = &ctx.repo.name;
+    let cur: Issue = ctx
+        .client
+        .get(&format!("/repos/{o}/{name}/issues/{number}"), &[])?;
+    let body = serde_json::json!({
+        "repo": ctx.repo.name,
+        "title": cur.title,
+        "state": state,
+    });
+    ctx.client
+        .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
 }

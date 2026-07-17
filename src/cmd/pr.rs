@@ -23,11 +23,11 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             let qref: Vec<(&str, &str)> = q.iter().map(|(k, v)| (*k, v.as_str())).collect();
             let path = format!("/repos/{o}/{r}/pulls");
             let items: Vec<PullRequest> = ctx.client.get_paged(&path, &qref, limit)?;
-            if ctx.out.json {
-                out::json(&items);
-            } else {
-                out::pr_table(&items);
-            }
+            ctx.out.render(&items, || out::pr_table(&items));
+        }
+        PrCmd::View { number } => {
+            let pr: PullRequest = ctx.client.get(&format!("/repos/{o}/{r}/pulls/{number}"), &[])?;
+            ctx.out.render(&pr, || out::one_pr(&pr));
         }
         PrCmd::Create {
             title,
@@ -52,11 +52,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             }
             let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
             let pr: PullRequest = ctx.client.post(&format!("/repos/{o}/{r}/pulls"), &form)?;
-            if ctx.out.json {
-                out::json(&pr);
-            } else {
-                out::one_pr(&pr);
-            }
+            ctx.out.render(&pr, || out::one_pr(&pr));
         }
         PrCmd::Merge {
             number,
@@ -87,11 +83,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             let c: Comment = ctx
                 .client
                 .post(&format!("/repos/{o}/{r}/pulls/{number}/comments"), &form)?;
-            if ctx.out.json {
-                out::json(&c);
-            } else {
-                out::comment_line(&c);
-            }
+            ctx.out.render(&c, || out::comment_line(&c));
         }
         PrCmd::Approve { number, force } => {
             // POST /review returns an empty body on success.
@@ -105,16 +97,12 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             println!("Approved pull request !{number}");
         }
         PrCmd::Close { number } => {
-            let f: Vec<(&str, String)> = vec![("state", "closed".to_string())];
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let pr: PullRequest = ctx
-                .client
-                .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)?;
-            if ctx.out.json {
-                out::json(&pr);
-            } else {
-                out::one_pr(&pr);
-            }
+            let pr = set_state(ctx, number, "closed")?;
+            ctx.out.render(&pr, || out::one_pr(&pr));
+        }
+        PrCmd::Reopen { number } => {
+            let pr = set_state(ctx, number, "open")?;
+            ctx.out.render(&pr, || out::one_pr(&pr));
         }
         PrCmd::Link { number, issue } => {
             let pr: PullRequest = ctx
@@ -136,6 +124,16 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Flip a PR's `state` via PATCH (form-encoded; Gitee accepts form on PRs).
+fn set_state(ctx: &Ctx, number: i64, state: &str) -> Result<PullRequest> {
+    let o = ctx.repo.owner.as_str();
+    let r = ctx.repo.name.as_str();
+    let f: Vec<(&str, String)> = vec![("state", state.to_string())];
+    let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    ctx.client
+        .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)
 }
 
 fn current_branch() -> Result<String> {

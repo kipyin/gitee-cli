@@ -9,7 +9,7 @@ pub struct Repo {
 impl Repo {
     pub fn resolve(explicit: Option<&str>, remote: Option<&str>) -> Result<Repo> {
         if let Some(s) = explicit {
-            return Self::parse_pair(s);
+            return Self::from_spec(s);
         }
         let remote = remote.unwrap_or("origin");
         let url = std::process::Command::new("git")
@@ -17,12 +17,20 @@ impl Repo {
             .output()
             .map_err(|e| GiteeError::RepoResolve(format!("git: {e}")))?;
         if !url.status.success() {
-            return Err(GiteeError::RepoResolve(format!(
-                "no '{remote}' remote found"
-            )));
+            return Err(GiteeError::RepoResolve(format!("no '{remote}' remote found")));
         }
         let raw = String::from_utf8_lossy(&url.stdout);
         Self::parse_url(raw.trim())
+    }
+
+    /// Parse either an `owner/name` pair or a git URL (SSH or HTTPS).
+    pub fn from_spec(s: &str) -> Result<Repo> {
+        let s = s.trim();
+        if s.contains("://") || s.starts_with("git@") {
+            Self::parse_url(s)
+        } else {
+            Self::parse_pair(s)
+        }
     }
 
     fn parse_pair(s: &str) -> Result<Repo> {
@@ -79,5 +87,13 @@ mod tests {
         let r = Repo::parse_pair("oschina/git").expect("should parse");
         assert_eq!(r.owner, "oschina");
         assert_eq!(r.name, "git");
+    }
+
+    #[test]
+    fn from_spec_dispatches() {
+        let a = Repo::from_spec("oschina/git").unwrap();
+        assert_eq!(a.owner, "oschina");
+        let b = Repo::from_spec("git@gitee.com:oschina/git.git").unwrap();
+        assert_eq!(b.owner, "oschina");
     }
 }
