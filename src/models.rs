@@ -22,6 +22,19 @@ pub struct Label {
     pub color: Option<String>,
 }
 
+/// Minimal repo reference embedded in PR `head`/`base` (includes clone URLs on live API).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct PrRepoRef {
+    #[serde(default)]
+    pub full_name: Option<String>,
+    #[serde(default)]
+    pub html_url: Option<String>,
+    #[serde(default)]
+    pub ssh_url: Option<String>,
+    #[serde(default)]
+    pub clone_url: Option<String>,
+}
+
 /// Gitee returns PR `head`/`base` as objects `{ ref, label, sha, repo, user }`,
 /// not plain strings (the swagger model is wrong on this point).
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -32,6 +45,51 @@ pub struct PrBranch {
     pub label: Option<String>,
     #[serde(default)]
     pub sha: Option<String>,
+    #[serde(default)]
+    pub repo: Option<PrRepoRef>,
+}
+
+/// Gitee nests the unified diff under `patch.diff` (not a plain string).
+#[derive(Deserialize, Clone, Debug, Default)]
+struct FilePatchBody {
+    #[serde(default)]
+    diff: Option<String>,
+}
+
+fn deserialize_patch<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<FilePatchBody> = Option::deserialize(deserializer)?;
+    Ok(value.and_then(|p| p.diff.filter(|d| !d.is_empty())))
+}
+
+fn serialize_patch<S>(patch: &Option<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    patch.serialize(serializer)
+}
+
+/// One changed file from GET /repos/{owner}/{repo}/pulls/{number}/files.
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct FileDiff {
+    #[serde(default)]
+    pub sha: Option<String>,
+    #[serde(default)]
+    pub filename: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_patch", serialize_with = "serialize_patch")]
+    pub patch: Option<String>,
+    #[serde(default)]
+    pub additions: Option<String>,
+    #[serde(default)]
+    pub deletions: Option<String>,
+    #[serde(default)]
+    pub raw_url: Option<String>,
+    #[serde(default)]
+    pub blob_url: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]

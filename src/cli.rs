@@ -53,6 +53,14 @@ pub enum PrCmd {
     View {
         number: i64,
     },
+    /// Show the unified diff of a pull request.
+    Diff {
+        number: i64,
+    },
+    /// Fetch and check out a pull request branch locally.
+    Checkout {
+        number: i64,
+    },
     Create {
         #[arg(long)]
         title: String,

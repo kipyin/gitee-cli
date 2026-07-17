@@ -1,6 +1,7 @@
-use gitee::models::{Issue, PullRequest, RepoDetails};
+use gitee::models::{FileDiff, Issue, PullRequest, RepoDetails};
 
 const PULL_REQUEST_JSON: &str = include_str!("fixtures/pull_request.json");
+const PR_FILE_DIFF_JSON: &str = include_str!("fixtures/pr_file_diff.json");
 const ISSUE_JSON: &str = include_str!("fixtures/issue.json");
 const REPO_LIST_JSON: &str = include_str!("fixtures/repo_list.json");
 
@@ -14,6 +15,18 @@ fn fixture_pull_request_deserializes() {
     assert_eq!(pr.base.git_ref, "master");
     assert_eq!(pr.user.as_ref().expect("user").login, "dev1");
     assert_eq!(pr.labels.as_ref().expect("labels").len(), 1);
+}
+
+#[test]
+fn fixture_pr_file_diff_deserializes() {
+    let files: Vec<FileDiff> = serde_json::from_str(PR_FILE_DIFF_JSON).expect("file diff json");
+    assert_eq!(files.len(), 2);
+    assert_eq!(files[0].filename, "pom.xml");
+    assert_eq!(files[0].additions.as_deref(), Some("5"));
+    assert_eq!(files[0].deletions.as_deref(), Some("6"));
+    assert!(files[0].patch.as_ref().expect("patch").contains("3.5.15"));
+    assert_eq!(files[1].filename, "logo.png");
+    assert!(files[1].patch.is_none());
 }
 
 #[test]

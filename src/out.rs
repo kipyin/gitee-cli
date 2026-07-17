@@ -137,7 +137,6 @@ pub fn magenta(s: &str) -> String {
 pub fn yellow(s: &str) -> String {
     paint("33", s)
 }
-#[allow(dead_code)]
 pub fn cyan(s: &str) -> String {
     paint("36", s)
 }
@@ -197,6 +196,57 @@ pub fn one_pr(p: &PullRequest) {
         if !b.is_empty() {
             println!("\n{b}");
         }
+    }
+}
+
+/// Colorize one line of unified diff output.
+pub fn color_diff_line(line: &str) -> String {
+    if line.starts_with("@@") {
+        cyan(line)
+    } else if line.starts_with('+') && !line.starts_with("+++") {
+        green(line)
+    } else if line.starts_with('-') && !line.starts_with("---") {
+        red(line)
+    } else {
+        line.to_string()
+    }
+}
+
+pub fn pr_diff(files: &[FileDiff]) {
+    if files.is_empty() {
+        println!("(no changed files)");
+        return;
+    }
+    for (i, f) in files.iter().enumerate() {
+        if i > 0 {
+            println!();
+        }
+        let name = &f.filename;
+        println!("{}", bold(&format!("diff --git a/{name} b/{name}")));
+        println!("{}", bold(name));
+        match &f.patch {
+            Some(p) if !p.is_empty() => {
+                for line in p.lines() {
+                    println!("{}", color_diff_line(line));
+                }
+            }
+            _ => println!("{}", dim("(no text diff — binary or too large)")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod diff_tests {
+    use super::*;
+
+    #[test]
+    fn color_diff_line_marks_hunks_and_changes() {
+        assert_eq!(color_diff_line("@@ -1,3 +1,4 @@"), cyan("@@ -1,3 +1,4 @@"));
+        assert_eq!(color_diff_line("+added"), green("+added"));
+        assert_eq!(color_diff_line("-removed"), red("-removed"));
+        assert_eq!(color_diff_line(" context"), " context");
+        assert_eq!(color_diff_line("+++ b/file"), "+++ b/file");
+        assert_eq!(color_diff_line("--- a/file"), "--- a/file");
     }
 }
 

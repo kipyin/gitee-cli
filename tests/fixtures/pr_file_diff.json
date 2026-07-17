@@ -1,0 +1,30 @@
+[
+  {
+    "sha": "18541e72b996ec8902918be840c265d7cc61ae00",
+    "filename": "pom.xml",
+    "status": null,
+    "additions": "5",
+    "deletions": "6",
+    "blob_url": "https://gitee.com/y_project/RuoYi/blob/18541e72b996ec8902918be840c265d7cc61ae00/pom.xml",
+    "raw_url": "https://gitee.com/y_project/RuoYi/raw/18541e72b996ec8902918be840c265d7cc61ae00/pom.xml",
+    "patch": {
+      "diff": "@@ -17,7 +17,7 @@\n-        <spring-boot.version>3.5.14</spring-boot.version>\n+        <spring-boot.version>3.5.15</spring-boot.version>\n",
+      "new_path": "pom.xml",
+      "old_path": "pom.xml",
+      "new_file": false,
+      "renamed_file": false,
+      "deleted_file": false,
+      "too_large": false
+    }
+  },
+  {
+    "sha": "abc123",
+    "filename": "logo.png",
+    "status": null,
+    "additions": "0",
+    "deletions": "0",
+    "blob_url": "https://gitee.com/example/repo/blob/abc123/logo.png",
+    "raw_url": "https://gitee.com/example/repo/raw/abc123/logo.png",
+    "patch": null
+  }
+]

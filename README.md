@@ -97,6 +97,8 @@ These flags apply to all subcommands:
 |------------|-------------|
 | `list` | List pull requests |
 | `view <number>` | Show pull request details |
+| `diff <number>` | Show pull request diff |
+| `checkout <number>` | Fetch and check out a pull request locally |
 | `create` | Open a new pull request |
 | `merge <number>` | Merge a pull request |
 | `comment <number>` | Add a comment |
@@ -116,6 +118,12 @@ gitee pr list --state merged --author alice --limit 10
 
 # View PR #42
 gitee pr view 42
+
+# Show unified diff for PR #42
+gitee pr diff 42
+
+# Check out PR #42 as local branch pr-42
+gitee pr checkout 42
 
 # Create a PR
 gitee pr create --title "Fix login bug" --body "Details here" --head feature-branch --base master
