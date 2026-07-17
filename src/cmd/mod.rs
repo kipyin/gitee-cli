@@ -13,6 +13,7 @@ use crate::repo::Repo;
 pub mod auth;
 pub mod issue;
 pub mod pr;
+pub mod release;
 pub mod repo;
 
 pub struct Ctx {
@@ -31,6 +32,10 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Issue(c) => {
             let ctx = build(&cli)?;
             issue::execute(&ctx, c.clone())
+        }
+        Command::Release(c) => {
+            let ctx = build(&cli)?;
+            release::execute(&ctx, c.clone())
         }
         // repo commands resolve their target themselves: list/clone/view-with-arg
         // need no `origin`, so they must not require repo resolution at build time.

@@ -1,0 +1,26 @@
+{
+  "id": 12345,
+  "tag_name": "v1.2.0",
+  "target_commitish": "master",
+  "name": "v1.2.0",
+  "body": "## What's Changed\n\n- Added release command",
+  "prerelease": false,
+  "draft": false,
+  "created_at": "2024-06-01T10:00:00+08:00",
+  "author": {
+    "id": 42,
+    "login": "dev1",
+    "name": "Developer One",
+    "html_url": "https://gitee.com/dev1"
+  },
+  "assets": [
+    {
+      "name": "gitee-linux-amd64.tar.xz",
+      "browser_download_url": "https://gitee.com/oschina/gitee-cli/releases/download/v1.2.0/gitee-linux-amd64.tar.xz"
+    },
+    {
+      "name": "gitee-darwin-arm64.tar.xz",
+      "browser_download_url": "https://gitee.com/oschina/gitee-cli/releases/download/v1.2.0/gitee-darwin-arm64.tar.xz"
+    }
+  ]
+}

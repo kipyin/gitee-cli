@@ -188,6 +188,22 @@ impl Client {
         self.send_ok("PUT", path, form)
     }
 
+    pub fn post_multipart<T: DeserializeOwned>(&self, path: &str, file_path: &str) -> Result<T> {
+        self.trace("POST", path);
+        let form = reqwest::blocking::multipart::Form::new()
+            .file("file", file_path)
+            .map_err(|e| GiteeError::Usage(format!("read file {file_path}: {e}")))?;
+        let resp = self
+            .http
+            .post(self.full(path))
+            .header("Authorization", self.auth())
+            .multipart(form)
+            .send()?;
+        self.check(resp, "POST", path)?
+            .json()
+            .map_err(GiteeError::Http)
+    }
+
     fn send_ok(&self, method: &str, path: &str, form: &[(&str, &str)]) -> Result<()> {
         self.trace(method, path);
         let req = match method {

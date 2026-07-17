@@ -298,6 +298,62 @@ pub fn comment_line(c: &Comment) {
     );
 }
 
+// --- releases -----------------------------------------------------------
+
+#[derive(Tabled)]
+struct ReleaseRow {
+    tag: String,
+    name: String,
+    status: String,
+    created: String,
+}
+
+fn release_status(prerelease: Option<bool>) -> String {
+    if prerelease.unwrap_or(false) {
+        yellow("pre")
+    } else {
+        green("release")
+    }
+}
+
+pub fn release_table(items: &[Release]) {
+    let rows: Vec<ReleaseRow> = items
+        .iter()
+        .map(|rel| ReleaseRow {
+            tag: rel.tag_name.clone(),
+            name: rel.name.clone().unwrap_or_default(),
+            status: release_status(rel.prerelease),
+            created: rel.created_at.clone().unwrap_or_default(),
+        })
+        .collect();
+    println!("{}", Table::new(rows));
+}
+
+pub fn one_release(rel: &Release) {
+    let title = rel
+        .name
+        .as_deref()
+        .filter(|n| !n.is_empty())
+        .unwrap_or(&rel.tag_name);
+    println!(
+        "{}  {}  [{}]",
+        bold(&rel.tag_name),
+        title,
+        release_status(rel.prerelease)
+    );
+    if let Some(b) = &rel.body {
+        let b = b.trim();
+        if !b.is_empty() {
+            println!("\n{b}");
+        }
+    }
+    let assets = rel.assets.as_deref().unwrap_or(&[]);
+    println!("\n{} asset(s)", assets.len());
+    for asset in assets {
+        println!("  {}", asset.name);
+    }
+}
+
 // --- repositories -------------------------------------------------------
 
 #[derive(Tabled)]

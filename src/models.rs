@@ -205,3 +205,35 @@ pub struct RepoInfo {
     #[serde(default)]
     pub default_branch: Option<String>,
 }
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct ReleaseAsset {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub browser_download_url: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct Release {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub tag_name: String,
+    #[serde(default)]
+    pub target_commitish: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub prerelease: Option<bool>,
+    #[serde(default)]
+    pub draft: Option<bool>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub author: Option<UserBasic>,
+    #[serde(default)]
+    pub assets: Option<Vec<ReleaseAsset>>,
+}

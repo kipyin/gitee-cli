@@ -1,9 +1,10 @@
-use gitee_cli_rs::models::{FileDiff, Issue, PullRequest, RepoDetails};
+use gitee_cli_rs::models::{FileDiff, Issue, PullRequest, Release, RepoDetails};
 
 const PULL_REQUEST_JSON: &str = include_str!("fixtures/pull_request.json");
 const PR_FILE_DIFF_JSON: &str = include_str!("fixtures/pr_file_diff.json");
 const ISSUE_JSON: &str = include_str!("fixtures/issue.json");
 const REPO_LIST_JSON: &str = include_str!("fixtures/repo_list.json");
+const RELEASE_JSON: &str = include_str!("fixtures/release.json");
 
 #[test]
 fn fixture_pull_request_deserializes() {
@@ -50,4 +51,20 @@ fn fixture_repo_list_deserializes() {
     assert_eq!(repos[1].full_name, "oschina/docs");
     assert_eq!(repos[1].private, Some(true));
     assert!(repos[1].parent.is_some());
+}
+
+#[test]
+fn fixture_release_deserializes() {
+    let release: Release = serde_json::from_str(RELEASE_JSON).expect("release json");
+    assert_eq!(release.id, 12345);
+    assert_eq!(release.tag_name, "v1.2.0");
+    assert_eq!(release.target_commitish.as_deref(), Some("master"));
+    assert_eq!(release.name.as_deref(), Some("v1.2.0"));
+    assert_eq!(release.prerelease, Some(false));
+    assert_eq!(release.author.as_ref().expect("author").login, "dev1");
+    assert_eq!(release.assets.as_ref().expect("assets").len(), 2);
+    assert_eq!(
+        release.assets.as_ref().expect("assets")[0].name,
+        "gitee-linux-amd64.tar.xz"
+    );
 }

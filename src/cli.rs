@@ -30,6 +30,8 @@ pub enum Command {
     #[command(subcommand)]
     Issue(IssueCmd),
     #[command(subcommand)]
+    Release(ReleaseCmd),
+    #[command(subcommand)]
     Repo(RepoCmd),
     #[command(subcommand)]
     Auth(AuthCmd),
@@ -142,6 +144,33 @@ pub enum IssueCmd {
         number: String,
         #[arg(long, short = 'm')]
         body: String,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ReleaseCmd {
+    List {
+        #[arg(long, default_value_t = 30)]
+        limit: usize,
+    },
+    View {
+        tag: String,
+    },
+    Create {
+        #[arg(long)]
+        tag: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        prerelease: bool,
+    },
+    Upload {
+        tag: String,
+        files: Vec<String>,
     },
 }
 

@@ -25,6 +25,7 @@ gitee auth login
 ```bash
 gitee pr list        # pull requests
 gitee issue list     # issues
+gitee release list   # releases
 gitee repo view      # repo info
 ```
 
@@ -95,6 +96,12 @@ gitee issue create --title "Bug" --body "steps…"
 gitee issue comment 17 -m "looking into it"
 gitee issue close 17
 
+# releases
+gitee release list
+gitee release view v1.0.0
+gitee release create --tag v1.0.0 --notes "changelog…"
+gitee release upload v1.0.0 dist/*.tar.xz
+
 # repositories
 gitee repo view oschina/git         # any repo, no clone needed
 gitee repo list                     # your repos
@@ -142,6 +149,18 @@ gitee --host git.example.com ...    # self-hosted Gitee
 | `close <n>` / `reopen <n>` | Change state |
 | `link <n> <pr>` | Link an issue to a pull request |
 | `comment <n>` | Add a comment (`-m/--body`) |
+
+</details>
+
+<details>
+<summary><strong>gitee release</strong> — releases</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List releases (`--limit`) |
+| `view <tag>` | Show release details |
+| `create` | Create a release (`--tag` required, `--name`, `--notes`, `--target`, `--prerelease`) |
+| `upload <tag> <files…>` | Attach files to an existing release |
 
 </details>
 
