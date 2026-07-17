@@ -19,10 +19,9 @@ class Gitee < Formula
   end
 
   def install
-    arch = Hardware::CPU.arm? ? "aarch64" : "x86_64"
-    cd "gitee-#{arch}-apple-darwin-v#{version}" do
-      bin.install "gitee"
-    end
+    # Homebrew auto-cds into the single top-level dir the tarball extracts to,
+    # so the binary is already in the cwd here.
+    bin.install "gitee"
   end
 
   test do
