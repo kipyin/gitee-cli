@@ -1,6 +1,7 @@
 use crate::error::{GiteeError, Result};
 use reqwest::blocking::Client as Http;
 use serde::de::DeserializeOwned;
+use serde_json::Value;
 
 pub struct Client {
     http: Http,
@@ -83,10 +84,6 @@ impl Client {
         self.send("PATCH", path, form)
     }
 
-    pub fn put<T: DeserializeOwned>(&self, path: &str, form: &[(&str, &str)]) -> Result<T> {
-        self.send("PUT", path, form)
-    }
-
     fn send<T: DeserializeOwned>(
         &self,
         method: &str,
@@ -98,10 +95,42 @@ impl Client {
         let req = match method {
             "POST" => self.http.post(self.full(path)),
             "PATCH" => self.http.patch(self.full(path)),
-            "PUT" => self.http.put(self.full(path)),
             _ => unreachable!(),
         };
         let resp = req.form(&f).send()?;
         self.check(resp)?.json().map_err(GiteeError::Http)
+    }
+
+    /// Issue create/update require a JSON body (Gitee rejects form on these);
+    /// auth via `access_token` query param.
+    pub fn patch_json<T: DeserializeOwned>(&self, path: &str, body: &Value) -> Result<T> {
+        let resp = self
+            .http
+            .patch(self.full(path))
+            .query(&[("access_token", self.token.as_str())])
+            .json(body)
+            .send()?;
+        self.check(resp)?.json().map_err(GiteeError::Http)
+    }
+
+    /// For endpoints that return an empty body on success (e.g. PR review/merge).
+    pub fn post_ok(&self, path: &str, form: &[(&str, &str)]) -> Result<()> {
+        self.send_ok("POST", path, form)
+    }
+
+    pub fn put_ok(&self, path: &str, form: &[(&str, &str)]) -> Result<()> {
+        self.send_ok("PUT", path, form)
+    }
+
+    fn send_ok(&self, method: &str, path: &str, form: &[(&str, &str)]) -> Result<()> {
+        let mut f: Vec<(&str, &str)> = vec![("access_token", &self.token)];
+        f.extend(form.iter().copied());
+        let req = match method {
+            "POST" => self.http.post(self.full(path)),
+            "PUT" => self.http.put(self.full(path)),
+            _ => unreachable!(),
+        };
+        let resp = req.form(&f).send()?;
+        self.check(resp).map(|_| ())
     }
 }

@@ -56,11 +56,18 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             }
         }
         IssueCmd::Close { number } => {
-            let f: Vec<(&str, String)> = vec![("state", "closed".to_string())];
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            // Gitee quirk: PATCH /repos/{owner}/issues/{number} with JSON {repo, title, state}.
+            let cur: Issue = ctx
+                .client
+                .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
+            let body = serde_json::json!({
+                "repo": ctx.repo.name,
+                "title": cur.title,
+                "state": "closed",
+            });
             let issue: Issue = ctx
                 .client
-                .patch(&format!("/repos/{o}/{r}/issues/{number}"), &form)?;
+                .patch_json(&format!("/repos/{o}/issues/{number}"), &body)?;
             if ctx.out.json {
                 out::json(&issue);
             } else {
@@ -68,20 +75,23 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             }
         }
         IssueCmd::Link { number, pr } => {
-            let issue: Issue = ctx
+            let cur: Issue = ctx
                 .client
                 .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
-            let cur = issue.body.clone().unwrap_or_default();
+            let old = cur.body.clone().unwrap_or_default();
             let tag = format!("!{pr}");
-            if cur.contains(tag.as_str()) {
+            if old.contains(tag.as_str()) {
                 println!("Issue #{number} already references {tag}");
             } else {
-                let new = format!("{cur}\n\nLinked: {tag}");
-                let f: Vec<(&str, String)> = vec![("body", new)];
-                let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
+                let new = format!("{old}\n\nLinked: {tag}");
+                let body = serde_json::json!({
+                    "repo": ctx.repo.name,
+                    "title": cur.title,
+                    "body": new,
+                });
                 let _issue: Issue = ctx
                     .client
-                    .patch(&format!("/repos/{o}/{r}/issues/{number}"), &form)?;
+                    .patch_json(&format!("/repos/{o}/issues/{number}"), &body)?;
                 println!("Linked pull request {tag} on issue #{number}");
             }
         }

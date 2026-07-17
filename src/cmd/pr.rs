@@ -3,7 +3,6 @@ use crate::cli::PrCmd;
 use crate::error::{GiteeError, Result};
 use crate::models::{Comment, PullRequest, RepoInfo};
 use crate::out;
-use serde_json::Value;
 
 pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
     let o = ctx.repo.owner.as_str();
@@ -78,9 +77,8 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 ("close_related_issue", close.to_string()),
             ];
             let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let _v: Value = ctx
-                .client
-                .put(&format!("/repos/{o}/{r}/pulls/{number}/merge"), &form)?;
+            ctx.client
+                .put_ok(&format!("/repos/{o}/{r}/pulls/{number}/merge"), &form)?;
             println!("Merged pull request !{number}");
         }
         PrCmd::Comment { number, body } => {
@@ -96,14 +94,14 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             }
         }
         PrCmd::Approve { number, force } => {
+            // POST /review returns an empty body on success.
             let mut f: Vec<(&str, String)> = Vec::new();
             if force {
                 f.push(("force", "true".to_string()));
             }
             let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let _pr: PullRequest = ctx
-                .client
-                .post(&format!("/repos/{o}/{r}/pulls/{number}/review"), &form)?;
+            ctx.client
+                .post_ok(&format!("/repos/{o}/{r}/pulls/{number}/review"), &form)?;
             println!("Approved pull request !{number}");
         }
         PrCmd::Close { number } => {
