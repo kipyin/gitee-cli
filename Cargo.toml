@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "A gh-like command-line client for Gitee"
 license = "MIT"
-repository = "https://gitee.com/oschina/gitee-cli"
+repository = "https://github.com/kipyin/gitee-cli"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
