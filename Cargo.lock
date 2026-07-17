@@ -421,7 +421,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "gitee"
+name = "gitee-cli-rs"
 version = "0.1.0"
 dependencies = [
  "anyhow",

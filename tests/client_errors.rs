@@ -1,6 +1,6 @@
-use gitee::api::client::Client;
-use gitee::error::GiteeError;
-use gitee::models::Issue;
+use gitee_cli_rs::api::client::Client;
+use gitee_cli_rs::error::GiteeError;
+use gitee_cli_rs::models::Issue;
 
 fn client(server: &mockito::ServerGuard) -> Client {
     Client::new(format!("{}/api/v5", server.url()), "fake-token".into())

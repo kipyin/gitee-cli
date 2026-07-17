@@ -1,4 +1,4 @@
-use gitee::models::{FileDiff, Issue, PullRequest, RepoDetails};
+use gitee_cli_rs::models::{FileDiff, Issue, PullRequest, RepoDetails};
 
 const PULL_REQUEST_JSON: &str = include_str!("fixtures/pull_request.json");
 const PR_FILE_DIFF_JSON: &str = include_str!("fixtures/pr_file_diff.json");

@@ -1,4 +1,4 @@
-use gitee::api::client::Client;
+use gitee_cli_rs::api::client::Client;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
