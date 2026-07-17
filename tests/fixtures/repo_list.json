@@ -1,0 +1,63 @@
+[
+  {
+    "id": 1001,
+    "name": "gitee-cli",
+    "full_name": "oschina/gitee-cli",
+    "human_name": "oschina/gitee-cli",
+    "description": "A gh-like command-line client for Gitee",
+    "html_url": "https://gitee.com/oschina/gitee-cli",
+    "ssh_url": "git@gitee.com:oschina/gitee-cli.git",
+    "clone_url": "https://gitee.com/oschina/gitee-cli.git",
+    "default_branch": "master",
+    "private": false,
+    "public": true,
+    "fork": false,
+    "stargazers_count": 128,
+    "fork_count": 24,
+    "open_issues_count": 6,
+    "watchers_count": 45,
+    "owner": {
+      "id": 1,
+      "login": "oschina",
+      "name": "OSCHINA",
+      "html_url": "https://gitee.com/oschina",
+      "type": "Group"
+    },
+    "parent": null,
+    "namespace": { "id": 1, "type": "group", "name": "oschina", "path": "oschina" },
+    "created_at": "2023-01-15T08:00:00+08:00",
+    "updated_at": "2024-06-01T12:00:00+08:00"
+  },
+  {
+    "id": 2002,
+    "name": "docs",
+    "full_name": "oschina/docs",
+    "human_name": "oschina/docs",
+    "description": "Documentation site",
+    "html_url": "https://gitee.com/oschina/docs",
+    "ssh_url": "git@gitee.com:oschina/docs.git",
+    "clone_url": "https://gitee.com/oschina/docs.git",
+    "default_branch": "main",
+    "private": true,
+    "public": false,
+    "fork": false,
+    "stargazers_count": 12,
+    "fork_count": 1,
+    "open_issues_count": 2,
+    "watchers_count": 8,
+    "owner": {
+      "id": 1,
+      "login": "oschina",
+      "name": "OSCHINA",
+      "html_url": "https://gitee.com/oschina"
+    },
+    "parent": {
+      "id": 1001,
+      "name": "gitee-cli",
+      "full_name": "oschina/gitee-cli",
+      "human_name": "oschina/gitee-cli",
+      "html_url": "https://gitee.com/oschina/gitee-cli"
+    },
+    "namespace": { "id": 1, "type": "group", "name": "oschina", "path": "oschina" }
+  }
+]

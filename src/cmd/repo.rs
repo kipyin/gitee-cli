@@ -1,22 +1,30 @@
-use super::Ctx;
+use crate::api::client::Client;
 use crate::cli::RepoCmd;
 use crate::error::{GiteeError, Result};
 use crate::models::RepoDetails;
-use crate::out;
+use crate::out::{self, Output};
 use crate::repo::Repo;
 
-pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
+/// Repository commands. Unlike pr/issue, these resolve their own target so that
+/// `list`, `clone`, and `view <owner/name>` work without a local git remote.
+pub fn execute(
+    client: &Client,
+    out: &Output,
+    cmd: RepoCmd,
+    repo_arg: Option<String>,
+    remote_arg: Option<String>,
+) -> Result<()> {
     match cmd {
-        RepoCmd::View { repo } => {
-            let (o, r) = match repo {
-                Some(s) => {
-                    let rr = Repo::from_spec(&s)?;
-                    (rr.owner, rr.name)
-                }
-                None => (ctx.repo.owner.clone(), ctx.repo.name.clone()),
+        RepoCmd::View { target } => {
+            let rr = match target {
+                Some(s) => Repo::from_spec(&s)?,
+                None => resolve(&repo_arg, &remote_arg)?,
             };
-            let details: RepoDetails = ctx.client.get(&format!("/repos/{o}/{r}"), &[])?;
-            ctx.out.render(&details, || out::one_repo(&details));
+            let owner = &rr.owner;
+            let name = &rr.name;
+            let details: RepoDetails =
+                client.get(&format!("/repos/{owner}/{name}"), &[])?;
+            out.render(&details, || out::one_repo(&details));
         }
         RepoCmd::List { owner, limit } => {
             // Bare lists the authenticated user's repos; with an arg, that
@@ -25,15 +33,14 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
                 Some(o) => format!("/users/{o}/repos"),
                 None => "/user/repos".to_string(),
             };
-            let items: Vec<RepoDetails> = ctx.client.get_paged(&path, &[], limit)?;
-            ctx.out.render(&items, || out::repo_table(&items));
+            let items: Vec<RepoDetails> = client.get_paged(&path, &[], limit)?;
+            out.render(&items, || out::repo_table(&items));
         }
         RepoCmd::Clone { spec, dir, ssh } => {
             let rr = Repo::from_spec(&spec)?;
             let owner = &rr.owner;
             let name = &rr.name;
-            let det: RepoDetails =
-                ctx.client.get(&format!("/repos/{owner}/{name}"), &[])?;
+            let det: RepoDetails = client.get(&format!("/repos/{owner}/{name}"), &[])?;
             let url = preferred_url(&det, ssh);
             let mut args: Vec<String> = vec!["clone".to_string(), url.clone()];
             if let Some(d) = dir {
@@ -47,14 +54,15 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
                 return Err(GiteeError::Usage(format!("git clone failed for {url}")));
             }
         }
-        RepoCmd::Fork { remote } => {
-            let o = ctx.repo.owner.as_str();
-            let r = ctx.repo.name.as_str();
+        RepoCmd::Fork { add_remote } => {
+            let rr = resolve(&repo_arg, &remote_arg)?;
+            let o = rr.owner.as_str();
+            let r = rr.name.as_str();
             let forked: RepoDetails =
-                ctx.client.post(&format!("/repos/{o}/{r}/forks"), &[])?;
+                client.post(&format!("/repos/{o}/{r}/forks"), &[])?;
             println!("Forked to {}", forked.full_name);
-            ctx.out.render(&forked, || out::one_repo(&forked));
-            if let Some(name) = remote {
+            out.render(&forked, || out::one_repo(&forked));
+            if let Some(name) = add_remote {
                 let url = preferred_url(&forked, true);
                 let status = std::process::Command::new("git")
                     .args(["remote", "add", &name, &url])
@@ -67,6 +75,11 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Resolve a repo from the global --repo/--remote (for View-without-arg and Fork).
+fn resolve(repo_arg: &Option<String>, remote_arg: &Option<String>) -> Result<Repo> {
+    Repo::resolve(repo_arg.as_deref(), remote_arg.as_deref())
 }
 
 fn preferred_url(det: &RepoDetails, ssh: bool) -> String {

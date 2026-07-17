@@ -141,7 +141,8 @@ pub enum IssueCmd {
 pub enum RepoCmd {
     /// Show repository details. Targets the resolved repo unless given owner/name.
     View {
-        repo: Option<String>,
+        #[arg(value_name = "REPO")]
+        target: Option<String>,
     },
     /// List repositories. Bare lists the authenticated user's; with an arg,
     /// lists that user/org's public repos.
@@ -163,8 +164,8 @@ pub enum RepoCmd {
     /// Fork the resolved repository into your account.
     Fork {
         /// After forking, add the new repo as a git remote with this name.
-        #[arg(long)]
-        remote: Option<String>,
+        #[arg(long = "add-remote")]
+        add_remote: Option<String>,
     },
 }
 

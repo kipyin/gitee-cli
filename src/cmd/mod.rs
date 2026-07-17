@@ -32,26 +32,34 @@ pub fn run(cli: Cli) -> Result<()> {
             let ctx = build(&cli)?;
             issue::execute(&ctx, c.clone())
         }
+        // repo commands resolve their target themselves: list/clone/view-with-arg
+        // need no `origin`, so they must not require repo resolution at build time.
         Command::Repo(c) => {
-            let ctx = build(&cli)?;
-            repo::execute(&ctx, c.clone())
+            let (client, out) = core(&cli)?;
+            repo::execute(&client, &out, c.clone(), cli.repo.clone(), cli.remote.clone())
         }
         Command::Completions { shell } => completions(shell.clone()),
     }
 }
 
-fn build(cli: &Cli) -> Result<Ctx> {
+/// HTTP client + output renderer, with no repo resolution.
+fn core(cli: &Cli) -> Result<(Client, Output)> {
     let token = Config::token(&cli.host)?;
     let mut client = Client::new(format!("https://{}/api/v5", cli.host), token);
     client.set_debug(cli.debug);
-    let repo = Repo::resolve(cli.repo.as_deref(), cli.remote.as_deref())?;
-    Ok(Ctx {
+    Ok((
         client,
-        repo,
-        out: Output {
+        Output {
             json: cli.json.clone(),
         },
-    })
+    ))
+}
+
+/// Full context for commands that operate on the resolved repo (pr/issue).
+fn build(cli: &Cli) -> Result<Ctx> {
+    let (client, out) = core(cli)?;
+    let repo = Repo::resolve(cli.repo.as_deref(), cli.remote.as_deref())?;
+    Ok(Ctx { client, repo, out })
 }
 
 fn completions(shell: Option<String>) -> Result<()> {

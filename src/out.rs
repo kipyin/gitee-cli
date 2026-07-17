@@ -63,6 +63,53 @@ fn pick(value: serde_json::Value, fields: &[String]) -> serde_json::Value {
     }
 }
 
+
+#[cfg(test)]
+mod project_tests {
+    use super::project;
+    use serde_json::json;
+
+    #[test]
+    fn object_keeps_only_listed_keys() {
+        let value = json!({"a": 1, "b": 2, "c": 3});
+        let fields = vec!["a".to_string(), "c".to_string()];
+        assert_eq!(project(value, &fields), json!({"a": 1, "c": 3}));
+    }
+
+    #[test]
+    fn array_projects_each_element() {
+        let value = json!([
+            {"a": 1, "b": 2},
+            {"a": 3, "b": 4}
+        ]);
+        let fields = vec!["a".to_string()];
+        assert_eq!(
+            project(value, &fields),
+            json!([{"a": 1}, {"a": 3}])
+        );
+    }
+
+    #[test]
+    fn missing_keys_are_omitted() {
+        let value = json!({"a": 1});
+        let fields = vec!["a".to_string(), "missing".to_string()];
+        assert_eq!(project(value, &fields), json!({"a": 1}));
+    }
+
+    #[test]
+    fn empty_field_list_yields_empty_object() {
+        let value = json!({"a": 1, "b": 2});
+        assert_eq!(project(value, &[]), json!({}));
+    }
+
+    #[test]
+    fn scalar_passes_through_unchanged() {
+        let value = json!(42);
+        let fields = vec!["a".to_string()];
+        assert_eq!(project(value, &fields), json!(42));
+    }
+}
+
 // --- color --------------------------------------------------------------
 
 fn color() -> bool {

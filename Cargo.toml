@@ -21,3 +21,8 @@ keyring = "3"
 
 [dev-dependencies]
 mockito = "1"
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/gitee-{ target }-v{ version }{ archive-suffix }"
+pkg-fmt = "txz"
+bin-dir = "gitee-{ target }-v{ version }/{ bin }{ binary-ext }"
