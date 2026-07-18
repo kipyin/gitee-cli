@@ -37,6 +37,8 @@ pub enum Command {
     #[command(subcommand)]
     Release(ReleaseCmd),
     #[command(subcommand)]
+    Milestone(MilestoneCmd),
+    #[command(subcommand)]
     Repo(RepoCmd),
     #[command(subcommand)]
     Auth(AuthCmd),
@@ -360,6 +362,44 @@ pub enum RepoCmd {
     },
 }
 
+
+#[derive(Subcommand, Clone)]
+pub enum MilestoneCmd {
+    List {
+        #[command(flatten)]
+        list: ListArgs,
+    },
+    /// Show details of a milestone.
+    View {
+        number: i64,
+    },
+    Create {
+        #[arg(long)]
+        title: String,
+        /// Due date (required by the Gitee API — POST without `due_on` returns 400).
+        /// Accepted format: `YYYY-MM-DD`.
+        #[arg(long = "due-on")]
+        due_on: String,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long, value_parser = ["open", "closed"])]
+        state: Option<String>,
+    },
+    /// Edit a milestone. At least one flag is required.
+    #[command(group = clap::ArgGroup::new("milestone_edit_flags").required(true).multiple(true).args(["title", "due_on", "description", "state"]))]
+    Edit {
+        number: i64,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long = "due-on")]
+        due_on: Option<String>,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long, value_parser = ["open", "closed"])]
+        state: Option<String>,
+    },
+}
+
 #[derive(Subcommand, Clone)]
 pub enum AuthCmd {
     /// Store a personal access token (validated against the API unless --force).
@@ -380,7 +420,7 @@ pub enum AuthCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{Cli, Command, GistCmd, IssueCmd, PrCmd};
+    use super::{Cli, Command, GistCmd, IssueCmd, MilestoneCmd, PrCmd};
     use clap::Parser;
 
     #[test]
@@ -557,6 +597,28 @@ mod parse_tests {
         let r = Cli::try_parse_from(["gitee", "pr", "list", "--jq", ".[0]"]);
         assert!(r.is_err(), "--jq without --json must fail");
     }
+
+    #[test]
+    fn milestone_create_requires_title_and_due_on() {
+        assert!(Cli::try_parse_from(["gitee", "milestone", "create"]).is_err());
+        assert!(Cli::try_parse_from(["gitee", "milestone", "create", "--title", "T"]).is_err());
+        let cli = Cli::try_parse_from([
+            "gitee", "milestone", "create", "--title", "T", "--due-on", "2026-12-31",
+        ])
+        .expect("milestone create should parse");
+        let Command::Milestone(MilestoneCmd::Create { title, due_on, .. }) = cli.cmd else {
+            panic!("expected milestone create");
+        };
+        assert_eq!(title, "T");
+        assert_eq!(due_on, "2026-12-31");
+    }
+
+    #[test]
+    fn milestone_edit_requires_at_least_one_flag() {
+        let r = Cli::try_parse_from(["gitee", "milestone", "edit", "1"]);
+        assert!(r.is_err(), "milestone edit with no flags must fail");
+    }
+
 
     #[test]
     fn jq_parses_after_bare_json_flag() {

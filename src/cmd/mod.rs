@@ -16,6 +16,7 @@ pub mod auth;
 pub mod gist;
 pub mod issue;
 pub mod pr;
+pub mod milestone;
 pub mod release;
 pub mod repo;
 
@@ -68,6 +69,10 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Repo(c) => {
             let ctx = build(&cli)?;
             repo::execute(&ctx, c.clone())
+        }
+        Command::Milestone(c) => {
+            let ctx = build(&cli)?;
+            milestone::execute(&ctx, c.clone())
         }
         Command::Completions { shell } => completions(shell.clone()),
     }

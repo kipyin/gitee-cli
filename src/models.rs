@@ -134,6 +134,12 @@ pub struct Milestone {
     pub description: Option<String>,
     #[serde(default)]
     pub html_url: Option<String>,
+    #[serde(default)]
+    pub due_on: Option<String>,
+    #[serde(default)]
+    pub open_issues: Option<i64>,
+    #[serde(default)]
+    pub closed_issues: Option<i64>,
 }
 
 impl Milestone {

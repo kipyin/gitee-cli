@@ -4,6 +4,7 @@ use crate::repo::Repo;
 use super::gists::Gists;
 use reqwest::blocking::Client as Http;
 use serde::de::DeserializeOwned;
+use super::milestones::Milestones;
 use serde_json::Value;
 use std::time::Duration;
 
@@ -68,6 +69,10 @@ impl Client {
 
     pub fn repos<'a>(&'a self) -> Repos<'a> {
         Repos::new(self)
+    }
+
+    pub fn milestones<'a>(&'a self, repo: &'a Repo) -> Milestones<'a> {
+        Milestones::new(self, repo)
     }
 
     pub(crate) fn str_refs<'a>(pairs: &'a [(&'a str, String)]) -> Vec<(&'a str, &'a str)> {

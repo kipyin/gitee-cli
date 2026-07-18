@@ -414,6 +414,86 @@ pub fn pr_diff(w: &mut impl Write, files: &[FileDiff]) -> std::io::Result<()> {
     Ok(())
 }
 
+// --- milestones ---------------------------------------------------------
+
+#[derive(Tabled)]
+struct MilestoneRow {
+    number: String,
+    title: String,
+    state: String,
+    due_on: String,
+}
+
+fn milestone_state_label(state: Option<&String>) -> String {
+    match state.map(|s| s.as_str()) {
+        Some("open") => green("open"),
+        Some("closed") => red("closed"),
+        other => other.unwrap_or("").to_string(),
+    }
+}
+
+pub fn milestone_table(w: &mut impl Write, items: &[Milestone]) -> std::io::Result<()> {
+    let rows: Vec<MilestoneRow> = items
+        .iter()
+        .map(|m| MilestoneRow {
+            number: m.number.to_string(),
+            title: m.title.clone(),
+            state: milestone_state_label(m.state.as_ref()),
+            due_on: m.due_on.clone().unwrap_or_default(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+pub fn one_milestone(w: &mut impl Write, m: &Milestone) -> std::io::Result<()> {
+    let state = milestone_state_label(m.state.as_ref());
+    writeln!(
+        w,
+        "{}  {}  [{}]",
+        bold(&format!("#{}", m.number)),
+        m.title,
+        state
+    )?;
+    if let Some(d) = &m.due_on {
+        writeln!(w, "Due: {d}")?;
+    }
+    writeln!(w, "{}", dim(m.html_url.as_deref().unwrap_or("")))?;
+    let open = m.open_issues.unwrap_or(0);
+    let closed = m.closed_issues.unwrap_or(0);
+    writeln!(w, "Issues: {} open, {} closed", open, closed)?;
+    if let Some(desc) = &m.description {
+        let d = desc.trim();
+        if !d.is_empty() {
+            writeln!(w, "\n{d}")?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod milestone_printer_tests {
+    use super::*;
+
+    #[test]
+    fn milestone_table_contains_number_title_and_state() {
+        let milestone = Milestone {
+            number: 3,
+            title: "v1.0".into(),
+            state: Some("open".into()),
+            due_on: Some("2026-12-31".into()),
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        milestone_table(&mut buf, &[milestone]).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("3"));
+        assert!(out.contains("v1.0"));
+        assert!(out.contains("open"));
+    }
+}
+
+
 #[cfg(test)]
 mod diff_tests {
     use super::*;
