@@ -13,6 +13,7 @@ use crate::repo::Repo;
 
 pub mod api;
 pub mod auth;
+pub mod gist;
 pub mod issue;
 pub mod pr;
 pub mod release;
@@ -47,6 +48,10 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Api(a) => {
             let client = core(&cli)?;
             api::execute(&client, a.clone())
+        }
+        Command::Gist(c) => {
+            let ctx = build(&cli)?;
+            gist::execute(&ctx, c.clone())
         }
         Command::Pr(c) => {
             let ctx = build(&cli)?;

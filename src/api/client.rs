@@ -1,5 +1,7 @@
 use crate::error::{GiteeError, Result};
 use crate::repo::Repo;
+
+use super::gists::Gists;
 use reqwest::blocking::Client as Http;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -58,6 +60,10 @@ impl Client {
 
     pub fn releases<'a>(&'a self, repo: &'a Repo) -> Releases<'a> {
         Releases::new(self, repo)
+    }
+
+    pub fn gists<'a>(&'a self) -> Gists<'a> {
+        Gists::new(self)
     }
 
     pub fn repos<'a>(&'a self) -> Repos<'a> {

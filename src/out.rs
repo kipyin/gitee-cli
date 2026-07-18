@@ -543,6 +543,74 @@ pub fn one_release(w: &mut impl Write, rel: &Release) -> std::io::Result<()> {
     Ok(())
 }
 
+
+// --- gists --------------------------------------------------------------
+
+#[derive(Tabled)]
+struct GistRow {
+    id: String,
+    description: String,
+    files: String,
+    updated: String,
+}
+
+fn gist_visibility(public: Option<bool>) -> String {
+    if public.unwrap_or(false) {
+        green("public")
+    } else {
+        dim("secret")
+    }
+}
+
+pub fn gist_table(w: &mut impl Write, items: &[Gist]) -> std::io::Result<()> {
+    let rows: Vec<GistRow> = items
+        .iter()
+        .map(|g| GistRow {
+            id: g.id.clone(),
+            description: g.description.clone().unwrap_or_default(),
+            files: g.files.as_ref().map(|f| f.len().to_string()).unwrap_or_else(|| "0".into()),
+            updated: g.updated_at.clone().unwrap_or_default(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+pub fn one_gist(w: &mut impl Write, g: &Gist) -> std::io::Result<()> {
+    writeln!(
+        w,
+        "{}  {}  [{}]",
+        bold(&g.id),
+        g.description.as_deref().unwrap_or("(no description)"),
+        gist_visibility(g.public),
+    )?;
+    if let Some(updated) = &g.updated_at {
+        writeln!(w, "updated: {updated}")?;
+    }
+    let files = g.files.as_ref();
+    writeln!(w, "
+{} file(s)", files.map(|f| f.len()).unwrap_or(0))?;
+    if let Some(files) = files {
+        for (name, file) in files {
+            let size = file.size.map(|s| s.to_string()).unwrap_or_else(|| "?".into());
+            writeln!(w, "  {name} ({size} bytes)")?;
+        }
+    }
+    Ok(())
+}
+
+pub fn gist_raw(w: &mut impl Write, g: &Gist) -> std::io::Result<()> {
+    let files = g.files.as_ref().cloned().unwrap_or_default();
+    for (i, (_name, file)) in files.iter().enumerate() {
+        if i > 0 {
+            writeln!(w)?;
+        }
+        if let Some(content) = &file.content {
+            write!(w, "{content}")?;
+        }
+    }
+    Ok(())
+}
+
 // --- repositories -------------------------------------------------------
 
 #[derive(Tabled)]
@@ -662,6 +730,29 @@ mod printer_tests {
         assert!(out.contains("diff --git a/pom.xml b/pom.xml"));
         assert!(out.contains("@@ -1 +1 @@"));
         assert!(out.contains("(no text diff — binary or too large)"));
+    }
+
+    #[test]
+    fn gist_table_shows_id_and_description() {
+        let gist = Gist {
+            id: "abc123".into(),
+            description: Some("test gist snippet".into()),
+            updated_at: Some("2024-06-02T12:30:00+08:00".into()),
+            files: Some(std::collections::BTreeMap::from([(
+                "a.txt".into(),
+                GistFile {
+                    size: Some(13),
+                    ..Default::default()
+                },
+            )])),
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        gist_table(&mut buf, &[gist]).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("abc123"));
+        assert!(out.contains("test gist snippet"));
     }
 
     #[test]

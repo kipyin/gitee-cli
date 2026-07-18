@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 
 macro_rules! state_enum {
@@ -83,6 +84,39 @@ pub struct UserBasic {
     pub name: Option<String>,
     #[serde(default)]
     pub html_url: Option<String>,
+}
+
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct Gist {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub public: Option<bool>,
+    #[serde(default)]
+    pub files: Option<BTreeMap<String, GistFile>>,
+    #[serde(default)]
+    pub html_url: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub owner: Option<UserBasic>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct GistFile {
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub raw_url: Option<String>,
+    #[serde(default)]
+    pub size: Option<i64>,
+    #[serde(default)]
+    pub truncated: Option<bool>,
 }
 
 /// Gitee milestone. `number` is the id the v5 mutation endpoints take

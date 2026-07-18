@@ -42,6 +42,8 @@ pub enum Command {
     Auth(AuthCmd),
     /// Raw Gitee REST API request (like `gh api`).
     Api(ApiArgs),
+    #[command(subcommand)]
+    Gist(GistCmd),
     /// Print a shell completion script (bash, zsh, fish, powershell, elvish).
     Completions { shell: Option<String> },
 }
@@ -263,6 +265,42 @@ pub enum IssueCmd {
     },
 }
 
+
+#[derive(Subcommand, Clone)]
+pub enum GistCmd {
+    List {
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+    View {
+        id: String,
+        #[arg(long)]
+        raw: bool,
+    },
+    /// Create a gist from one or more files. Use `-` to read from stdin
+    /// (requires `--filename`). The Gitee API requires a description (1–30
+    /// chars); when `--desc` is omitted it defaults to the first file name.
+    Create {
+        #[arg(long)]
+        desc: Option<String>,
+        #[arg(long)]
+        public: bool,
+        #[arg(long)]
+        filename: Option<String>,
+        #[arg(required = true, num_args = 1..)]
+        files: Vec<String>,
+    },
+    Edit {
+        id: String,
+        file: String,
+    },
+    Delete {
+        id: String,
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+}
+
 #[derive(Subcommand, Clone)]
 pub enum ReleaseCmd {
     List {
@@ -342,7 +380,7 @@ pub enum AuthCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{Cli, Command, IssueCmd, PrCmd};
+    use super::{Cli, Command, GistCmd, IssueCmd, PrCmd};
     use clap::Parser;
 
     #[test]
@@ -392,6 +430,46 @@ mod parse_tests {
         let r = Cli::try_parse_from(["gitee", "issue", "edit", "I1AB"]);
         assert!(r.is_err(), "issue edit with no flags must fail");
     }
+
+    #[test]
+    fn gist_create_requires_at_least_one_file() {
+        let r = Cli::try_parse_from(["gitee", "gist", "create"]);
+        assert!(r.is_err(), "gist create with no files must fail");
+    }
+
+    #[test]
+    fn gist_flags_parse() {
+        let cli = Cli::try_parse_from([
+            "gitee", "gist", "create", "a.txt",
+            "--desc", "my snippet",
+            "--public",
+            "--filename", "b.txt",
+        ])
+        .expect("gist create should parse");
+        let Command::Gist(GistCmd::Create {
+            files,
+            desc,
+            public,
+            filename,
+            ..
+        }) = cli.cmd
+        else {
+            panic!("expected gist create");
+        };
+        assert_eq!(files, vec!["a.txt".to_string()]);
+        assert_eq!(desc.as_deref(), Some("my snippet"));
+        assert!(public);
+        assert_eq!(filename.as_deref(), Some("b.txt"));
+
+        let cli = Cli::try_parse_from(["gitee", "gist", "delete", "abc123", "--yes"])
+            .expect("gist delete should parse");
+        let Command::Gist(GistCmd::Delete { id, yes }) = cli.cmd else {
+            panic!("expected gist delete");
+        };
+        assert_eq!(id, "abc123");
+        assert!(yes);
+    }
+
 
     #[test]
     fn issue_edit_and_create_parse_new_flags() {
