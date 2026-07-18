@@ -14,11 +14,37 @@ pub struct PrFilter<'a> {
     pub limit: usize,
 }
 
+#[derive(Default)]
 pub struct CreatePr<'a> {
     pub title: &'a str,
     pub head: &'a str,
     pub base: &'a str,
     pub body: Option<&'a str>,
+    /// Comma-joined by the handler (v5 takes one `labels` string).
+    pub labels: Option<&'a str>,
+    pub assignees: Option<&'a str>,
+    pub testers: Option<&'a str>,
+    pub milestone_number: Option<i64>,
+    /// Linked issue ident; paired with close_related_issue=true so the issue
+    /// closes on merge (swagger: `issue` is the string ident;
+    /// `close_related_issue` is boolean).
+    pub issue: Option<&'a str>,
+    pub close_related_issue: bool,
+}
+
+/// Fields for `pr edit`. All optional; only `Some` fields are sent, so unset
+/// values are never blanked. `labels`/`assignees`/`testers` arrive pre-joined
+/// (comma-separated) by the handler. Param names per the v5 swagger, except
+/// `assignees`/`testers` which the PATCH swagger omits — names follow the PR
+/// create endpoint; live round-trip is unverified (no mutations in tests).
+#[derive(Default)]
+pub struct EditPr<'a> {
+    pub title: Option<&'a str>,
+    pub body: Option<&'a str>,
+    pub labels: Option<&'a str>,
+    pub assignees: Option<&'a str>,
+    pub testers: Option<&'a str>,
+    pub milestone_number: Option<i64>,
 }
 
 impl Pulls<'_> {
@@ -66,6 +92,24 @@ impl Pulls<'_> {
         if let Some(b) = req.body {
             f.push(("body", b.to_string()));
         }
+        if let Some(v) = req.labels {
+            f.push(("labels", v.to_string()));
+        }
+        if let Some(v) = req.assignees {
+            f.push(("assignees", v.to_string()));
+        }
+        if let Some(v) = req.testers {
+            f.push(("testers", v.to_string()));
+        }
+        if let Some(n) = req.milestone_number {
+            f.push(("milestone_number", n.to_string()));
+        }
+        if let Some(i) = req.issue {
+            f.push(("issue", i.to_string()));
+        }
+        if req.close_related_issue {
+            f.push(("close_related_issue", "true".to_string()));
+        }
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/{r}/pulls"), &form)
     }
@@ -110,6 +154,34 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let f: Vec<(&str, String)> = vec![("state", state.as_str().to_string())];
+        let form = Client::str_refs(&f);
+        self.client
+            .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)
+    }
+
+    /// PATCH metadata. Only `Some` fields become form entries.
+    pub fn edit(&self, number: i64, req: &EditPr<'_>) -> Result<PullRequest> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let mut f: Vec<(&str, String)> = Vec::new();
+        if let Some(v) = req.title {
+            f.push(("title", v.to_string()));
+        }
+        if let Some(v) = req.body {
+            f.push(("body", v.to_string()));
+        }
+        if let Some(v) = req.labels {
+            f.push(("labels", v.to_string()));
+        }
+        if let Some(v) = req.assignees {
+            f.push(("assignees", v.to_string()));
+        }
+        if let Some(v) = req.testers {
+            f.push(("testers", v.to_string()));
+        }
+        if let Some(n) = req.milestone_number {
+            f.push(("milestone_number", n.to_string()));
+        }
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)

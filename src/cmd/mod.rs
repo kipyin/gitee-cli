@@ -11,6 +11,7 @@ use crate::error::{GiteeError, Result};
 use crate::out::Output;
 use crate::repo::Repo;
 
+pub mod api;
 pub mod auth;
 pub mod issue;
 pub mod pr;
@@ -43,6 +44,10 @@ impl Ctx {
 pub fn run(cli: Cli) -> Result<()> {
     match &cli.cmd {
         Command::Auth(c) => auth::execute(c.clone(), &cli.host),
+        Command::Api(a) => {
+            let client = core(&cli)?;
+            api::execute(&client, a.clone())
+        }
         Command::Pr(c) => {
             let ctx = build(&cli)?;
             pr::execute(&ctx, c.clone())
@@ -71,11 +76,58 @@ fn core(cli: &Cli) -> Result<Client> {
     Ok(client)
 }
 
+/// Flatten repeatable, comma-splittable flag values (e.g. `--label a,b --label c`)
+/// into one comma-joined string; `None` when nothing was given.
+pub(crate) fn join_flags(values: &[String]) -> Option<String> {
+    let parts: Vec<&str> = values
+        .iter()
+        .flat_map(|v| v.split(','))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(","))
+}
+
+/// Resolve a `--milestone` value: bare integers pass through; anything else is
+/// matched against the repo's milestone titles (one extra API call).
+pub(crate) fn resolve_milestone(ctx: &Ctx, repo: &Repo, id_or_title: &str) -> Result<i64> {
+    if let Ok(n) = id_or_title.trim().parse::<i64>() {
+        return Ok(n);
+    }
+    let list = ctx
+        .client
+        .repos()
+        .list_milestones(&repo.owner, &repo.name)?;
+    crate::models::Milestone::resolve(&list, id_or_title).ok_or_else(|| {
+        let known = list
+            .iter()
+            .map(|m| m.title.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        GiteeError::Usage(format!(
+            "no milestone titled '{id_or_title}' (available: {known})"
+        ))
+    })
+}
+
+/// Optional variant of [`resolve_milestone`]: `None` stays `None`.
+pub(crate) fn resolve_milestone_opt(
+    ctx: &Ctx,
+    repo: &Repo,
+    id_or_title: Option<&str>,
+) -> Result<Option<i64>> {
+    match id_or_title {
+        Some(m) => Ok(Some(resolve_milestone(ctx, repo, m)?)),
+        None => Ok(None),
+    }
+}
+
 fn build(cli: &Cli) -> Result<Ctx> {
     Ok(Ctx {
         client: core(cli)?,
         out: Output {
             json: cli.json.clone(),
+            jq: cli.jq.clone(),
         },
         repo_arg: cli.repo.clone(),
         remote_arg: cli.remote.clone(),
@@ -114,4 +166,19 @@ fn detect_shell() -> Result<Shell> {
             "could not detect shell from $SHELL='{shell}'; pass it explicitly (bash|zsh|fish|...)"
         ))
     })
+}
+
+#[cfg(test)]
+mod flag_tests {
+    #[test]
+    fn join_flags_flattens_repeatable_and_comma_split() {
+        let v = vec!["a,b".to_string(), " c ".to_string()];
+        assert_eq!(super::join_flags(&v).as_deref(), Some("a,b,c"));
+    }
+
+    #[test]
+    fn join_flags_empty_is_none() {
+        assert_eq!(super::join_flags(&[]), None);
+        assert_eq!(super::join_flags(&["  ".to_string()]), None);
+    }
 }

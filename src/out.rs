@@ -3,10 +3,12 @@ use std::io::IsTerminal;
 use std::io::{self, Write};
 use tabled::{Table, Tabled};
 
+use crate::error::GiteeError;
 use crate::models::*;
 
 pub struct Output {
     pub json: Option<String>,
+    pub jq: Option<String>,
 }
 
 impl Output {
@@ -18,14 +20,19 @@ impl Output {
         human: impl FnOnce(&mut W) -> io::Result<()>,
     ) -> crate::error::Result<()> {
         match &self.json {
-            Some(spec) => print_json(w, data, spec)?,
+            Some(spec) => print_json(w, data, spec, self.jq.as_deref())?,
             None => human(w)?,
         }
         Ok(())
     }
 }
 
-fn print_json<T: Serialize, W: Write>(w: &mut W, data: &T, spec: &str) -> io::Result<()> {
+fn print_json<T: Serialize, W: Write>(
+    w: &mut W,
+    data: &T,
+    spec: &str,
+    jq: Option<&str>,
+) -> crate::error::Result<()> {
     let value = serde_json::to_value(data)
         .unwrap_or_else(|e| serde_json::json!({"error": format!("serialize: {e}")}));
     let out = if spec.trim().is_empty() {
@@ -38,11 +45,107 @@ fn print_json<T: Serialize, W: Write>(w: &mut W, data: &T, spec: &str) -> io::Re
             .collect();
         project(value, &fields)
     };
+    if let Some(expr) = jq {
+        return print_jq(w, &out, expr);
+    }
     writeln!(
         w,
         "{}",
         serde_json::to_string_pretty(&out).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
-    )
+    )?;
+    Ok(())
+}
+
+/// Apply a jq expression to the (already projected) value. Each result prints
+/// on its own line: string scalars unquoted, everything else as compact JSON.
+fn print_jq<W: Write>(w: &mut W, value: &serde_json::Value, expr: &str) -> crate::error::Result<()> {
+    for r in run_jq(value, expr)? {
+        match r {
+            serde_json::Value::String(s) => writeln!(w, "{s}")?,
+            other => writeln!(
+                w,
+                "{}",
+                serde_json::to_string(&other)
+                    .map_err(|e| GiteeError::Usage(format!("--jq: cannot serialize result: {e}")))?
+            )?,
+        }
+    }
+    Ok(())
+}
+
+/// Evaluate `expr` against `value` with the pure-Rust jaq engine (no C libjq).
+/// Setup follows the jaq 3.x idiom: core+std+json defs/funs, compile once, then
+/// run over a JustLut context (no `inputs` support — we evaluate a single value).
+fn run_jq(value: &serde_json::Value, expr: &str) -> crate::error::Result<Vec<serde_json::Value>> {
+    use jaq_core::data::JustLut;
+    use jaq_core::load::{Arena, File, Loader};
+    use jaq_core::{Compiler, Ctx, Vars};
+    use jaq_json::Val;
+
+    let arena = Arena::default();
+    let defs = jaq_core::defs()
+        .chain(jaq_std::defs())
+        .chain(jaq_json::defs());
+    let loader = Loader::new(defs);
+    let modules = loader
+        .load(&arena, File { path: (), code: expr })
+        .map_err(|errs| invalid_jq(expr, format!("{errs:?}")))?;
+    let funs = jaq_core::funs()
+        .chain(jaq_std::funs())
+        .chain(jaq_json::funs());
+    let filter: jaq_core::Filter<JustLut<Val>> = Compiler::default()
+        .with_funs(funs)
+        .compile(modules)
+        .map_err(|errs| invalid_jq(expr, format!("{errs:?}")))?;
+    let input: Val = serde_json::from_value(value.clone())
+        .map_err(|e| GiteeError::Usage(format!("--jq: cannot convert input: {e}")))?;
+    let ctx: Ctx<JustLut<Val>> = Ctx::new(&filter.lut, Vars::new([]));
+    let mut out = Vec::new();
+    for r in filter.id.run((ctx, input)) {
+        let v = r.map_err(|e| GiteeError::Usage(format!("--jq evaluation failed: {e:?}")))?;
+        out.push(val_to_json(&v)?);
+    }
+    Ok(out)
+}
+
+/// jaq's `Val` is a JSON superset (byte strings, non-string keys) with no
+/// Serialize impl, so convert back by hand. Plain-JSON results round-trip
+/// exactly; byte strings decode lossy-UTF-8; non-string object keys error.
+fn val_to_json(v: &jaq_json::Val) -> crate::error::Result<serde_json::Value> {
+    use jaq_json::Val;
+    use serde_json::Value;
+    Ok(match v {
+        Val::Null => Value::Null,
+        Val::Bool(b) => Value::Bool(*b),
+        // Num's Display is its JSON spelling; parse it back as a JSON number.
+        Val::Num(n) => serde_json::from_str(&n.to_string())
+            .map_err(|e| GiteeError::Usage(format!("--jq: cannot convert number {n}: {e}")))?,
+        Val::TStr(s) | Val::BStr(s) => Value::String(String::from_utf8_lossy(s).into_owned()),
+        Val::Arr(a) => Value::Array(
+            a.iter()
+                .map(val_to_json)
+                .collect::<crate::error::Result<Vec<_>>>()?,
+        ),
+        Val::Obj(o) => {
+            let mut map = serde_json::Map::new();
+            for (k, val) in o.iter() {
+                let key = match k {
+                    Val::TStr(s) => String::from_utf8_lossy(s).into_owned(),
+                    other => {
+                        return Err(GiteeError::Usage(format!(
+                            "--jq: object key is not a string ({other:?}); cannot render as JSON"
+                        )))
+                    }
+                };
+                map.insert(key, val_to_json(val)?);
+            }
+            Value::Object(map)
+        }
+    })
+}
+
+fn invalid_jq(expr: &str, details: String) -> GiteeError {
+    GiteeError::Usage(format!("invalid --jq expression '{expr}': {details}"))
 }
 
 /// Project a JSON value down to the requested fields. Arrays project each
@@ -67,6 +170,64 @@ fn pick(value: serde_json::Value, fields: &[String]) -> serde_json::Value {
         serde_json::Value::Object(out)
     } else {
         value
+    }
+}
+
+#[cfg(test)]
+mod jq_tests {
+    use crate::out::Output;
+    use serde_json::json;
+
+    fn render_json(value: serde_json::Value, json: &str, jq: &str) -> String {
+        let out = Output {
+            json: Some(json.to_string()),
+            jq: Some(jq.to_string()),
+        };
+        let mut buf = Vec::new();
+        out.render(&mut buf, &value, |_w| unreachable!("human path"))
+            .expect("render should succeed");
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn jq_string_scalar_prints_unquoted() {
+        let data = json!([{"title": "Fix bug", "number": 1}]);
+        assert_eq!(render_json(data, "", ".[0].title"), "Fix bug\n");
+    }
+
+    #[test]
+    fn jq_applies_after_field_projection() {
+        let data = json!([
+            {"number": 1, "title": "a", "extra": true},
+            {"number": 2, "title": "b", "extra": false}
+        ]);
+        assert_eq!(render_json(data, "number,title", "map(.number)"), "[1,2]\n");
+    }
+
+    #[test]
+    fn jq_invalid_expression_is_usage_error() {
+        let out = Output {
+            json: Some("".to_string()),
+            jq: Some(".[".to_string()),
+        };
+        let mut buf = Vec::new();
+        let err = out
+            .render(&mut buf, &json!([1]), |_w| unreachable!("human path"))
+            .expect_err("invalid expression must fail");
+        let msg = err.to_string();
+        assert!(msg.contains(".["), "message names the expression: {msg}");
+    }
+
+    #[test]
+    fn jq_multiple_results_print_one_per_line() {
+        let data = json!([1, 2, 3]);
+        assert_eq!(render_json(data, "", ".[]"), "1\n2\n3\n");
+    }
+
+    #[test]
+    fn jq_non_string_scalar_prints_as_json() {
+        let data = json!([{"number": 42}]);
+        assert_eq!(render_json(data, "", ".[0].number"), "42\n");
     }
 }
 

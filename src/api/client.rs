@@ -14,6 +14,16 @@ pub struct Client {
     debug: bool,
 }
 
+/// Parameters for [`Client::raw`].
+pub struct RawRequest<'a> {
+    pub method: &'a str,
+    pub path: &'a str,
+    pub query: &'a [(&'a str, &'a str)],
+    pub form: &'a [(&'a str, &'a str)],
+    pub headers: &'a [(&'a str, &'a str)],
+    pub body: Option<&'a [u8]>,
+}
+
 impl Client {
     pub fn new(base: String, token: String) -> Self {
         let http = Http::builder()
@@ -93,14 +103,7 @@ impl Client {
                     .map(str::to_owned)
                     .or_else(|| v.get("error").and_then(|m| m.as_str()).map(str::to_owned))
             })
-            .unwrap_or_else(|| {
-                let t = body.trim();
-                if t.len() > 300 {
-                    format!("{}…", &t[..300])
-                } else {
-                    t.to_string()
-                }
-            });
+            .unwrap_or_else(|| Self::trim_cap(&body, 300));
         if self.debug {
             eprintln!("<- {method} {path} -> {code}: {message}");
         }
@@ -237,5 +240,125 @@ impl Client {
         };
         let resp = req.header("Authorization", self.auth()).form(form).send()?;
         self.check(resp, method, path).map(|_| ())
+    }
+
+    /// Char-safe truncation for error bodies (CJK messages would panic a
+    /// byte-slice cap like `&t[..max]`).
+    fn trim_cap(s: &str, max: usize) -> String {
+        let t = s.trim();
+        if t.chars().count() <= max {
+            return t.to_string();
+        }
+        format!("{}…", t.chars().take(max).collect::<String>())
+    }
+
+    /// Issue a raw API request and return the response body text.
+    pub fn raw(&self, req: &RawRequest<'_>) -> Result<String> {
+        self.trace(req.method, req.path);
+        let method = req.method.to_uppercase();
+        let url = self.full(req.path);
+
+        let mut rb = match method.as_str() {
+            "GET" => self.http.get(&url),
+            "POST" => self.http.post(&url),
+            "PUT" => self.http.put(&url),
+            "PATCH" => self.http.patch(&url),
+            "DELETE" => self.http.delete(&url),
+            "HEAD" => self.http.head(&url),
+            _ => unreachable!("method validated before raw()"),
+        };
+
+        rb = rb.header("Authorization", self.auth());
+
+        if matches!(method.as_str(), "GET" | "HEAD" | "DELETE") {
+            let mut q: Vec<(&str, &str)> = req.query.to_vec();
+            q.extend_from_slice(req.form);
+            if !q.is_empty() {
+                rb = rb.query(&q);
+            }
+        } else if let Some(body) = req.body {
+            let has_ct = req
+                .headers
+                .iter()
+                .any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
+            if !has_ct {
+                rb = rb.header("Content-Type", "application/json");
+            }
+            rb = rb.body(body.to_vec());
+            if !req.query.is_empty() {
+                rb = rb.query(req.query);
+            }
+        } else if !req.form.is_empty() {
+            rb = rb.form(req.form);
+            if !req.query.is_empty() {
+                rb = rb.query(req.query);
+            }
+        } else if !req.query.is_empty() {
+            rb = rb.query(req.query);
+        }
+
+        for (k, v) in req.headers {
+            rb = rb.header(*k, *v);
+        }
+
+        let resp = rb.send()?;
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp.text().unwrap_or_default());
+        }
+
+        let code = status.as_u16();
+        let body = resp.text().unwrap_or_default();
+        let message = Self::trim_cap(&body, 2048);
+        if self.debug {
+            eprintln!("<- {} {} -> {code}: {message}", req.method, req.path);
+        }
+        Err(GiteeError::Api {
+            status: code,
+            message,
+        })
+    }
+
+    /// GET-only pagination: walk `page`/`per_page=100` until a short page.
+    pub fn raw_paged(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        headers: &[(&str, &str)],
+    ) -> Result<Vec<Value>> {
+        let mut out: Vec<Value> = Vec::new();
+        let mut page = 1u32;
+        let per = 100;
+        loop {
+            let mut q: Vec<(String, String)> = vec![
+                ("page".into(), page.to_string()),
+                ("per_page".into(), per.to_string()),
+            ];
+            for (k, v) in query {
+                q.push((k.to_string(), v.to_string()));
+            }
+            let qref: Vec<(&str, &str)> = q.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+            let body = self.raw(&RawRequest {
+                method: "GET",
+                path,
+                query: &qref,
+                form: &[],
+                headers,
+                body: None,
+            })?;
+            let parsed: Value = serde_json::from_str(&body).map_err(|e| {
+                GiteeError::Usage(format!("--paginate requires JSON array responses: {e}"))
+            })?;
+            let arr = parsed.as_array().ok_or_else(|| {
+                GiteeError::Usage("--paginate requires JSON array responses".into())
+            })?;
+            let n = arr.len();
+            out.extend(arr.iter().cloned());
+            if n < per {
+                break;
+            }
+            page += 1;
+        }
+        Ok(out)
     }
 }

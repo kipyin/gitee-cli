@@ -22,6 +22,11 @@ dirs = "5"
 tabled = "0.16"
 url = "2"
 keyring = "3"
+jaq-core = "3"
+jaq-std = "3"
+jaq-json = { version = "2", features = ["serde"] }
+
+base64 = "0.22"
 
 [dev-dependencies]
 mockito = "1"

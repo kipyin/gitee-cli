@@ -1,5 +1,5 @@
 use gitee_cli_rs::api::client::Client;
-use gitee_cli_rs::api::pulls::{CreatePr, PrFilter};
+use gitee_cli_rs::api::pulls::{CreatePr, EditPr, PrFilter};
 use gitee_cli_rs::models::{MergeMethod, PrState};
 use gitee_cli_rs::repo::Repo;
 
@@ -126,11 +126,101 @@ fn create_posts_form_title_head_base_body() {
             head: "feature/x",
             base: "master",
             body: Some("Please review"),
+            ..Default::default()
         })
         .expect("create should succeed");
 
     mock.assert();
     assert_eq!(pr.number, 12);
+}
+
+#[test]
+fn create_sends_full_parity_fields() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("title".into(), "New feature".into()),
+            mockito::Matcher::UrlEncoded("labels".into(), "bug,ui".into()),
+            mockito::Matcher::UrlEncoded("assignees".into(), "me".into()),
+            mockito::Matcher::UrlEncoded("testers".into(), "qa1".into()),
+            mockito::Matcher::UrlEncoded("milestone_number".into(), "7".into()),
+            mockito::Matcher::UrlEncoded("issue".into(), "I1AB2C".into()),
+            mockito::Matcher::UrlEncoded("close_related_issue".into(), "true".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    client(&server)
+        .pulls(&test_repo())
+        .create(&CreatePr {
+            title: "New feature",
+            head: "feature/x",
+            base: "master",
+            labels: Some("bug,ui"),
+            assignees: Some("me"),
+            testers: Some("qa1"),
+            milestone_number: Some(7),
+            issue: Some("I1AB2C"),
+            close_related_issue: true,
+            ..Default::default()
+        })
+        .expect("create should succeed");
+
+    mock.assert();
+}
+
+#[test]
+fn file_contents_decodes_base64_file() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/contents/PULL_REQUEST_TEMPLATE.md";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::UrlEncoded("ref".into(), "master".into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"encoding":"base64","content":"IyMgVGVtcGxhdGUK"}"#)
+        .create();
+
+    let text = client(&server)
+        .repos()
+        .file_contents("oschina", "gitee-cli", "PULL_REQUEST_TEMPLATE.md", "master")
+        .expect("file_contents should succeed");
+
+    mock.assert();
+    assert_eq!(text.as_deref(), Some("## Template\n"));
+}
+
+#[test]
+fn file_contents_404_is_none() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/contents/.gitee/PULL_REQUEST_TEMPLATE.md";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::UrlEncoded("ref".into(), "master".into()))
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message":"Not Found"}"#)
+        .create();
+
+    let text = client(&server)
+        .repos()
+        .file_contents(
+            "oschina",
+            "gitee-cli",
+            ".gitee/PULL_REQUEST_TEMPLATE.md",
+            "master",
+        )
+        .expect("404 should map to Ok(None)");
+
+    mock.assert();
+    assert_eq!(text, None);
 }
 
 #[test]
@@ -322,4 +412,96 @@ fn link_already_linked_skips_patch() {
     get.assert();
     patch.assert();
     assert!(!linked);
+}
+
+#[test]
+fn edit_sends_only_provided_fields_comma_joined() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12";
+
+    let mock = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("title".into(), "New title".into()),
+            mockito::Matcher::UrlEncoded("labels".into(), "bug,regression,ui".into()),
+            mockito::Matcher::UrlEncoded("assignees".into(), "dev1,dev2".into()),
+            mockito::Matcher::UrlEncoded("testers".into(), "qa1".into()),
+            mockito::Matcher::UrlEncoded("milestone_number".into(), "7".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    let pr = client(&server)
+        .pulls(&test_repo())
+        .edit(
+            12,
+            &EditPr {
+                title: Some("New title"),
+                labels: Some("bug,regression,ui"),
+                assignees: Some("dev1,dev2"),
+                testers: Some("qa1"),
+                milestone_number: Some(7),
+                ..Default::default()
+            },
+        )
+        .expect("edit should succeed");
+
+    mock.assert();
+    assert_eq!(pr.number, 12);
+}
+
+#[test]
+fn edit_omits_unset_fields_from_form_body() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12";
+
+    // Only `body` provided: the form must contain exactly that one field.
+    let mock = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("body".into(), "hello world".into()),
+            mockito::Matcher::Regex("^[^&=]+=[^&]*$".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    client(&server)
+        .pulls(&test_repo())
+        .edit(
+            12,
+            &EditPr {
+                body: Some("hello world"),
+                ..Default::default()
+            },
+        )
+        .expect("edit should succeed");
+
+    mock.assert();
+}
+
+#[test]
+fn list_milestones_hits_milestones_path() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/milestones";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[{"number":7,"title":"v1.0"},{"number":9,"title":"v2.0"}]"#)
+        .create();
+
+    let milestones = client(&server)
+        .repos()
+        .list_milestones("oschina", "gitee-cli")
+        .expect("list milestones should succeed");
+
+    mock.assert();
+    assert_eq!(milestones.len(), 2);
+    assert_eq!(milestones[0].number, 7);
+    assert_eq!(milestones[1].title, "v2.0");
 }

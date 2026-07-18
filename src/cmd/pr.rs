@@ -1,7 +1,7 @@
 use std::io::Write;
 
-use super::Ctx;
-use crate::api::pulls::{CreatePr, PrFilter};
+use super::{join_flags, resolve_milestone_opt, Ctx};
+use crate::api::pulls::{CreatePr, EditPr, PrFilter};
 use crate::cli::PrCmd;
 use crate::error::{GiteeError, Result};
 use crate::models::{MergeMethod, PrState};
@@ -35,11 +35,43 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 .render(&mut out, &files, |w| out::pr_diff(w, &files))?;
         }
         PrCmd::Checkout { number } => checkout_pr(ctx, number)?,
+        PrCmd::Edit {
+            number,
+            title,
+            body,
+            assignee,
+            tester,
+            label,
+            milestone,
+        } => {
+            let repo = ctx.repo()?;
+            let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
+            let labels = join_flags(&label);
+            let assignees = join_flags(&assignee);
+            let testers = join_flags(&tester);
+            let req = EditPr {
+                title: title.as_deref(),
+                body: body.as_deref(),
+                labels: labels.as_deref(),
+                assignees: assignees.as_deref(),
+                testers: testers.as_deref(),
+                milestone_number,
+            };
+            let pr = ctx.client.pulls(repo).edit(number, &req)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
+        }
         PrCmd::Create {
             title,
             body,
             head,
             base,
+            fill,
+            assignee,
+            tester,
+            label,
+            milestone,
+            close_issue,
         } => {
             let repo = ctx.repo()?;
             let head = match head {
@@ -58,11 +90,39 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                         .unwrap_or_else(|| "master".to_string())
                 }
             };
+            let mut title = title;
+            let mut body = body;
+            if fill {
+                let subjects = git_log_subjects(&base, &head)?;
+                let (ft, fb) = fill_from_subjects(&subjects)?;
+                if title.is_none() {
+                    title = Some(ft);
+                }
+                if body.is_none() {
+                    body = Some(fb);
+                }
+            }
+            let title = title.ok_or_else(|| {
+                GiteeError::Usage("pr create needs --title (or --fill)".into())
+            })?;
+            if body.is_none() {
+                body = fetch_pr_template(ctx, repo, &base)?;
+            }
+            let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
+            let labels = join_flags(&label);
+            let assignees = join_flags(&assignee);
+            let testers = join_flags(&tester);
             let req = CreatePr {
                 title: &title,
                 head: &head,
                 base: &base,
                 body: body.as_deref(),
+                labels: labels.as_deref(),
+                assignees: assignees.as_deref(),
+                testers: testers.as_deref(),
+                milestone_number,
+                issue: close_issue.as_deref(),
+                close_related_issue: close_issue.is_some(),
             };
             let pr = ctx.client.pulls(repo).create(&req)?;
             let mut out = std::io::stdout().lock();
@@ -186,6 +246,58 @@ fn checkout_pr(ctx: &Ctx, number: i64) -> Result<()> {
     Ok(())
 }
 
+/// Commit subjects in `base..head`, oldest first, for --fill.
+fn git_log_subjects(base: &str, head: &str) -> Result<Vec<String>> {
+    let range = format!("{base}..{head}");
+    let out = std::process::Command::new("git")
+        .args(["log", "--reverse", "--format=%s", &range])
+        .output()
+        .map_err(|e| GiteeError::Usage(format!("git: {e}")))?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        return Err(GiteeError::Usage(format!(
+            "git log {range} failed: {}",
+            stderr.trim()
+        )));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect())
+}
+
+/// gh --fill semantics: title = first (oldest) commit subject, body = the
+/// commit list as markdown bullets.
+fn fill_from_subjects(subjects: &[String]) -> Result<(String, String)> {
+    let first = subjects.first().ok_or_else(|| {
+        GiteeError::Usage("no commits in base..head range; nothing to --fill from".into())
+    })?;
+    let body = subjects
+        .iter()
+        .map(|s| format!("- {s}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok((first.clone(), body))
+}
+
+/// Template prefill, tried in order on the base ref; missing template = no body.
+fn fetch_pr_template(ctx: &Ctx, repo: &crate::repo::Repo, base: &str) -> Result<Option<String>> {
+    for path in [
+        ".gitee/PULL_REQUEST_TEMPLATE.md",
+        "PULL_REQUEST_TEMPLATE.md",
+    ] {
+        if let Some(c) = ctx
+            .client
+            .repos()
+            .file_contents(&repo.owner, &repo.name, path, base)?
+        {
+            return Ok(Some(c));
+        }
+    }
+    Ok(None)
+}
+
 fn current_branch() -> Result<String> {
     let out = std::process::Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
@@ -203,4 +315,27 @@ fn current_branch() -> Result<String> {
         ));
     }
     Ok(b)
+}
+
+#[cfg(test)]
+mod fill_tests {
+    #[test]
+    fn fill_from_subjects_single_commit() {
+        let (title, body) = super::fill_from_subjects(&["Add paging".to_string()]).unwrap();
+        assert_eq!(title, "Add paging");
+        assert_eq!(body, "- Add paging");
+    }
+
+    #[test]
+    fn fill_from_subjects_uses_oldest_subject_as_title() {
+        let subjects = vec!["First commit".to_string(), "Second commit".to_string()];
+        let (title, body) = super::fill_from_subjects(&subjects).unwrap();
+        assert_eq!(title, "First commit");
+        assert_eq!(body, "- First commit\n- Second commit");
+    }
+
+    #[test]
+    fn fill_from_subjects_empty_is_usage_error() {
+        assert!(super::fill_from_subjects(&[]).is_err());
+    }
 }

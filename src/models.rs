@@ -85,6 +85,36 @@ pub struct UserBasic {
     pub html_url: Option<String>,
 }
 
+/// Gitee milestone. `number` is the id the v5 mutation endpoints take
+/// (`milestone_number`); `title` is what users type, so CLI flags accept
+/// either and resolve via `Milestone::resolve`.
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct Milestone {
+    #[serde(default)]
+    pub number: i64,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub html_url: Option<String>,
+}
+
+impl Milestone {
+    /// Resolve an `--milestone` flag value: a bare integer is used as-is,
+    /// otherwise match by exact title. `None` means "no such milestone".
+    pub fn resolve(list: &[Milestone], id_or_title: &str) -> Option<i64> {
+        if let Ok(n) = id_or_title.trim().parse::<i64>() {
+            return Some(n);
+        }
+        list.iter()
+            .find(|m| m.title == id_or_title)
+            .map(|m| m.number)
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Label {
     #[serde(default)]
@@ -203,6 +233,12 @@ pub struct PullRequest {
     #[serde(default)]
     pub labels: Option<Vec<Label>>,
     #[serde(default)]
+    pub assignees: Option<Vec<UserBasic>>,
+    #[serde(default)]
+    pub testers: Option<Vec<UserBasic>>,
+    #[serde(default)]
+    pub milestone: Option<Milestone>,
+    #[serde(default)]
     pub created_at: Option<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
@@ -232,6 +268,10 @@ pub struct Issue {
     pub assignee: Option<UserBasic>,
     #[serde(default)]
     pub labels: Option<Vec<Label>>,
+    #[serde(default)]
+    pub security_hole: Option<bool>,
+    #[serde(default)]
+    pub milestone: Option<Milestone>,
     #[serde(default)]
     pub comments: Option<i64>,
     #[serde(default)]
@@ -342,7 +382,7 @@ pub struct Release {
 
 #[cfg(test)]
 mod state_tests {
-    use super::{IssueState, MergeMethod, PrState};
+    use super::{Issue, IssueState, MergeMethod, Milestone, PrState, PullRequest};
     use serde_json;
 
     #[test]
@@ -428,6 +468,58 @@ mod state_tests {
             serde_json::to_string(&IssueState::Rejected).unwrap(),
             r#""rejected""#
         );
+    }
+
+    #[test]
+    fn milestone_resolve_by_id_or_title() {
+        let list = vec![
+            Milestone {
+                number: 7,
+                title: "v1.0".into(),
+                ..Default::default()
+            },
+            Milestone {
+                number: 9,
+                title: "v2.0".into(),
+                ..Default::default()
+            },
+        ];
+        assert_eq!(Milestone::resolve(&list, "42"), Some(42));
+        assert_eq!(Milestone::resolve(&list, "v2.0"), Some(9));
+        assert_eq!(Milestone::resolve(&list, "nope"), None);
+    }
+
+    #[test]
+    fn pr_deserializes_assignees_testers_milestone() {
+        let pr: PullRequest = serde_json::from_str(
+            r#"{
+                "number": 3,
+                "assignees": [{"login": "dev1"}],
+                "testers": [{"login": "qa1"}],
+                "milestone": {"number": 7, "title": "v1.0"}
+            }"#,
+        )
+        .expect("pr json");
+        assert_eq!(pr.assignees.expect("assignees")[0].login, "dev1");
+        assert_eq!(pr.testers.expect("testers")[0].login, "qa1");
+        let ms = pr.milestone.expect("milestone");
+        assert_eq!(ms.number, 7);
+        assert_eq!(ms.title, "v1.0");
+    }
+
+    #[test]
+    fn issue_deserializes_security_hole_and_milestone() {
+        let issue: Issue = serde_json::from_str(
+            r#"{
+                "number": "I1AB",
+                "title": "Leak",
+                "security_hole": true,
+                "milestone": {"number": 3, "title": "v1.0"}
+            }"#,
+        )
+        .expect("issue json");
+        assert_eq!(issue.security_hole, Some(true));
+        assert_eq!(issue.milestone.expect("milestone").number, 3);
     }
 
     #[test]

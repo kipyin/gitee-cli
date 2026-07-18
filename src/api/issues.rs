@@ -14,11 +14,27 @@ pub struct IssueFilter<'a> {
     pub limit: usize,
 }
 
+#[derive(Default)]
 pub struct CreateIssue<'a> {
     pub title: &'a str,
     pub body: Option<&'a str>,
     pub assignee: Option<&'a str>,
     pub labels: Option<&'a str>,
+    pub milestone_number: Option<i64>,
+    pub security_hole: bool,
+}
+
+/// Fields for `issue edit`. All optional; only `Some` fields are sent. `labels`
+/// arrives comma-joined from the handler. Param names per the v5 swagger
+/// (milestone takes the milestone number as integer).
+#[derive(Default)]
+pub struct EditIssue<'a> {
+    pub title: Option<&'a str>,
+    pub body: Option<&'a str>,
+    pub assignee: Option<&'a str>,
+    pub labels: Option<&'a str>,
+    pub milestone_number: Option<i64>,
+    pub security_hole: Option<bool>,
 }
 
 impl Issues<'_> {
@@ -65,6 +81,12 @@ impl Issues<'_> {
         if let Some(l) = req.labels {
             f.push(("labels", l.to_string()));
         }
+        if let Some(n) = req.milestone_number {
+            f.push(("milestone", n.to_string()));
+        }
+        if req.security_hole {
+            f.push(("security_hole", "true".to_string()));
+        }
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/issues"), &form)
     }
@@ -82,6 +104,38 @@ impl Issues<'_> {
             "title": cur.title,
             "state": state.as_str(),
         });
+        self.client
+            .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
+    }
+
+    /// PATCH metadata. Same JSON quirk as set_state: `repo` and the current
+    /// `title` must always be echoed; only `Some` fields are added.
+    pub fn edit(&self, number: &str, req: &EditIssue<'_>) -> Result<Issue> {
+        let o = self.repo.owner.as_str();
+        let name = &self.repo.name;
+        let cur: Issue = self
+            .client
+            .get(&format!("/repos/{o}/{name}/issues/{number}"), &[])?;
+        let mut body = serde_json::json!({
+            "repo": self.repo.name,
+            "title": req.title.unwrap_or(&cur.title),
+        });
+        let map = body.as_object_mut().expect("json object");
+        if let Some(v) = req.body {
+            map.insert("body".into(), v.into());
+        }
+        if let Some(v) = req.assignee {
+            map.insert("assignee".into(), v.into());
+        }
+        if let Some(v) = req.labels {
+            map.insert("labels".into(), v.into());
+        }
+        if let Some(n) = req.milestone_number {
+            map.insert("milestone".into(), n.into());
+        }
+        if let Some(b) = req.security_hole {
+            map.insert("security_hole".into(), b.into());
+        }
         self.client
             .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
     }

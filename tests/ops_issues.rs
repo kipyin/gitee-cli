@@ -1,5 +1,5 @@
 use gitee_cli_rs::api::client::Client;
-use gitee_cli_rs::api::issues::CreateIssue;
+use gitee_cli_rs::api::issues::{CreateIssue, EditIssue};
 use gitee_cli_rs::models::IssueState;
 use gitee_cli_rs::repo::Repo;
 
@@ -46,6 +46,7 @@ fn create_posts_owner_issues_path_with_repo_form_field() {
             body: Some("Steps to reproduce"),
             assignee: Some("dev1"),
             labels: Some("bug,auth"),
+            ..Default::default()
         })
         .expect("create should succeed");
 
@@ -178,4 +179,120 @@ fn comment_posts_form_body_to_issue_comments() {
 
     mock.assert();
     assert_eq!(comment.body, "Thanks for the report");
+}
+
+#[test]
+fn create_sends_milestone_and_security_hole() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/issues";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("repo".into(), "gitee-cli".into()),
+            mockito::Matcher::UrlEncoded("title".into(), "New bug".into()),
+            mockito::Matcher::UrlEncoded("milestone".into(), "3".into()),
+            mockito::Matcher::UrlEncoded("security_hole".into(), "true".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    client(&server)
+        .issues(&test_repo())
+        .create(&CreateIssue {
+            title: "New bug",
+            milestone_number: Some(3),
+            security_hole: true,
+            ..Default::default()
+        })
+        .expect("create should succeed");
+
+    mock.assert();
+}
+
+#[test]
+fn edit_gets_first_then_patches_json_with_echoed_title() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/issues/88";
+    let patch_path = "/repos/oschina/issues/88";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    // Fixture title must be echoed (Gitee blanks it otherwise); unset fields absent.
+    let patch = server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::Json(serde_json::json!({
+            "repo": "gitee-cli",
+            "title": "Login fails with expired token",
+            "body": "updated body",
+            "labels": "bug,ui",
+            "security_hole": true
+        })))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    client(&server)
+        .issues(&test_repo())
+        .edit(
+            "88",
+            &EditIssue {
+                body: Some("updated body"),
+                labels: Some("bug,ui"),
+                security_hole: Some(true),
+                ..Default::default()
+            },
+        )
+        .expect("edit should succeed");
+
+    get.assert();
+    patch.assert();
+}
+
+#[test]
+fn edit_title_uses_new_title_not_echo() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/issues/88";
+    let patch_path = "/repos/oschina/issues/88";
+
+    server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    let patch = server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::Json(serde_json::json!({
+            "repo": "gitee-cli",
+            "title": "New title",
+            "milestone": 3
+        })))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    client(&server)
+        .issues(&test_repo())
+        .edit(
+            "88",
+            &EditIssue {
+                title: Some("New title"),
+                milestone_number: Some(3),
+                ..Default::default()
+            },
+        )
+        .expect("edit should succeed");
+
+    patch.assert();
 }

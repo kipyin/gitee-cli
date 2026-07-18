@@ -1,7 +1,7 @@
 use std::io::Write;
 
-use super::Ctx;
-use crate::api::issues::{CreateIssue, IssueFilter};
+use super::{join_flags, resolve_milestone_opt, Ctx};
+use crate::api::issues::{CreateIssue, EditIssue, IssueFilter};
 use crate::cli::IssueCmd;
 use crate::error::Result;
 use crate::models::IssueState;
@@ -33,15 +33,45 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             body,
             assignee,
             labels,
+            milestone,
+            security_hole,
         } => {
             let repo = ctx.repo()?;
+            let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
             let req = CreateIssue {
                 title: &title,
                 body: body.as_deref(),
                 assignee: assignee.as_deref(),
                 labels: labels.as_deref(),
+                milestone_number,
+                security_hole,
             };
             let issue = ctx.client.issues(repo).create(&req)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &issue, |w| out::one_issue(w, &issue))?;
+        }
+        IssueCmd::Edit {
+            number,
+            title,
+            body,
+            assignee,
+            label,
+            milestone,
+            security_hole,
+        } => {
+            let repo = ctx.repo()?;
+            let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
+            let labels = join_flags(&label);
+            let req = EditIssue {
+                title: title.as_deref(),
+                body: body.as_deref(),
+                assignee: assignee.as_deref(),
+                labels: labels.as_deref(),
+                milestone_number,
+                security_hole: security_hole.then_some(true),
+            };
+            let issue = ctx.client.issues(repo).edit(&number, &req)?;
             let mut out = std::io::stdout().lock();
             ctx.out
                 .render(&mut out, &issue, |w| out::one_issue(w, &issue))?;
