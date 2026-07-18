@@ -564,6 +564,27 @@ pub fn comment_line(w: &mut impl Write, c: &Comment) -> std::io::Result<()> {
         c.html_url.as_deref().unwrap_or("")
     )
 }
+// --- labels -------------------------------------------------------------
+
+#[derive(Tabled)]
+struct LabelRow {
+    name: String,
+    color: String,
+    id: String,
+}
+
+pub fn label_table(w: &mut impl Write, items: &[Label]) -> std::io::Result<()> {
+    let rows: Vec<LabelRow> = items
+        .iter()
+        .map(|l| LabelRow {
+            name: l.name.clone(),
+            color: format!("#{}", l.color.as_deref().unwrap_or("000000")),
+            id: l.id.to_string(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
 
 // --- releases -----------------------------------------------------------
 
@@ -921,4 +942,18 @@ mod printer_tests {
         assert!(out.contains("https://gitee.com/kip"));
     }
 
+    #[test]
+    fn label_table_shows_name_color_and_id() {
+        let labels = vec![Label {
+            id: 42,
+            name: "bug".into(),
+            color: Some("ff0000".into()),
+        }];
+        let mut buf = Vec::new();
+        label_table(&mut buf, &labels).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("bug"));
+        assert!(out.contains("#ff0000"));
+        assert!(out.contains("42"));
+    }
 }

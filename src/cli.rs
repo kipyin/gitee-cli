@@ -41,6 +41,8 @@ pub enum Command {
     #[command(subcommand)]
     Repo(RepoCmd),
     #[command(subcommand)]
+    Label(LabelCmd),
+    #[command(subcommand)]
     Auth(AuthCmd),
     #[command(subcommand)]
     Search(SearchCmd),
@@ -381,6 +383,35 @@ pub enum ReleaseCmd {
     Upload {
         tag: String,
         files: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum LabelCmd {
+    List {
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+    Create {
+        name: String,
+        #[arg(long)]
+        color: String,
+        // Ticket asked for --description but Gitee v5 POST /repos/{owner}/{repo}/labels
+        // has no description param (swagger 2026-07-18).
+    },
+    /// Edit a label. At least one flag is required.
+    #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["new_name", "color"]))]
+    Edit {
+        name: String,
+        #[arg(long = "name")]
+        new_name: Option<String>,
+        #[arg(long)]
+        color: Option<String>,
+    },
+    Delete {
+        name: String,
+        #[arg(long, short = 'y')]
+        yes: bool,
     },
 }
 
@@ -731,6 +762,18 @@ mod parse_tests {
     fn pr_edit_requires_at_least_one_flag() {
         let r = Cli::try_parse_from(["gitee", "pr", "edit", "5"]);
         assert!(r.is_err(), "pr edit with no flags must fail");
+    }
+
+    #[test]
+    fn label_edit_requires_at_least_one_flag() {
+        let r = Cli::try_parse_from(["gitee", "label", "edit", "bug"]);
+        assert!(r.is_err(), "label edit with no flags must fail");
+    }
+
+    #[test]
+    fn label_create_requires_color() {
+        let r = Cli::try_parse_from(["gitee", "label", "create", "bug"]);
+        assert!(r.is_err(), "label create without --color must fail");
     }
 
     #[test]

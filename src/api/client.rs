@@ -4,6 +4,7 @@ use crate::repo::Repo;
 
 use super::gists::Gists;
 use reqwest::blocking::Client as Http;
+use super::labels::Labels;
 use serde::de::DeserializeOwned;
 use super::milestones::Milestones;
 use serde_json::Value;
@@ -70,6 +71,10 @@ impl Client {
 
     pub fn gists<'a>(&'a self) -> Gists<'a> {
         Gists::new(self)
+    }
+
+    pub fn labels<'a>(&'a self, repo: &'a Repo) -> Labels<'a> {
+        Labels::new(self, repo)
     }
 
     pub fn repos<'a>(&'a self) -> Repos<'a> {

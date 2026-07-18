@@ -15,6 +15,7 @@ pub mod api;
 pub mod auth;
 pub mod gist;
 pub mod issue;
+pub mod label;
 pub mod pr;
 pub mod milestone;
 pub mod release;
@@ -70,6 +71,10 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Release(c) => {
             let ctx = build(&cli)?;
             release::execute(&ctx, c.clone())
+        }
+        Command::Label(c) => {
+            let ctx = build(&cli)?;
+            label::execute(&ctx, c.clone())
         }
         Command::Repo(c) => {
             let ctx = build(&cli)?;

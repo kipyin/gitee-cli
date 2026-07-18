@@ -1,6 +1,7 @@
 pub mod client;
 pub mod gists;
 pub mod issues;
+pub mod labels;
 pub mod pulls;
 pub mod milestones;
 pub mod releases;
