@@ -1,4 +1,5 @@
 pub mod client;
+pub mod collaborators;
 pub mod gists;
 pub mod issues;
 pub mod labels;
@@ -8,3 +9,4 @@ pub mod releases;
 pub mod repos;
 pub mod search;
 pub mod users;
+pub mod webhooks;

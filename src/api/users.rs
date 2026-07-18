@@ -1,6 +1,6 @@
 use super::client::Client;
 use crate::error::Result;
-use crate::models::{Issue, UserBasic};
+use crate::models::{Issue, Org, SshKey, UserBasic};
 
 /// User-level operations (no repo scope): the authenticated user and their
 /// cross-repo issue lists.
@@ -34,5 +34,26 @@ impl Users<'_> {
         }
         let qref = Client::str_refs(&q);
         self.client.get_paged("/user/issues", &qref, filter.limit)
+    }
+
+    /// Organizations for the authenticated user (GET /user/orgs).
+    pub fn orgs(&self, limit: usize) -> Result<Vec<Org>> {
+        self.client.get_paged("/user/orgs", &[], limit)
+    }
+
+    /// SSH keys for the authenticated user (GET /user/keys).
+    pub fn keys(&self, limit: usize) -> Result<Vec<SshKey>> {
+        self.client.get_paged("/user/keys", &[], limit)
+    }
+
+    /// Add an SSH public key (POST /user/keys).
+    pub fn add_key(&self, key: &str, title: &str) -> Result<SshKey> {
+        self.client
+            .post("/user/keys", &[("key", key), ("title", title)])
+    }
+
+    /// Delete an SSH key (DELETE /user/keys/{id}).
+    pub fn delete_key(&self, id: i64) -> Result<()> {
+        self.client.delete_ok(&format!("/user/keys/{id}"))
     }
 }

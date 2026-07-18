@@ -2,6 +2,7 @@ use crate::error::{GiteeError, Result};
 use super::search::Search;
 use crate::repo::Repo;
 
+use super::collaborators::Collaborators;
 use super::gists::Gists;
 use reqwest::blocking::Client as Http;
 use super::labels::Labels;
@@ -10,7 +11,7 @@ use super::milestones::Milestones;
 use serde_json::Value;
 use std::time::Duration;
 
-use super::{issues::Issues, pulls::Pulls, releases::Releases, repos::Repos, users::Users};
+use super::{issues::Issues, pulls::Pulls, releases::Releases, repos::Repos, users::Users, webhooks::Webhooks};
 
 pub struct Client {
     http: Http,
@@ -87,6 +88,14 @@ impl Client {
 
     pub fn users<'a>(&'a self) -> Users<'a> {
         Users::new(self)
+    }
+
+    pub fn collaborators<'a>(&'a self, repo: &'a Repo) -> Collaborators<'a> {
+        Collaborators::new(self, repo)
+    }
+
+    pub fn webhooks<'a>(&'a self, repo: &'a Repo) -> Webhooks<'a> {
+        Webhooks::new(self, repo)
     }
 
     pub(crate) fn str_refs<K: AsRef<str>>(pairs: &[(K, String)]) -> Vec<(&str, &str)> {

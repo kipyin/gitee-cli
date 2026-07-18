@@ -14,15 +14,19 @@ use crate::repo::Repo;
 
 pub mod api;
 pub mod auth;
+pub mod collaborator;
 pub mod gist;
 pub mod issue;
 pub mod label;
+pub mod org;
 pub mod pr;
 pub mod milestone;
 pub mod release;
 pub mod search;
+pub mod ssh_key;
 pub mod status;
 pub mod repo;
+pub mod webhook;
 
 pub struct Ctx {
     pub client: Client,
@@ -100,6 +104,22 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Milestone(c) => {
             let ctx = build(&cli)?;
             milestone::execute(&ctx, c.clone())
+        }
+        Command::Org(c) => {
+            let ctx = build(&cli)?;
+            org::execute(&ctx, c.clone())
+        }
+        Command::SshKey(c) => {
+            let ctx = build(&cli)?;
+            ssh_key::execute(&ctx, c.clone())
+        }
+        Command::Collaborator(c) => {
+            let ctx = build(&cli)?;
+            collaborator::execute(&ctx, c.clone())
+        }
+        Command::Webhook(c) => {
+            let ctx = build(&cli)?;
+            webhook::execute(&ctx, c.clone())
         }
         Command::Completions { shell } => completions(shell.clone()),
     }

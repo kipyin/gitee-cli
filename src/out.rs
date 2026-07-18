@@ -842,6 +842,113 @@ pub fn user_table(w: &mut impl Write, items: &[UserBasic]) -> std::io::Result<()
     writeln!(w, "{}", Table::new(rows))
 }
 
+// --- org / ssh-key / collaborator / webhook -----------------------------
+
+#[derive(Tabled)]
+struct OrgRow {
+    login: String,
+    name: String,
+    role: String,
+}
+
+pub fn org_table(w: &mut impl Write, items: &[Org]) -> std::io::Result<()> {
+    let rows: Vec<OrgRow> = items
+        .iter()
+        .map(|o| OrgRow {
+            login: o.login.clone(),
+            name: o.name.clone().unwrap_or_default(),
+            role: o.role.clone().unwrap_or_default(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+#[derive(Tabled)]
+struct SshKeyRow {
+    id: String,
+    title: String,
+    key: String,
+}
+
+pub fn ssh_key_table(w: &mut impl Write, items: &[SshKey]) -> std::io::Result<()> {
+    let rows: Vec<SshKeyRow> = items
+        .iter()
+        .map(|k| SshKeyRow {
+            id: k.id.to_string(),
+            title: k.title.clone().unwrap_or_default(),
+            key: truncate_key(&k.key),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+fn truncate_key(key: &str) -> String {
+    let parts: Vec<&str> = key.split_whitespace().collect();
+    if parts.len() >= 2 {
+        let blob = parts[1];
+        let short = if blob.len() > 16 {
+            format!("{}…", &blob[..16])
+        } else {
+            blob.to_string()
+        };
+        format!("{} {}", parts[0], short)
+    } else if key.len() > 24 {
+        format!("{}…", &key[..24])
+    } else {
+        key.to_string()
+    }
+}
+
+#[derive(Tabled)]
+struct CollaboratorRow {
+    login: String,
+    name: String,
+    permission: String,
+}
+
+pub fn collaborator_table(w: &mut impl Write, items: &[Collaborator]) -> std::io::Result<()> {
+    let rows: Vec<CollaboratorRow> = items
+        .iter()
+        .map(|c| CollaboratorRow {
+            login: c.login.clone(),
+            name: c.name.clone().unwrap_or_default(),
+            permission: permission_label(c.permissions.as_ref()),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+fn permission_label(p: Option<&CollaboratorPermissions>) -> String {
+    let Some(p) = p else { return String::new() };
+    if p.admin.unwrap_or(false) {
+        "admin".into()
+    } else if p.push.unwrap_or(false) {
+        "push".into()
+    } else if p.pull.unwrap_or(false) {
+        "pull".into()
+    } else {
+        String::new()
+    }
+}
+
+#[derive(Tabled)]
+struct WebhookRow {
+    id: String,
+    url: String,
+}
+
+pub fn webhook_table(w: &mut impl Write, items: &[Webhook]) -> std::io::Result<()> {
+    let rows: Vec<WebhookRow> = items
+        .iter()
+        .map(|h| WebhookRow {
+            id: h.id.to_string(),
+            url: h.url.clone().unwrap_or_default(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+
 
 #[cfg(test)]
 mod printer_tests {

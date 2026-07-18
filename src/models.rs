@@ -86,6 +86,77 @@ pub struct UserBasic {
     pub html_url: Option<String>,
 }
 
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct Org {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub login: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Membership role when present (`admin`/`member`, etc.).
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct SshKey {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct CollaboratorPermissions {
+    #[serde(default)]
+    pub pull: Option<bool>,
+    #[serde(default)]
+    pub push: Option<bool>,
+    #[serde(default)]
+    pub admin: Option<bool>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct Collaborator {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub login: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub permissions: Option<CollaboratorPermissions>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct Webhook {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub result_code: Option<i64>,
+    #[serde(default)]
+    pub result_msg: Option<String>,
+    #[serde(default)]
+    pub push_events: Option<bool>,
+    #[serde(default)]
+    pub tag_push_events: Option<bool>,
+    #[serde(default)]
+    pub issues_events: Option<bool>,
+    #[serde(default)]
+    pub pull_requests_events: Option<bool>,
+    #[serde(default)]
+    pub note_events: Option<bool>,
+}
+
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Gist {

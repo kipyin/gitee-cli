@@ -50,6 +50,14 @@ pub enum Command {
     Api(ApiArgs),
     #[command(subcommand)]
     Gist(GistCmd),
+    #[command(subcommand)]
+    Org(OrgCmd),
+    #[command(name = "ssh-key", subcommand)]
+    SshKey(SshKeyCmd),
+    #[command(subcommand)]
+    Collaborator(CollaboratorCmd),
+    #[command(subcommand)]
+    Webhook(WebhookCmd),
     /// Cross-repo dashboard of your open issues. PR sections are omitted: Gitee v5 has no user-level pulls endpoint (swagger verified 2026-07-18).
     Status {
         #[command(flatten)]
@@ -573,6 +581,76 @@ pub enum MilestoneCmd {
     },
 }
 
+
+#[derive(Subcommand, Clone)]
+pub enum OrgCmd {
+    List {
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum SshKeyCmd {
+    List {
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+    Add {
+        /// Path to the public key file.
+        pubkey_file: String,
+        #[arg(long)]
+        title: Option<String>,
+    },
+    Delete {
+        id: i64,
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum CollaboratorCmd {
+    List {
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+    Add {
+        username: String,
+        /// Permission: pull | push | admin (English enums).
+        #[arg(long, default_value = "push")]
+        permission: String,
+    },
+    Remove {
+        username: String,
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum WebhookCmd {
+    List {
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+    Create {
+        #[arg(long)]
+        url: String,
+        /// Event flags (comma-separated or repeatable): push_events, tag_push_events,
+        /// issues_events, pull_requests_events, note_events.
+        #[arg(long)]
+        events: Vec<String>,
+        #[arg(long)]
+        password: Option<String>,
+    },
+    Delete {
+        id: i64,
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+}
+
 #[derive(Subcommand, Clone)]
 pub enum AuthCmd {
     /// Store a personal access token (validated against the API unless --force).
@@ -593,7 +671,7 @@ pub enum AuthCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{Cli, Command, GistCmd, IssueCmd, MilestoneCmd, PrCmd, ReleaseCmd, RepoCmd};
+    use super::{Cli, CollaboratorCmd, Command, GistCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
     use clap::Parser;
 
     #[test]
@@ -1094,5 +1172,64 @@ mod parse_tests {
             panic!("expected issue status");
         };
         assert_eq!(limit.limit, 5);
+    }
+
+    #[test]
+    fn org_list_parses_limit() {
+        let cli = Cli::try_parse_from(["gitee", "org", "list", "--limit", "5"]).expect("org list");
+        let Command::Org(OrgCmd::List { limit }) = cli.cmd else { panic!("expected org list") };
+        assert_eq!(limit.limit, 5);
+    }
+
+    #[test]
+    fn ssh_key_commands_parse() {
+        let cli = Cli::try_parse_from(["gitee", "ssh-key", "list"]).expect("ssh-key list");
+        assert!(matches!(cli.cmd, Command::SshKey(SshKeyCmd::List { .. })));
+
+        let cli = Cli::try_parse_from([
+            "gitee", "ssh-key", "add", "~/.ssh/id_ed25519.pub", "--title", "laptop",
+        ]).expect("ssh-key add");
+        let Command::SshKey(SshKeyCmd::Add { pubkey_file, title }) = cli.cmd else { panic!("add") };
+        assert_eq!(pubkey_file, "~/.ssh/id_ed25519.pub");
+        assert_eq!(title.as_deref(), Some("laptop"));
+
+        let cli = Cli::try_parse_from(["gitee", "ssh-key", "delete", "99", "--yes"]).expect("delete");
+        let Command::SshKey(SshKeyCmd::Delete { id, yes }) = cli.cmd else { panic!("delete") };
+        assert_eq!(id, 99);
+        assert!(yes);
+    }
+
+    #[test]
+    fn collaborator_commands_parse() {
+        let cli = Cli::try_parse_from([
+            "gitee", "collaborator", "add", "alice", "--permission", "admin",
+        ]).expect("collaborator add");
+        let Command::Collaborator(CollaboratorCmd::Add { username, permission }) = cli.cmd else { panic!("add") };
+        assert_eq!(username, "alice");
+        assert_eq!(permission, "admin");
+
+        let cli = Cli::try_parse_from(["gitee", "collaborator", "remove", "alice", "-y"]).expect("remove");
+        let Command::Collaborator(CollaboratorCmd::Remove { username, yes }) = cli.cmd else { panic!("remove") };
+        assert_eq!(username, "alice");
+        assert!(yes);
+    }
+
+    #[test]
+    fn webhook_commands_parse() {
+        let cli = Cli::try_parse_from([
+            "gitee", "webhook", "create",
+            "--url", "https://example.com/hook",
+            "--events", "push_events,issues_events",
+            "--password", "s3cret",
+        ]).expect("webhook create");
+        let Command::Webhook(WebhookCmd::Create { url, events, password }) = cli.cmd else { panic!("create") };
+        assert_eq!(url, "https://example.com/hook");
+        assert_eq!(events, vec!["push_events,issues_events".to_string()]);
+        assert_eq!(password.as_deref(), Some("s3cret"));
+
+        let cli = Cli::try_parse_from(["gitee", "webhook", "delete", "55", "--yes"]).expect("delete");
+        let Command::Webhook(WebhookCmd::Delete { id, yes }) = cli.cmd else { panic!("delete") };
+        assert_eq!(id, 55);
+        assert!(yes);
     }
 }
