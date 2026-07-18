@@ -706,11 +706,28 @@ pub enum AuthCmd {
     Token,
     /// Forget the stored token for the current host.
     Logout,
+    /// Configure git to use gitee as a credential helper for this host.
+    SetupGit,
+    /// Switch the active user for this host.
+    Switch {
+        #[arg(long)]
+        user: String,
+    },
+    /// Git credential-helper protocol (usually invoked by git, not humans).
+    #[command(subcommand)]
+    GitCredential(GitCredentialCmd),
+}
+
+#[derive(Subcommand, Clone)]
+pub enum GitCredentialCmd {
+    Get,
+    Store,
+    Erase,
 }
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{AliasCmd, Cli, CollaboratorCmd, Command, ConfigCmd, GistCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
+    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, GistCmd, GitCredentialCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
     use clap::Parser;
 
     #[test]
@@ -1299,6 +1316,21 @@ mod parse_tests {
         let cli = Cli::try_parse_from(["gitee", "alias", "delete", "co"]).unwrap();
         assert!(matches!(cli.cmd, Command::Alias(AliasCmd::Delete { .. })));
     }
+
+    #[test]
+    fn auth_setup_switch_credential_parse() {
+        let cli = Cli::try_parse_from(["gitee", "auth", "setup-git"]).unwrap();
+        assert!(matches!(cli.cmd, Command::Auth(AuthCmd::SetupGit)));
+        let cli = Cli::try_parse_from(["gitee", "auth", "switch", "--user", "kip"]).unwrap();
+        let Command::Auth(AuthCmd::Switch { user }) = cli.cmd else { panic!("switch") };
+        assert_eq!(user, "kip");
+        let cli = Cli::try_parse_from(["gitee", "auth", "git-credential", "get"]).unwrap();
+        assert!(matches!(
+            cli.cmd,
+            Command::Auth(AuthCmd::GitCredential(GitCredentialCmd::Get))
+        ));
+    }
+
 
 
 }

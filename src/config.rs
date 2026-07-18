@@ -41,6 +41,12 @@ pub struct Settings {
     pub editor: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub aliases: BTreeMap<String, String>,
+    /// Active username per host (ticket 17).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub active_users: BTreeMap<String, String>,
+    /// Known usernames per host that have stored tokens.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub known_users: BTreeMap<String, Vec<String>>,
 }
 
 pub struct Config;
@@ -148,6 +154,100 @@ impl Config {
         Ok(s.aliases.into_iter().collect())
     }
 
+
+    fn user_token_path(host: &str, user: &str) -> Result<PathBuf> {
+        Ok(Self::dir()?.join(format!("{host}.{user}.token")))
+    }
+
+    fn keyring_account(host: &str, user: Option<&str>) -> String {
+        match user {
+            Some(u) => format!("{host}:{u}"),
+            None => host.to_string(),
+        }
+    }
+
+    pub fn active_user(host: &str) -> Result<Option<String>> {
+        Ok(Self::load_settings()?
+            .active_users
+            .get(host)
+            .cloned())
+    }
+
+    pub fn set_active_user(host: &str, user: &str) -> Result<()> {
+        let mut s = Self::load_settings()?;
+        s.active_users.insert(host.to_string(), user.to_string());
+        let users = s.known_users.entry(host.to_string()).or_default();
+        if !users.iter().any(|u| u == user) {
+            users.push(user.to_string());
+        }
+        Self::save_settings(&s)
+    }
+
+    pub fn remember_user(host: &str, user: &str) -> Result<()> {
+        let mut s = Self::load_settings()?;
+        let users = s.known_users.entry(host.to_string()).or_default();
+        if !users.iter().any(|u| u == user) {
+            users.push(user.to_string());
+        }
+        if !s.active_users.contains_key(host) {
+            s.active_users.insert(host.to_string(), user.to_string());
+        }
+        Self::save_settings(&s)
+    }
+
+    pub fn known_users(host: &str) -> Result<Vec<String>> {
+        let s = Self::load_settings()?;
+        Ok(s.known_users.get(host).cloned().unwrap_or_default())
+    }
+
+    pub fn switch_user(host: &str, user: &str) -> Result<()> {
+        // Ensure a token exists for this user (or legacy default).
+        let _ = Self::token_for_user(host, user)?;
+        Self::set_active_user(host, user)
+    }
+
+    pub fn token_for_user(host: &str, user: &str) -> Result<String> {
+        if let Ok(t) = keyring_get(&Self::keyring_account(host, Some(user))) {
+            return Ok(t);
+        }
+        match fs::read_to_string(Self::user_token_path(host, user)?) {
+            Ok(s) => {
+                let s = s.trim().to_string();
+                if s.is_empty() {
+                    Err(GiteeError::NotLoggedIn)
+                } else {
+                    Ok(s)
+                }
+            }
+            Err(_) => Err(GiteeError::NotLoggedIn),
+        }
+    }
+
+    pub fn set_token_for_user(host: &str, user: &str, token: &str) -> Result<()> {
+        let account = Self::keyring_account(host, Some(user));
+        match keyring::Entry::new(KEYRING_SERVICE, &account).and_then(|e| e.set_password(token)) {
+            Ok(()) => {
+                let _ = fs::remove_file(Self::user_token_path(host, user)?);
+            }
+            Err(_) => {
+                let p = Self::user_token_path(host, user)?;
+                if let Some(parent) = p.parent() {
+                    fs::create_dir_all(parent).map_err(|e| GiteeError::Config(e.to_string()))?;
+                }
+                fs::write(&p, token).map_err(|e| GiteeError::Config(e.to_string()))?;
+                restrict_perms(&p)?;
+            }
+        }
+        Self::remember_user(host, user)?;
+        Self::set_active_user(host, user)?;
+        // Drop legacy host-only token so active user wins unambiguously.
+        let _ = fs::remove_file(Self::token_path(host)?);
+        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
+            let _ = entry.delete_credential();
+        }
+        Ok(())
+    }
+
     /// Resolve the active token. Precedence (mirrors `gh`):
     ///   1. `$GITEE_TOKEN` env var   — CI / headless
     ///   2. OS keyring               — interactive default (encrypted)
@@ -159,6 +259,12 @@ impl Config {
                 return Ok(t);
             }
         }
+        if let Some(user) = Self::active_user(host)? {
+            if let Ok(t) = Self::token_for_user(host, &user) {
+                return Ok(t);
+            }
+        }
+        // Legacy single-token (pre–ticket 17) host-only store.
         if let Ok(t) = keyring_get(host) {
             return Ok(t);
         }
@@ -182,6 +288,16 @@ impl Config {
             .unwrap_or(false)
         {
             return Some(TokenSource::Env);
+        }
+        if let Ok(Some(user)) = Self::active_user(host) {
+            if keyring_get(&Self::keyring_account(host, Some(&user))).is_ok() {
+                return Some(TokenSource::Keyring);
+            }
+            if let Ok(p) = Self::user_token_path(host, &user) {
+                if matches!(fs::read_to_string(&p), Ok(s) if !s.trim().is_empty()) {
+                    return Some(TokenSource::File);
+                }
+            }
         }
         if keyring_get(host).is_ok() {
             return Some(TokenSource::Keyring);
