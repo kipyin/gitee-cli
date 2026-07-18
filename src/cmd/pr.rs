@@ -196,9 +196,15 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
         PrCmd::Test { number, force } => {
             let repo = ctx.repo()?;
             ctx.client.pulls(repo).test(number, force)?;
-            let pr = ctx.client.pulls(repo).get(number)?;
+            let confirm = serde_json::json!({
+                "number": number,
+                "tested": true,
+                "force": force,
+            });
             let mut out = std::io::stdout().lock();
-            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
+            ctx.out.render(&mut out, &confirm, |w| {
+                writeln!(w, "Marked pull request !{number} as tested")
+            })?;
         }
         PrCmd::Close { number } => {
             let repo = ctx.repo()?;
