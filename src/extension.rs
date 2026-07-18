@@ -90,6 +90,11 @@ pub fn list_on_path() -> Vec<String> {
     names
 }
 
+/// Whether to inject `GITEE_HOST` for an extension child process.
+fn should_set_gitee_host() -> bool {
+    std::env::var_os("GITEE_HOST").is_none()
+}
+
 /// Exec a `gitee-{name}` binary with `args`, forwarding `GITEE_*` env.
 pub fn exec(name: &str, args: &[OsString], host: &str) -> Result<()> {
     let path = find_on_path(name).ok_or_else(|| {
@@ -99,7 +104,9 @@ pub fn exec(name: &str, args: &[OsString], host: &str) -> Result<()> {
     })?;
     let mut cmd = Command::new(&path);
     cmd.args(args);
-    cmd.env("GITEE_HOST", host);
+    if should_set_gitee_host() {
+        cmd.env("GITEE_HOST", host);
+    }
     if std::env::var("GITEE_TOKEN").is_err() {
         if let Ok(token) = Config::token(host) {
             cmd.env("GITEE_TOKEN", token);
@@ -113,6 +120,8 @@ pub fn exec(name: &str, args: &[OsString], host: &str) -> Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     fn temp_bin_dir() -> PathBuf {
@@ -128,6 +137,7 @@ mod tests {
         path
     }
 
+    #[cfg(unix)]
     fn write_fake_ext(dir: &Path, name: &str) {
         let path = dir.join(format!("{PREFIX}{name}"));
         fs::write(&path, b"#!/bin/sh\n").expect("write");
@@ -136,6 +146,26 @@ mod tests {
         fs::set_permissions(&path, perms).expect("chmod");
     }
 
+    #[cfg(not(unix))]
+    fn write_fake_ext(dir: &Path, name: &str) {
+        let path = dir.join(format!("{PREFIX}{name}"));
+        fs::write(&path, b"").expect("write");
+    }
+
+    #[test]
+    fn should_set_gitee_host_respects_existing_env() {
+        let prev = std::env::var_os("GITEE_HOST");
+        std::env::set_var("GITEE_HOST", "self.gitee.test");
+        assert!(!should_set_gitee_host());
+        if let Some(v) = prev {
+            std::env::set_var("GITEE_HOST", v);
+        } else {
+            std::env::remove_var("GITEE_HOST");
+        }
+        assert!(should_set_gitee_host());
+    }
+
+    #[cfg(unix)]
     #[test]
     fn find_on_path_discovers_executable() {
         let dir = temp_bin_dir();
@@ -151,6 +181,7 @@ mod tests {
         assert_eq!(found, Some(dir.join("gitee-foo")));
     }
 
+    #[cfg(unix)]
     #[test]
     fn find_on_path_missing_returns_none() {
         let dir = temp_bin_dir();
@@ -165,6 +196,7 @@ mod tests {
         assert!(found.is_none());
     }
 
+    #[cfg(unix)]
     #[test]
     fn list_on_path_collects_names() {
         let dir = temp_bin_dir();

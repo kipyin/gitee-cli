@@ -63,6 +63,14 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             milestone,
             security_hole,
         } => {
+            if super::interactive::should_run_interactive_create(title.as_deref(), false)
+                && !super::interactive::stdin_is_tty()
+            {
+                return Err(super::interactive::missing_title_usage(
+                    "issue create",
+                    false,
+                ));
+            }
             let repo = ctx.repo()?;
             let mut title = title;
             let mut body = body;

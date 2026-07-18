@@ -341,3 +341,55 @@ mod flag_tests {
         assert_eq!(super::join_flags(&["  ".to_string()]), None);
     }
 }
+
+
+#[cfg(test)]
+mod create_title_tests {
+    use super::*;
+    use crate::cli::{Cli, Command, IssueCmd, PrCmd};
+    use clap::Parser;
+
+    #[test]
+    fn issue_create_non_tty_missing_title_before_repo() {
+        let _env = crate::config::test_config_env_lock();
+        let prev_token = std::env::var_os("GITEE_TOKEN");
+        std::env::set_var("GITEE_TOKEN", "test-token");
+        let cli = Cli::try_parse_from(["gitee", "issue", "create"]).unwrap();
+        let ctx = build_inner(&cli, true).unwrap();
+        let Command::Issue(cmd) = cli.cmd else {
+            panic!("expected issue command");
+        };
+        let IssueCmd::Create { .. } = cmd else {
+            panic!("expected issue create");
+        };
+        let err = issue::execute(&ctx, cmd).unwrap_err();
+        assert!(err.to_string().contains("issue create needs --title"));
+        if let Some(t) = prev_token {
+            std::env::set_var("GITEE_TOKEN", t);
+        } else {
+            std::env::remove_var("GITEE_TOKEN");
+        }
+    }
+
+    #[test]
+    fn pr_create_non_tty_missing_title_before_repo() {
+        let _env = crate::config::test_config_env_lock();
+        let prev_token = std::env::var_os("GITEE_TOKEN");
+        std::env::set_var("GITEE_TOKEN", "test-token");
+        let cli = Cli::try_parse_from(["gitee", "pr", "create"]).unwrap();
+        let ctx = build_inner(&cli, true).unwrap();
+        let Command::Pr(cmd) = cli.cmd else {
+            panic!("expected pr command");
+        };
+        let PrCmd::Create { .. } = cmd else {
+            panic!("expected pr create");
+        };
+        let err = pr::execute(&ctx, cmd).unwrap_err();
+        assert!(err.to_string().contains("pr create needs --title"));
+        if let Some(t) = prev_token {
+            std::env::set_var("GITEE_TOKEN", t);
+        } else {
+            std::env::remove_var("GITEE_TOKEN");
+        }
+    }
+}

@@ -59,6 +59,23 @@ pub fn set_test_dir(dir: Option<PathBuf>) {
     *TEST_CONFIG_DIR.lock().unwrap_or_else(|e| e.into_inner()) = dir;
 }
 
+/// When a test config dir is active, never touch the real OS keyring.
+/// Tests only isolate the config directory; without this guard they can
+/// delete/overwrite production `gitee-cli` credentials for `gitee.com`.
+fn keyring_enabled() -> bool {
+    #[cfg(test)]
+    {
+        if TEST_CONFIG_DIR
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+        {
+            return false;
+        }
+    }
+    true
+}
+
 
 impl Config {
     pub fn dir() -> Result<PathBuf> {
@@ -245,8 +262,10 @@ impl Config {
     }
 
     pub fn token_for_user(host: &str, user: &str) -> Result<String> {
-        if let Ok(t) = keyring_get(&Self::keyring_account(host, Some(user))) {
-            return Ok(t);
+        if keyring_enabled() {
+            if let Ok(t) = keyring_get(&Self::keyring_account(host, Some(user))) {
+                return Ok(t);
+            }
         }
         match fs::read_to_string(Self::user_token_path(host, user)?) {
             Ok(s) => {
@@ -262,14 +281,16 @@ impl Config {
     }
 
     fn store_user_token(host: &str, user: &str, token: &str) -> Result<()> {
-        let account = Self::keyring_account(host, Some(user));
-        let keyring_ok = keyring::Entry::new(KEYRING_SERVICE, &account)
-            .and_then(|e| e.set_password(token))
-            .is_ok()
-            && keyring_get(&account).ok().as_deref() == Some(token);
-        if keyring_ok {
-            let _ = fs::remove_file(Self::user_token_path(host, user)?);
-            return Ok(());
+        if keyring_enabled() {
+            let account = Self::keyring_account(host, Some(user));
+            let keyring_ok = keyring::Entry::new(KEYRING_SERVICE, &account)
+                .and_then(|e| e.set_password(token))
+                .is_ok()
+                && keyring_get(&account).ok().as_deref() == Some(token);
+            if keyring_ok {
+                let _ = fs::remove_file(Self::user_token_path(host, user)?);
+                return Ok(());
+            }
         }
         let p = Self::user_token_path(host, user)?;
         if let Some(parent) = p.parent() {
@@ -283,11 +304,20 @@ impl Config {
     pub fn set_token_for_user(host: &str, user: &str, token: &str) -> Result<()> {
         Self::sanitize_username(user)?;
         Self::store_user_token(host, user, token)?;
+        // Verify the new secret is readable before deleting any legacy copy.
+        let stored = Self::token_for_user(host, user)?;
+        if stored != token {
+            return Err(GiteeError::Config(
+                "token store verification failed: readable value does not match".into(),
+            ));
+        }
         Self::remember_user(host, user)?;
         Self::set_active_user(host, user)?;
         let _ = fs::remove_file(Self::token_path(host)?);
-        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
-            let _ = entry.delete_credential();
+        if keyring_enabled() {
+            if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
+                let _ = entry.delete_credential();
+            }
         }
         Ok(())
     }
@@ -310,8 +340,10 @@ impl Config {
             }
         }
         // Legacy single-token (pre–ticket 17) host-only store.
-        if let Ok(t) = keyring_get(host) {
-            return Ok(t);
+        if keyring_enabled() {
+            if let Ok(t) = keyring_get(host) {
+                return Ok(t);
+            }
         }
         match fs::read_to_string(Self::token_path(host)?) {
             Ok(s) => {
@@ -335,7 +367,9 @@ impl Config {
             return Some(TokenSource::Env);
         }
         if let Ok(Some(user)) = Self::active_user(host) {
-            if keyring_get(&Self::keyring_account(host, Some(&user))).is_ok() {
+            if keyring_enabled()
+                && keyring_get(&Self::keyring_account(host, Some(&user))).is_ok()
+            {
                 return Some(TokenSource::Keyring);
             }
             if let Ok(p) = Self::user_token_path(host, &user) {
@@ -344,7 +378,7 @@ impl Config {
                 }
             }
         }
-        if keyring_get(host).is_ok() {
+        if keyring_enabled() && keyring_get(host).is_ok() {
             return Some(TokenSource::Keyring);
         }
         let Ok(p) = Self::token_path(host) else {
@@ -359,22 +393,24 @@ impl Config {
     /// Store a token. Writes to the OS keyring when available; otherwise falls
     /// back to a plaintext file (chmod 600) so headless boxes still work.
     pub fn set_token(host: &str, token: &str) -> Result<()> {
-        match keyring::Entry::new(KEYRING_SERVICE, host).and_then(|e| e.set_password(token)) {
-            Ok(()) => {
+        if keyring_enabled() {
+            let keyring_ok = keyring::Entry::new(KEYRING_SERVICE, host)
+                .and_then(|e| e.set_password(token))
+                .is_ok()
+                && keyring_get(host).ok().as_deref() == Some(token);
+            if keyring_ok {
                 // Active secret now lives only in the keyring; drop any stale file.
                 let _ = fs::remove_file(Self::token_path(host)?);
-                Ok(())
-            }
-            Err(_) => {
-                let p = Self::token_path(host)?;
-                if let Some(parent) = p.parent() {
-                    fs::create_dir_all(parent).map_err(|e| GiteeError::Config(e.to_string()))?;
-                }
-                fs::write(&p, token).map_err(|e| GiteeError::Config(e.to_string()))?;
-                restrict_perms(&p)?;
-                Ok(())
+                return Ok(());
             }
         }
+        let p = Self::token_path(host)?;
+        if let Some(parent) = p.parent() {
+            fs::create_dir_all(parent).map_err(|e| GiteeError::Config(e.to_string()))?;
+        }
+        fs::write(&p, token).map_err(|e| GiteeError::Config(e.to_string()))?;
+        restrict_perms(&p)?;
+        Ok(())
     }
 
     fn keyring_delete_error(account: &str, err: keyring::Error) -> Option<String> {
@@ -387,7 +423,12 @@ impl Config {
     }
 
     fn legacy_token(host: &str) -> Option<String> {
-        keyring_get(host).ok().or_else(|| {
+        let from_keyring = if keyring_enabled() {
+            keyring_get(host).ok()
+        } else {
+            None
+        };
+        from_keyring.or_else(|| {
             fs::read_to_string(Self::token_path(host).ok()?)
                 .ok()
                 .map(|s| s.trim().to_string())
@@ -401,10 +442,12 @@ impl Config {
 
     fn clear_legacy_token(host: &str) -> Result<()> {
         let mut errors = Vec::new();
-        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
-            if let Err(e) = entry.delete_credential() {
-                if let Some(msg) = Self::keyring_delete_error(host, e) {
-                    errors.push(msg);
+        if keyring_enabled() {
+            if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
+                if let Err(e) = entry.delete_credential() {
+                    if let Some(msg) = Self::keyring_delete_error(host, e) {
+                        errors.push(msg);
+                    }
                 }
             }
         }
@@ -422,11 +465,13 @@ impl Config {
     pub fn clear_token_for_user(host: &str, user: &str) -> Result<()> {
         Self::sanitize_username(user)?;
         let mut errors = Vec::new();
-        let account = Self::keyring_account(host, Some(user));
-        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &account) {
-            if let Err(e) = entry.delete_credential() {
-                if let Some(msg) = Self::keyring_delete_error(&account, e) {
-                    errors.push(msg);
+        if keyring_enabled() {
+            let account = Self::keyring_account(host, Some(user));
+            if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &account) {
+                if let Err(e) = entry.delete_credential() {
+                    if let Some(msg) = Self::keyring_delete_error(&account, e) {
+                        errors.push(msg);
+                    }
                 }
             }
         }
@@ -490,11 +535,15 @@ impl Config {
 
     /// Migrate legacy host-only tokens and the old synthetic `default` user slot
     /// into the per-user store under `oauth2`.
+    ///
+    /// Deletion of the old secret only happens after the new location round-trips.
     pub fn migrate_legacy_user(host: &str) -> Result<()> {
         if Self::active_user(host)?.as_deref() == Some("default") {
             if let Ok(token) = Self::token_for_user(host, "default") {
+                // Store under oauth2 first; only then drop the old `default` slot.
+                Self::set_token_for_user(host, "oauth2", &token)?;
                 let _ = Self::clear_token_for_user(host, "default");
-                return Self::set_token_for_user(host, "oauth2", &token);
+                return Ok(());
             }
         }
         if Self::active_user(host)?.is_some() {
@@ -503,6 +552,7 @@ impl Config {
         let Some(token) = Self::legacy_token(host) else {
             return Ok(());
         };
+        // set_token_for_user verifies the new secret before clearing legacy storage.
         Self::set_token_for_user(host, "oauth2", &token)
     }
 }
@@ -584,6 +634,31 @@ pub fn apply_defaults(mut argv: Vec<String>, settings: &Settings) -> Vec<String>
         }
     }
     argv
+}
+
+/// Like [`apply_defaults`] but preserves non-UTF-8 argv elements.
+pub fn apply_defaults_os(mut argv: Vec<std::ffi::OsString>, settings: &Settings) -> Vec<std::ffi::OsString> {
+    if let Some(host) = &settings.host {
+        if !has_long_opt_os(&argv, "host") {
+            argv.insert(1, std::ffi::OsString::from(format!("--host={host}")));
+        }
+    }
+    if let Some(remote) = &settings.remote {
+        if !has_long_opt_os(&argv, "remote") {
+            argv.insert(1, std::ffi::OsString::from(format!("--remote={remote}")));
+        }
+    }
+    argv
+}
+
+fn has_long_opt_os(argv: &[std::ffi::OsString], name: &str) -> bool {
+    let prefixed = format!("--{name}");
+    let eq = format!("--{name}=");
+    argv.iter().any(|a| {
+        a.to_str()
+            .map(|s| s == prefixed || s.starts_with(&eq))
+            .unwrap_or(false)
+    })
 }
 
 fn has_long_opt(argv: &[String], name: &str) -> bool {
@@ -734,7 +809,9 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
-        let host = "gitee.com";
+        // Never use gitee.com here: even if keyring isolation regresses, dummy
+        // tokens must not overwrite a real `gitee.com:*` keyring entry mid-test.
+        let host = "gitee.test";
         fs::write(dir.join(format!("{host}.token")), "legacy-token\n").unwrap();
         Config::migrate_legacy_user(host).unwrap();
         assert_eq!(Config::active_user(host).unwrap().as_deref(), Some("oauth2"));
@@ -757,11 +834,51 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
-        let host = "gitee.com";
+        let host = "gitee.test";
         Config::set_token_for_user(host, "alice", "secret").unwrap();
         assert!(dir.join(format!("{host}.alice.token")).exists());
         Config::clear_stored_credentials(host, Some("alice")).unwrap();
         assert!(!dir.join(format!("{host}.alice.token")).exists());
+        set_test_dir(None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn orphaned_known_user_is_not_logged_in() {
+        let _env = test_config_env_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "gitee-cli-orphan-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        set_test_dir(Some(dir.clone()));
+        let host = "gitee.test";
+        Config::set_active_user(host, "oauth2").unwrap();
+        assert!(Config::known_users(host).unwrap().contains(&"oauth2".into()));
+        assert!(Config::locate(host).is_none());
+        assert!(Config::token(host).is_err());
+        set_test_dir(None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migrate_keeps_legacy_if_new_store_unreadable() {
+        // With test-dir isolation, store goes to files. After a successful
+        // migrate the legacy file must be gone and the per-user file present.
+        let _env = test_config_env_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "gitee-cli-migrate-keep-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        set_test_dir(Some(dir.clone()));
+        let host = "gitee.test";
+        fs::write(dir.join(format!("{host}.token")), "legacy-token\n").unwrap();
+        Config::migrate_legacy_user(host).unwrap();
+        assert_eq!(Config::token_for_user(host, "oauth2").unwrap(), "legacy-token");
+        assert!(!dir.join(format!("{host}.token")).exists());
         set_test_dir(None);
         let _ = fs::remove_dir_all(&dir);
     }

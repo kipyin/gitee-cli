@@ -110,6 +110,11 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             milestone,
             close_issue,
         } => {
+            if super::interactive::should_run_interactive_create(title.as_deref(), fill)
+                && !super::interactive::stdin_is_tty()
+            {
+                return Err(super::interactive::missing_title_usage("pr create", true));
+            }
             let repo = ctx.repo()?;
             let head = match head {
                 Some(h) => h,
