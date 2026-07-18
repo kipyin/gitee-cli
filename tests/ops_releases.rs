@@ -143,3 +143,60 @@ fn upload_gets_release_then_posts_multipart_attach_files() {
     assert_eq!(asset.name, "upload.bin");
     let _ = std::fs::remove_file(&file_path);
 }
+
+/// Regression (found by the release mirror job): Gitee rejects release create
+/// without a non-empty `body`, so it defaults to the display name.
+#[test]
+fn create_without_notes_defaults_body_to_name() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/releases";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("tag_name".into(), "v1.3.0".into()),
+            mockito::Matcher::UrlEncoded("body".into(), "v1.3.0".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(RELEASE_JSON)
+        .create();
+
+    client(&server)
+        .releases(&test_repo())
+        .create(&CreateRelease {
+            tag: "v1.3.0",
+            name: None,
+            notes: None,
+            target: None,
+            prerelease: false,
+        })
+        .expect("create should succeed");
+
+    mock.assert();
+}
+
+/// Regression: Gitee returns HTTP 200 with a JSON `null` body for a missing
+/// release tag — must surface as NotFound, not a decode error.
+#[test]
+fn get_by_tag_null_body_maps_to_not_found() {
+    use gitee_cli_rs::error::GiteeError;
+
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/releases/tags/v9.9.9";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body("null")
+        .create();
+
+    let err = client(&server)
+        .releases(&test_repo())
+        .get_by_tag("v9.9.9")
+        .expect_err("null body should map to NotFound");
+
+    mock.assert();
+    assert!(matches!(err, GiteeError::NotFound(_)), "got {err:?}");
+}

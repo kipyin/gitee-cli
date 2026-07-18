@@ -28,14 +28,22 @@ impl Releases<'_> {
         self.client.get_paged(&path, &[], limit)
     }
 
+    /// Gitee quirk: a missing release returns HTTP 200 with a JSON `null`
+    /// body (not 404). Deserialize as Option and map null to NotFound.
     pub fn get_by_tag(&self, tag: &str) -> Result<Release> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        self.client
-            .get(&format!("/repos/{o}/{r}/releases/tags/{tag}"), &[])
+        let rel: Option<Release> = self
+            .client
+            .get(&format!("/repos/{o}/{r}/releases/tags/{tag}"), &[])?;
+        rel.ok_or_else(|| {
+            crate::error::GiteeError::NotFound(format!("release {tag}"))
+        })
     }
 
-    /// Gitee quirk: `prerelease` is always sent as `"true"` or `"false"`; `name` defaults to `tag`.
+    /// Gitee quirks: `body` is REQUIRED and must be non-empty (400 otherwise),
+    /// so it defaults to the display name; `prerelease` is always sent as
+    /// `"true"` or `"false"`; `name` defaults to `tag`.
     pub fn create(&self, req: &CreateRelease<'_>) -> Result<Release> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
@@ -43,10 +51,8 @@ impl Releases<'_> {
         let mut f: Vec<(&str, String)> = vec![
             ("tag_name", req.tag.to_string()),
             ("name", display_name.to_string()),
+            ("body", req.notes.unwrap_or(display_name).to_string()),
         ];
-        if let Some(n) = req.notes {
-            f.push(("body", n.to_string()));
-        }
         if let Some(t) = req.target {
             f.push(("target_commitish", t.to_string()));
         }
