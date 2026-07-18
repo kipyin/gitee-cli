@@ -14,6 +14,7 @@ use crate::repo::Repo;
 
 pub mod api;
 pub mod alias;
+pub mod extension;
 pub mod auth;
 pub mod browse;
 pub mod collaborator;
@@ -140,6 +141,18 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Webhook(c) => {
             let ctx = build(&cli)?;
             webhook::execute(&ctx, c.clone())
+        }
+        Command::Extension(c) => {
+            let ctx = build_inner(&cli, false)?;
+            extension::execute(&ctx, c.clone())
+        }
+        Command::External(args) => {
+            let Some(name) = args.first().and_then(|s| s.to_str()) else {
+                return Err(crate::error::GiteeError::Usage(
+                    "extension command name required".into(),
+                ));
+            };
+            crate::extension::exec(name, &args[1..], &cli.host)
         }
         Command::Completions { shell } => completions(shell.clone()),
     }

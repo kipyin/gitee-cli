@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use std::ffi::OsString;
 
 #[derive(Parser)]
 #[command(name = "gitee", version, about = "Gitee CLI (gh-like)")]
@@ -71,6 +72,11 @@ pub enum Command {
     },
     /// Print a shell completion script (bash, zsh, fish, powershell, elvish).
     Completions { shell: Option<String> },
+    #[command(subcommand)]
+    Extension(ExtensionCmd),
+    /// Extension or unknown command: exec `gitee-<name>` from PATH.
+    #[command(external_subcommand)]
+    External(Vec<OsString>),
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -622,6 +628,12 @@ pub enum ConfigCmd {
 }
 
 #[derive(Subcommand, Clone)]
+pub enum ExtensionCmd {
+    /// List extension commands discovered on PATH.
+    List,
+}
+
+#[derive(Subcommand, Clone)]
 pub enum AliasCmd {
     List,
     Set {
@@ -741,7 +753,7 @@ pub enum GitCredentialCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, GistCmd, GitCredentialCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
+    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
     use clap::Parser;
 
     #[test]
@@ -1351,6 +1363,22 @@ mod parse_tests {
             cli.cmd,
             Command::Auth(AuthCmd::GitCredential(GitCredentialCmd::Get))
         ));
+    }
+
+    #[test]
+    fn extension_list_parse() {
+        let cli = Cli::try_parse_from(["gitee", "extension", "list"]).unwrap();
+        assert!(matches!(cli.cmd, Command::Extension(ExtensionCmd::List)));
+    }
+
+    #[test]
+    fn external_extension_parse() {
+        let cli = Cli::try_parse_from(["gitee", "myext", "arg1", "--flag"]).unwrap();
+        let Command::External(args) = cli.cmd else { panic!("external") };
+        assert_eq!(args.len(), 3);
+        assert_eq!(args[0], "myext");
+        assert_eq!(args[1], "arg1");
+        assert_eq!(args[2], "--flag");
     }
 
     #[test]

@@ -11,3 +11,7 @@ Review fixes: pending commit
 - 17 complete (06e22fa)
 - 15 complete (ae7969e)
 - code-review findings addressed (this commit)
+
+## Fix wave (post 1d4f2eb review)
+- Dispatch FixAuthConfig + FixApiUx for remaining P1/P2
+- Then triage+implement 23/24 per suggested directions
