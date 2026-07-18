@@ -67,13 +67,19 @@ For CI / scripts, use an environment variable instead:
 export GITEE_TOKEN=your_token
 ```
 
-Token lookup order: `$GITEE_TOKEN` → OS keyring → `~/.config/gitee/<host>.token`.
+Token lookup order: `$GITEE_TOKEN` → OS keyring → `~/.config/gitee/<host>/…`
+(per-user token files after login; legacy `~/.config/gitee/<host>.token` is migrated).
+
 Useful commands:
 
 ```bash
-gitee auth status    # where am I logged in / where's the token from?
-gitee auth token     # print the active token (for piping)
-gitee auth logout    # forget the stored token
+gitee auth status                 # where am I logged in / who's active?
+gitee auth token                  # print the active token (for piping)
+gitee auth switch --user alice    # pick among saved accounts on this host
+gitee auth setup-git              # use gitee as git credential helper
+gitee auth logout                 # forget the stored token
+gitee config set editor nvim      # defaults: host / remote / editor
+gitee alias set co pr checkout    # expand `gitee co 42` → `gitee pr checkout 42`
 ```
 
 ## Everyday commands
@@ -85,9 +91,11 @@ Run from inside a repo, or point anywhere with `--repo owner/name`.
 gitee pr list
 gitee pr status                      # created / assigned / awaiting my test
 gitee pr view 42
+gitee pr view 42 --web               # open in browser
 gitee pr diff 42
 gitee pr checkout 42                 # fetch into local branch pr-42
 gitee pr create --title "Fix" --head my-branch
+gitee pr create                      # interactive title/body on a TTY
 gitee pr create --fill               # title/body from commits
 gitee pr edit 42 --title "Retitle" --label bug
 gitee pr comment 42 -m "LGTM"
@@ -99,13 +107,16 @@ gitee pr merge 42 --squash
 gitee issue list
 gitee issue status                   # created / assigned to me
 gitee issue view I88
+gitee issue view I88 --web
 gitee issue create --title "Bug" --body "steps…"
+gitee issue create                   # interactive title/body on a TTY
 gitee issue edit I88 --label bug --milestone v1.0
 gitee issue comment I88 -m "looking into it"
 gitee issue close I88
 
-# cross-repo dashboard
+# cross-repo dashboard / browser
 gitee status                         # assigned / created open issues
+gitee browse                         # open the resolved repo in a browser
 
 # search
 gitee search repos gitee --language Rust
@@ -115,6 +126,7 @@ gitee search users kip
 # releases
 gitee release list
 gitee release view v1.0.0
+gitee release view v1.0.0 --web
 gitee release create --tag v1.0.0 --notes "changelog…"
 gitee release upload v1.0.0 dist/*.tar.xz
 gitee release download v1.0.0 --dir ./dist
@@ -122,12 +134,14 @@ gitee release edit v1.0.0 --notes "updated notes"
 
 # repositories
 gitee repo view oschina/git
+gitee repo view --web
 gitee repo list
 gitee repo clone oschina/git
 gitee repo fork
 gitee repo create my-tool --private
 gitee repo edit --description "…"
 gitee repo rename new-slug
+gitee repo star                      # also: unstar / watch / unwatch
 
 # labels / milestones
 gitee label list
@@ -135,10 +149,25 @@ gitee label create bug --color ff0000
 gitee milestone list
 gitee milestone create --title v1.0 --due-on 2026-12-31
 
+# org / access / hooks
+gitee org list
+gitee ssh-key list
+gitee ssh-key add ~/.ssh/id_ed25519.pub --title laptop
+gitee collaborator list
+gitee collaborator add alice --permission push
+gitee webhook list
+gitee webhook create --url https://example.com/hook --events push_events
+
 # gists
 gitee gist list
 gitee gist create notes.md --desc "scratch"
 gitee gist view <id> --raw
+
+# config / aliases / extensions
+gitee config list
+gitee alias list
+gitee extension list                 # gitee-* binaries on PATH
+# unknown commands also exec `gitee-<name>` from PATH (gh-style)
 
 # raw API escape hatch
 gitee api user
@@ -165,10 +194,10 @@ gitee --host git.example.com ...           # self-hosted Gitee
 |------------|-------------|
 | `list` | List PRs (`--state`, `--author`, `--limit`) |
 | `status` | Open PRs relevant to you: created, assigned, awaiting your test (`--limit`) |
-| `view <n>` | Show pull request details |
+| `view <n>` | Show pull request details (`--web` opens in browser) |
 | `diff <n>` | Show pull request diff |
 | `checkout <n>` | Fetch and check out a pull request locally |
-| `create` | Open a PR (`--title` or `--fill`; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`) |
+| `create` | Open a PR (`--title` / `--fill`, or interactive on a TTY; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--tester`, `--label`, `--milestone`) |
 | `merge <n>` | Merge (`--squash`, `--rebase`, `--no-close-issue`) |
 | `comment <n>` | Add a comment (`-m/--body`) |
@@ -186,8 +215,8 @@ gitee --host git.example.com ...           # self-hosted Gitee
 |------------|-------------|
 | `list` | List issues (`--state`, `--assignee`, `--limit`) |
 | `status` | Open issues relevant to you: created, assigned (`--limit`) |
-| `view <n>` | Show issue details (Gitee issue idents are strings, e.g. `I88`) |
-| `create` | Create (`--title` required; `--body`, `--assignee`, `--labels`, `--milestone`, `--security-hole`) |
+| `view <n>` | Show issue details (`--web`; Gitee issue idents are strings, e.g. `I88`) |
+| `create` | Create (`--title` or interactive on a TTY; `--body`, `--assignee`, `--labels`, `--milestone`, `--security-hole`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`) |
 | `close <n>` / `reopen <n>` | Change state |
 | `link <n> <pr>` | Link an issue to a pull request |
@@ -224,7 +253,7 @@ sections are omitted — Gitee v5 has no user-level pulls endpoint.
 | Subcommand | Description |
 |------------|-------------|
 | `list` | List releases (`--limit`) |
-| `view <tag>` | Show release details |
+| `view <tag>` | Show release details (`--web` opens in browser) |
 | `create` | Create (`--tag` required; `--name`, `--notes`, `--target`, `--prerelease`) |
 | `upload <tag> <files…>` | Attach files to an existing release |
 | `download <tag>` | Download assets (`--dir`, `--pattern`) |
@@ -238,13 +267,15 @@ sections are omitted — Gitee v5 has no user-level pulls endpoint.
 
 | Subcommand | Description |
 |------------|-------------|
-| `view [repo]` | Show repository details |
+| `view [repo]` | Show repository details (`--web` opens in browser) |
 | `list [owner]` | List repos (yours, or a user/org's public repos) (`--limit`) |
 | `clone <spec> [dir]` | Clone via git (`--ssh`) |
 | `fork` | Fork the resolved repository (`--add-remote <name>`) |
 | `create <name>` | Create under your account or `--org` (`--private`, `--description`, `--homepage`, `--gitignore`, `--license`) |
 | `edit` | Edit settings (`--description`, `--homepage`, `--private`/`--public`, `--default-branch`) |
 | `rename <path>` | Rename the URL slug |
+| `star` / `unstar` | Star or unstar the resolved repository |
+| `watch` / `unwatch` | Watch or unwatch the resolved repository |
 | `delete` | Delete (`--yes` to skip confirmation) |
 
 </details>
@@ -306,9 +337,98 @@ gitee api repos/oschina/git/releases --paginate
 | Subcommand | Description |
 |------------|-------------|
 | `login` | Store a token (`--token`, `--force` to skip validation) |
-| `status` | Show login status and token source |
+| `status` | Show login status, active user, and token source |
 | `token` | Print the active token |
 | `logout` | Forget the stored token for the current host |
+| `switch --user <name>` | Switch the active saved account for this host |
+| `setup-git` | Configure git to use `gitee` as credential helper for this host |
+| `git-credential` | Git credential-helper protocol (`get` / `store` / `erase`; usually invoked by git) |
+
+</details>
+
+<details>
+<summary><strong>gitee browse</strong> — open in browser</summary>
+
+Opens the resolved repository in your default browser. Prefer `view --web` when you already know the PR / issue / release / repo target.
+
+</details>
+
+<details>
+<summary><strong>gitee org</strong> — organizations</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List organizations for the authenticated user (`--limit`) |
+
+</details>
+
+<details>
+<summary><strong>gitee ssh-key</strong> — SSH keys</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List your SSH public keys (`--limit`) |
+| `add <pubkey-file>` | Upload a public key (`--title`) |
+| `delete <id>` | Delete a key (`--yes` to skip confirmation) |
+
+</details>
+
+<details>
+<summary><strong>gitee collaborator</strong> — repository collaborators</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List collaborators on the resolved repo (`--limit`) |
+| `add <username>` | Add a collaborator (`--permission` pull\|push\|admin, default `push`) |
+| `remove <username>` | Remove a collaborator (`--yes` to skip confirmation) |
+
+</details>
+
+<details>
+<summary><strong>gitee webhook</strong> — repository webhooks</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List webhooks (`--limit`) |
+| `create` | Create (`--url` required; `--events` push_events/tag_push_events/issues_events/merge_requests_events/note_events; `--password`) |
+| `delete <id>` | Delete (`--yes` to skip confirmation) |
+
+</details>
+
+<details>
+<summary><strong>gitee config</strong> — defaults</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | Show configured keys |
+| `get <key>` | Read one key (`host`, `remote`, `editor`) |
+| `set <key> <value>` | Write one key |
+
+Stored in `~/.config/gitee/config.json`. CLI flags still win over these defaults.
+
+</details>
+
+<details>
+<summary><strong>gitee alias</strong> — command aliases</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | Show aliases |
+| `set <name> <expansion…>` | Define an alias (shell-quote multi-word expansions) |
+| `delete <name>` | Remove an alias |
+
+Example: `gitee alias set co pr checkout` → `gitee co 42` expands to `gitee pr checkout 42`.
+
+</details>
+
+<details>
+<summary><strong>gitee extension</strong> — PATH extensions</summary>
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List `gitee-*` executables discovered on `PATH` |
+
+Unknown top-level commands also exec `gitee-<name>` from `PATH` (same model as `gh`).
 
 </details>
 
@@ -355,8 +475,8 @@ Features beyond GitHub CLI parity:
 | `issue --security-hole` | shipped | mark an issue as a security hole on create/edit |
 | `milestone` | shipped | full list/view/create/edit; Gitee requires `--due-on` on create |
 | `pr` assignees **and** testers | shipped | dual review/test roles on create/edit/status |
-| `repo star` / `watch` | planned | ticket 22 |
-| `webhook` | planned | ticket 20 |
+| `repo star` / `watch` | shipped | `star` / `unstar` / `watch` / `unwatch` |
+| `webhook` | shipped | list / create / delete repository hooks |
 
 ## License
 
