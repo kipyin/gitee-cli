@@ -13,8 +13,10 @@ use crate::out::Output;
 use crate::repo::Repo;
 
 pub mod api;
+pub mod alias;
 pub mod auth;
 pub mod collaborator;
+pub mod config_cmd;
 pub mod gist;
 pub mod issue;
 pub mod label;
@@ -65,6 +67,8 @@ impl Ctx {
 pub fn run(cli: Cli) -> Result<()> {
     match &cli.cmd {
         Command::Auth(c) => auth::execute(c.clone(), &cli.host),
+        Command::Config(c) => config_cmd::execute(c.clone()),
+        Command::Alias(c) => alias::execute(c.clone()),
         Command::Api(a) => {
             let client = core(&cli)?;
             api::execute(&client, a.clone())

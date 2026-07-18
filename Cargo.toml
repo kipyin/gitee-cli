@@ -27,6 +27,7 @@ jaq-std = "3"
 jaq-json = { version = "2", features = ["serde"] }
 
 base64 = "0.22"
+shell-words = "1"
 
 [dev-dependencies]
 mockito = "1"

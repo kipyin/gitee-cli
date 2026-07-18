@@ -58,6 +58,10 @@ pub enum Command {
     Collaborator(CollaboratorCmd),
     #[command(subcommand)]
     Webhook(WebhookCmd),
+    #[command(subcommand)]
+    Config(ConfigCmd),
+    #[command(subcommand)]
+    Alias(AliasCmd),
     /// Cross-repo dashboard of your open issues. PR sections are omitted: Gitee v5 has no user-level pulls endpoint (swagger verified 2026-07-18).
     Status {
         #[command(flatten)]
@@ -590,6 +594,33 @@ pub enum MilestoneCmd {
 }
 
 
+
+#[derive(Subcommand, Clone)]
+pub enum ConfigCmd {
+    List,
+    Get {
+        key: String,
+    },
+    Set {
+        key: String,
+        value: String,
+    },
+}
+
+#[derive(Subcommand, Clone)]
+pub enum AliasCmd {
+    List,
+    Set {
+        name: String,
+        /// Expansion words (joined with spaces). Prefer quoting in the shell.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
+        expansion: Vec<String>,
+    },
+    Delete {
+        name: String,
+    },
+}
+
 #[derive(Subcommand, Clone)]
 pub enum OrgCmd {
     List {
@@ -679,7 +710,7 @@ pub enum AuthCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{Cli, CollaboratorCmd, Command, GistCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
+    use super::{AliasCmd, Cli, CollaboratorCmd, Command, ConfigCmd, GistCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
     use clap::Parser;
 
     #[test]
@@ -1252,5 +1283,22 @@ mod parse_tests {
         let cli = Cli::try_parse_from(["gitee", "repo", "unwatch"]).expect("unwatch");
         assert!(matches!(cli.cmd, Command::Repo(RepoCmd::Unwatch)));
     }
+
+    #[test]
+    fn config_and_alias_parse() {
+        let cli = Cli::try_parse_from(["gitee", "config", "set", "host", "gitee.com"]).unwrap();
+        let Command::Config(ConfigCmd::Set { key, value }) = cli.cmd else { panic!("config set") };
+        assert_eq!(key, "host");
+        assert_eq!(value, "gitee.com");
+
+        let cli = Cli::try_parse_from(["gitee", "alias", "set", "co", "pr", "checkout"]).unwrap();
+        let Command::Alias(AliasCmd::Set { name, expansion }) = cli.cmd else { panic!("alias set") };
+        assert_eq!(name, "co");
+        assert_eq!(expansion, vec!["pr", "checkout"]);
+
+        let cli = Cli::try_parse_from(["gitee", "alias", "delete", "co"]).unwrap();
+        assert!(matches!(cli.cmd, Command::Alias(AliasCmd::Delete { .. })));
+    }
+
 
 }
