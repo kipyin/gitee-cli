@@ -37,12 +37,13 @@ pub fn execute(ctx: &Ctx, cmd: SshKeyCmd) -> Result<()> {
 }
 
 fn default_key_title(key: &str) -> String {
-    // ssh pubkey line: <type> <blob> [comment]
-    let comment = key.split_whitespace().nth(2);
-    if let Some(c) = comment {
-        if !c.is_empty() {
-            return c.to_string();
-        }
+    // ssh pubkey line: <type> <blob> [comment...]
+    let mut parts = key.split_whitespace();
+    let _ty = parts.next();
+    let _blob = parts.next();
+    let comment: Vec<&str> = parts.collect();
+    if !comment.is_empty() {
+        return comment.join(" ");
     }
     let host = hostname();
     let date = today();
@@ -79,5 +80,7 @@ mod title_tests {
     fn uses_pubkey_comment_when_present() {
         let title = default_key_title("ssh-ed25519 AAAAAcel comment@box");
         assert_eq!(title, "comment@box");
+        let title = default_key_title("ssh-ed25519 AAAAAcel my laptop key");
+        assert_eq!(title, "my laptop key");
     }
 }

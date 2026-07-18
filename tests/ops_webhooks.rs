@@ -58,7 +58,7 @@ fn create_webhook_posts_url_events_and_password() {
             mockito::Matcher::Regex("push_events=true".into()),
             mockito::Matcher::Regex("tag_push_events=false".into()),
             mockito::Matcher::Regex("issues_events=true".into()),
-            mockito::Matcher::Regex("pull_requests_events=false".into()),
+            mockito::Matcher::Regex("merge_requests_events=false".into()),
             mockito::Matcher::Regex("note_events=false".into()),
         ]))
         .with_status(201)
@@ -74,7 +74,7 @@ fn create_webhook_posts_url_events_and_password() {
             push_events: true,
             tag_push_events: false,
             issues_events: true,
-            pull_requests_events: false,
+            merge_requests_events: false,
             note_events: false,
         })
         .expect("create");

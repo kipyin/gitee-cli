@@ -691,7 +691,7 @@ pub enum WebhookCmd {
         #[arg(long)]
         url: String,
         /// Event flags (comma-separated or repeatable): push_events, tag_push_events,
-        /// issues_events, pull_requests_events, note_events.
+        /// issues_events, merge_requests_events, note_events.
         #[arg(long)]
         events: Vec<String>,
         #[arg(long)]

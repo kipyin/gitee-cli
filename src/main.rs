@@ -4,11 +4,11 @@ use gitee_cli_rs::config::{self, Config};
 fn main() {
     let settings = Config::load_settings().unwrap_or_else(|_| Default::default());
     let debug = std::env::args_os().any(|a| a == "--debug");
-    let mut argv: Vec<String> = std::env::args().collect();
-    argv = config::apply_defaults(argv, &settings);
-    match config::expand_aliases(argv, &settings.aliases) {
+    let raw: Vec<String> = std::env::args().collect();
+    let with_defaults = config::apply_defaults(raw.clone(), &settings);
+    match config::expand_aliases(with_defaults.clone(), &settings.aliases) {
         Ok(expanded) => {
-            if debug && expanded != std::env::args().collect::<Vec<_>>() {
+            if debug && expanded != with_defaults {
                 eprintln!("alias expanded: {}", expanded.join(" "));
             }
             let cli = gitee_cli_rs::cli::Cli::parse_from(expanded);

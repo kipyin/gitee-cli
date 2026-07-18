@@ -332,16 +332,47 @@ impl Config {
         }
     }
 
-    /// Forget the token for a host, in both keyring and file.
+    /// Forget tokens for a host (legacy + all known per-user stores).
     pub fn logout(host: &str) -> Result<()> {
+        let users = Self::known_users(host).unwrap_or_default();
+        for user in &users {
+            let account = Self::keyring_account(host, Some(user));
+            if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &account) {
+                let _ = entry.delete_credential();
+            }
+            let _ = fs::remove_file(Self::user_token_path(host, user)?);
+        }
         if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
             let _ = entry.delete_credential();
         }
-        match fs::remove_file(Self::token_path(host)?) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(GiteeError::Config(e.to_string())),
+        let _ = fs::remove_file(Self::token_path(host)?);
+        let mut settings = Self::load_settings()?;
+        settings.active_users.remove(host);
+        settings.known_users.remove(host);
+        Self::save_settings(&settings)?;
+        Ok(())
+    }
+
+    /// If a legacy host-only token exists and no active user is recorded, probe
+    /// `/user` is not available here — record a synthetic default user slot so
+    /// `auth status` / `auth switch` can see it. The login name is `"default"`
+    /// until the next validated `auth login` rewrites it.
+    pub fn migrate_legacy_user(host: &str) -> Result<()> {
+        if Self::active_user(host)?.is_some() {
+            return Ok(());
         }
+        let legacy = keyring_get(host).ok().or_else(|| {
+            fs::read_to_string(Self::token_path(host).ok()?)
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        });
+        let Some(token) = legacy else {
+            return Ok(());
+        };
+        // Copy legacy secret into per-user slot named "default".
+        Self::set_token_for_user(host, "default", &token)?;
+        Ok(())
     }
 }
 

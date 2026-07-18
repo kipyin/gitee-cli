@@ -152,7 +152,7 @@ pub struct Webhook {
     #[serde(default)]
     pub issues_events: Option<bool>,
     #[serde(default)]
-    pub pull_requests_events: Option<bool>,
+    pub merge_requests_events: Option<bool>,
     #[serde(default)]
     pub note_events: Option<bool>,
 }

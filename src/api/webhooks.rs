@@ -14,7 +14,7 @@ pub struct CreateWebhook<'a> {
     pub push_events: bool,
     pub tag_push_events: bool,
     pub issues_events: bool,
-    pub pull_requests_events: bool,
+    pub merge_requests_events: bool,
     pub note_events: bool,
 }
 
@@ -37,8 +37,8 @@ impl Webhooks<'_> {
             ("tag_push_events", Client::bool_str(req.tag_push_events)),
             ("issues_events", Client::bool_str(req.issues_events)),
             (
-                "pull_requests_events",
-                Client::bool_str(req.pull_requests_events),
+                "merge_requests_events",
+                Client::bool_str(req.merge_requests_events),
             ),
             ("note_events", Client::bool_str(req.note_events)),
         ];

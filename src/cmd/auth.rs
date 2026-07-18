@@ -6,7 +6,6 @@ use crate::api::client::Client;
 use crate::cli::{AuthCmd, GitCredentialCmd};
 use crate::config::Config;
 use crate::error::{GiteeError, Result};
-use crate::models::UserBasic;
 
 pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
     match cmd {
@@ -28,7 +27,7 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
             }
             if !force {
                 let client = Client::for_host(host, token.clone());
-                let user = client.get::<UserBasic>("/user", &[]).map_err(|e| {
+                let user = client.users().me().map_err(|e| {
                     GiteeError::Usage(format!(
                         "token validation failed: {e}. Re-run with --force to store anyway."
                     ))
@@ -75,17 +74,12 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
 }
 
 fn status(host: &str) -> Result<()> {
+    Config::migrate_legacy_user(host)?;
     let active = Config::active_user(host)?;
     let mut users = Config::known_users(host)?;
     if users.is_empty() {
-        // Legacy single-token migration display.
         match Config::locate(host) {
-            Some(src) => {
-                println!("Logged in to {host} (via {}).", src.as_str());
-                if let Some(u) = &active {
-                    println!("  * {u} (active)");
-                }
-            }
+            Some(src) => println!("Logged in to {host} (via {}).", src.as_str()),
             None => println!("Not logged in to {host}."),
         }
         return Ok(());

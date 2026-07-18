@@ -72,7 +72,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Config(c) => config_cmd::execute(c.clone()),
         Command::Alias(c) => alias::execute(c.clone()),
         Command::Browse => {
-            let ctx = build(&cli)?;
+            let ctx = build_inner(&cli, false)?;
             browse::execute(&ctx)
         }
         Command::Api(a) => {
@@ -84,11 +84,13 @@ pub fn run(cli: Cli) -> Result<()> {
             gist::execute(&ctx, c.clone())
         }
         Command::Pr(c) => {
-            let ctx = build(&cli)?;
+            let require_auth = !matches!(c, crate::cli::PrCmd::View { web: true, .. });
+            let ctx = build_inner(&cli, require_auth)?;
             pr::execute(&ctx, c.clone())
         }
         Command::Issue(c) => {
-            let ctx = build(&cli)?;
+            let require_auth = !matches!(c, crate::cli::IssueCmd::View { web: true, .. });
+            let ctx = build_inner(&cli, require_auth)?;
             issue::execute(&ctx, c.clone())
         }
         Command::Search(c) => {
@@ -100,7 +102,8 @@ pub fn run(cli: Cli) -> Result<()> {
             status::execute(&ctx, limit.clone())
         }
         Command::Release(c) => {
-            let ctx = build(&cli)?;
+            let require_auth = !matches!(c, crate::cli::ReleaseCmd::View { web: true, .. });
+            let ctx = build_inner(&cli, require_auth)?;
             release::execute(&ctx, c.clone())
         }
         Command::Label(c) => {
@@ -108,7 +111,8 @@ pub fn run(cli: Cli) -> Result<()> {
             label::execute(&ctx, c.clone())
         }
         Command::Repo(c) => {
-            let ctx = build(&cli)?;
+            let require_auth = !matches!(c, crate::cli::RepoCmd::View { web: true, .. });
+            let ctx = build_inner(&cli, require_auth)?;
             repo::execute(&ctx, c.clone())
         }
         Command::Milestone(c) => {
@@ -137,7 +141,15 @@ pub fn run(cli: Cli) -> Result<()> {
 
 /// HTTP client with no repo resolution.
 fn core(cli: &Cli) -> Result<Client> {
-    let token = Config::token(&cli.host)?;
+    core_inner(cli, true)
+}
+
+fn core_inner(cli: &Cli, require_auth: bool) -> Result<Client> {
+    let token = match Config::token(&cli.host) {
+        Ok(t) => t,
+        Err(GiteeError::NotLoggedIn) if !require_auth => String::new(),
+        Err(e) => return Err(e),
+    };
     let mut client = Client::for_host(&cli.host, token);
     client.set_debug(cli.debug);
     Ok(client)
@@ -213,8 +225,12 @@ pub(crate) fn resolve_milestone_opt(
 }
 
 fn build(cli: &Cli) -> Result<Ctx> {
+    build_inner(cli, true)
+}
+
+fn build_inner(cli: &Cli, require_auth: bool) -> Result<Ctx> {
     Ok(Ctx {
-        client: core(cli)?,
+        client: core_inner(cli, require_auth)?,
         out: Output {
             json: cli.json.clone(),
             jq: cli.jq.clone(),

@@ -2,7 +2,7 @@ use std::io::Write;
 
 use super::{confirm, Ctx};
 use crate::cli::CollaboratorCmd;
-use crate::error::Result;
+use crate::error::{GiteeError, Result};
 use crate::out;
 
 pub fn execute(ctx: &Ctx, cmd: CollaboratorCmd) -> Result<()> {
@@ -18,6 +18,7 @@ pub fn execute(ctx: &Ctx, cmd: CollaboratorCmd) -> Result<()> {
             username,
             permission,
         } => {
+            validate_permission(&permission)?;
             let repo = ctx.repo()?;
             ctx.client
                 .collaborators(repo)
@@ -38,4 +39,13 @@ pub fn execute(ctx: &Ctx, cmd: CollaboratorCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn validate_permission(permission: &str) -> Result<()> {
+    match permission {
+        "pull" | "push" | "admin" => Ok(()),
+        other => Err(GiteeError::Usage(format!(
+            "invalid --permission '{other}'; expected pull, push, or admin"
+        ))),
+    }
 }

@@ -10,7 +10,8 @@ const EVENT_FLAGS: &[&str] = &[
     "push_events",
     "tag_push_events",
     "issues_events",
-    "pull_requests_events",
+    "merge_requests_events",
+    "pull_requests_events", // alias → merge_requests_events
     "note_events",
 ];
 
@@ -36,7 +37,9 @@ pub fn execute(ctx: &Ctx, cmd: WebhookCmd) -> Result<()> {
                 push_events: selected.iter().any(|e| e == "push_events"),
                 tag_push_events: selected.iter().any(|e| e == "tag_push_events"),
                 issues_events: selected.iter().any(|e| e == "issues_events"),
-                pull_requests_events: selected.iter().any(|e| e == "pull_requests_events"),
+                merge_requests_events: selected.iter().any(|e| {
+                    e == "merge_requests_events" || e == "pull_requests_events"
+                }),
                 note_events: selected.iter().any(|e| e == "note_events"),
             })?;
             let items = [hook];
