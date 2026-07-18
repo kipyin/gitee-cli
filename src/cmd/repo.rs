@@ -1,47 +1,36 @@
-use crate::api::client::Client;
+use std::io::Write;
+
+use super::Ctx;
 use crate::cli::RepoCmd;
 use crate::error::{GiteeError, Result};
-use crate::models::RepoDetails;
-use crate::out::{self, Output};
+use crate::out;
 use crate::repo::Repo;
 
-/// Repository commands. Unlike pr/issue, these resolve their own target so that
-/// `list`, `clone`, and `view <owner/name>` work without a local git remote.
-pub fn execute(
-    client: &Client,
-    out: &Output,
-    cmd: RepoCmd,
-    repo_arg: Option<String>,
-    remote_arg: Option<String>,
-) -> Result<()> {
+pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
     match cmd {
         RepoCmd::View { target } => {
             let rr = match target {
                 Some(s) => Repo::from_spec(&s)?,
-                None => resolve(&repo_arg, &remote_arg)?,
+                None => ctx.repo()?.clone(),
             };
-            let owner = &rr.owner;
-            let name = &rr.name;
-            let details: RepoDetails =
-                client.get(&format!("/repos/{owner}/{name}"), &[])?;
-            out.render(&details, || out::one_repo(&details));
+            let details = ctx.client.repos().get(&rr.owner, &rr.name)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &details, |w| out::one_repo(w, &details))?;
         }
         RepoCmd::List { owner, limit } => {
-            // Bare lists the authenticated user's repos; with an arg, that
-            // user's public repos. Gitee differs: /user/repos vs /users/{owner}/repos.
-            let path = match &owner {
-                Some(o) => format!("/users/{o}/repos"),
-                None => "/user/repos".to_string(),
+            let items = match &owner {
+                Some(o) => ctx.client.repos().list_user(o, limit.limit)?,
+                None => ctx.client.repos().list_mine(limit.limit)?,
             };
-            let items: Vec<RepoDetails> = client.get_paged(&path, &[], limit)?;
-            out.render(&items, || out::repo_table(&items));
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::repo_table(w, &items))?;
         }
         RepoCmd::Clone { spec, dir, ssh } => {
             let rr = Repo::from_spec(&spec)?;
-            let owner = &rr.owner;
-            let name = &rr.name;
-            let det: RepoDetails = client.get(&format!("/repos/{owner}/{name}"), &[])?;
-            let url = preferred_url(&det, ssh);
+            let det = ctx.client.repos().get(&rr.owner, &rr.name)?;
+            let url = det.preferred_url(ssh);
             let mut args: Vec<String> = vec!["clone".to_string(), url.clone()];
             if let Some(d) = dir {
                 args.push(d);
@@ -55,44 +44,23 @@ pub fn execute(
             }
         }
         RepoCmd::Fork { add_remote } => {
-            let rr = resolve(&repo_arg, &remote_arg)?;
-            let o = rr.owner.as_str();
-            let r = rr.name.as_str();
-            let forked: RepoDetails =
-                client.post(&format!("/repos/{o}/{r}/forks"), &[])?;
-            println!("Forked to {}", forked.full_name);
-            out.render(&forked, || out::one_repo(&forked));
+            let rr = ctx.repo()?.clone();
+            let forked = ctx.client.repos().fork(&rr.owner, &rr.name)?;
+            let mut out = std::io::stdout().lock();
+            writeln!(out, "Forked to {}", forked.full_name)?;
+            ctx.out
+                .render(&mut out, &forked, |w| out::one_repo(w, &forked))?;
             if let Some(name) = add_remote {
-                let url = preferred_url(&forked, true);
+                let url = forked.preferred_url(true);
                 let status = std::process::Command::new("git")
                     .args(["remote", "add", &name, &url])
                     .status()
                     .map_err(|e| GiteeError::Usage(format!("git remote add: {e}")))?;
                 if status.success() {
-                    println!("Added remote '{name}' -> {url}");
+                    writeln!(out, "Added remote '{name}' -> {url}")?;
                 }
             }
         }
     }
     Ok(())
-}
-
-/// Resolve a repo from the global --repo/--remote (for View-without-arg and Fork).
-fn resolve(repo_arg: &Option<String>, remote_arg: &Option<String>) -> Result<Repo> {
-    Repo::resolve(repo_arg.as_deref(), remote_arg.as_deref())
-}
-
-fn preferred_url(det: &RepoDetails, ssh: bool) -> String {
-    if ssh {
-        if let Some(u) = &det.ssh_url {
-            if !u.is_empty() {
-                return u.clone();
-            }
-        }
-    } else if let Some(u) = &det.clone_url {
-        if !u.is_empty() {
-            return u.clone();
-        }
-    }
-    det.html_url.clone()
 }

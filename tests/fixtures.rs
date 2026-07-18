@@ -1,4 +1,4 @@
-use gitee_cli_rs::models::{FileDiff, Issue, PullRequest, Release, RepoDetails};
+use gitee_cli_rs::models::{FileDiff, Issue, IssueState, PrState, PullRequest, Release, RepoDetails};
 
 const PULL_REQUEST_JSON: &str = include_str!("fixtures/pull_request.json");
 const PR_FILE_DIFF_JSON: &str = include_str!("fixtures/pr_file_diff.json");
@@ -11,7 +11,7 @@ fn fixture_pull_request_deserializes() {
     let pr: PullRequest = serde_json::from_str(PULL_REQUEST_JSON).expect("pull request json");
     assert_eq!(pr.number, 12);
     assert_eq!(pr.title, "Add pagination helpers");
-    assert_eq!(pr.state, "open");
+    assert_eq!(pr.state, PrState::Open);
     assert_eq!(pr.head.git_ref, "feature/paging");
     assert_eq!(pr.base.git_ref, "master");
     assert_eq!(pr.user.as_ref().expect("user").login, "dev1");
@@ -35,7 +35,7 @@ fn fixture_issue_deserializes() {
     let issue: Issue = serde_json::from_str(ISSUE_JSON).expect("issue json");
     assert_eq!(issue.number, "88");
     assert_eq!(issue.title, "Login fails with expired token");
-    assert_eq!(issue.state, "open");
+    assert_eq!(issue.state, IssueState::Open);
     assert_eq!(issue.user.as_ref().expect("user").login, "reporter");
     assert_eq!(issue.assignee.as_ref().expect("assignee").login, "dev1");
     assert_eq!(issue.labels.as_ref().expect("labels").len(), 2);

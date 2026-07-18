@@ -1,6 +1,6 @@
 use gitee_cli_rs::api::client::Client;
 use gitee_cli_rs::error::GiteeError;
-use gitee_cli_rs::models::Issue;
+use gitee_cli_rs::models::{Issue, IssueState};
 
 fn client(server: &mockito::ServerGuard) -> Client {
     Client::new(format!("{}/api/v5", server.url()), "fake-token".into())
@@ -121,7 +121,7 @@ fn get_200_deserializes_issue() {
 
     assert_eq!(issue.number, "42");
     assert_eq!(issue.title, "Bug report");
-    assert_eq!(issue.state, "open");
+    assert_eq!(issue.state, IssueState::Open);
     assert_eq!(
         issue.html_url,
         "https://gitee.com/owner/repo/issues/I42"

@@ -1,35 +1,32 @@
+use std::io::Write;
+
 use super::Ctx;
+use crate::api::issues::{CreateIssue, IssueFilter};
 use crate::cli::IssueCmd;
 use crate::error::Result;
-use crate::models::{Comment, Issue};
+use crate::models::IssueState;
 use crate::out;
 
 pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
-    let o = ctx.repo.owner.as_str();
-    let r = ctx.repo.name.as_str();
     match cmd {
-        IssueCmd::List {
-            state,
-            assignee,
-            limit,
-        } => {
-            let mut q: Vec<(&str, String)> = Vec::new();
-            if let Some(s) = state {
-                q.push(("state", s));
-            }
-            if let Some(a) = assignee {
-                q.push(("assignee", a));
-            }
-            let qref: Vec<(&str, &str)> = q.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let path = format!("/repos/{o}/{r}/issues");
-            let items: Vec<Issue> = ctx.client.get_paged(&path, &qref, limit)?;
-            ctx.out.render(&items, || out::issue_table(&items));
+        IssueCmd::List { list, assignee } => {
+            let repo = ctx.repo()?;
+            let filter = IssueFilter {
+                state: list.state.as_deref(),
+                assignee: assignee.as_deref(),
+                limit: list.limit,
+            };
+            let items = ctx.client.issues(repo).list(&filter)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::issue_table(w, &items))?;
         }
         IssueCmd::View { number } => {
-            let issue: Issue = ctx
-                .client
-                .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
-            ctx.out.render(&issue, || out::one_issue(&issue));
+            let repo = ctx.repo()?;
+            let issue = ctx.client.issues(repo).get(&number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &issue, |w| out::one_issue(w, &issue))?;
         }
         IssueCmd::Create {
             title,
@@ -37,77 +34,55 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             assignee,
             labels,
         } => {
-            // Gitee quirk: issue creation is POST /repos/{owner}/issues with `repo` as a form field.
-            let mut f: Vec<(&str, String)> =
-                vec![("repo", ctx.repo.name.clone()), ("title", title)];
-            if let Some(b) = body {
-                f.push(("body", b));
-            }
-            if let Some(a) = assignee {
-                f.push(("assignee", a));
-            }
-            if let Some(l) = labels {
-                f.push(("labels", l));
-            }
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let issue: Issue = ctx.client.post(&format!("/repos/{o}/issues"), &form)?;
-            ctx.out.render(&issue, || out::one_issue(&issue));
+            let repo = ctx.repo()?;
+            let req = CreateIssue {
+                title: &title,
+                body: body.as_deref(),
+                assignee: assignee.as_deref(),
+                labels: labels.as_deref(),
+            };
+            let issue = ctx.client.issues(repo).create(&req)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &issue, |w| out::one_issue(w, &issue))?;
         }
         IssueCmd::Close { number } => {
-            let issue = set_state(ctx, &number, "closed")?;
-            ctx.out.render(&issue, || out::one_issue(&issue));
+            let repo = ctx.repo()?;
+            let issue = ctx
+                .client
+                .issues(repo)
+                .set_state(&number, IssueState::Closed)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &issue, |w| out::one_issue(w, &issue))?;
         }
         IssueCmd::Reopen { number } => {
-            let issue = set_state(ctx, &number, "open")?;
-            ctx.out.render(&issue, || out::one_issue(&issue));
+            let repo = ctx.repo()?;
+            let issue = ctx
+                .client
+                .issues(repo)
+                .set_state(&number, IssueState::Open)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &issue, |w| out::one_issue(w, &issue))?;
         }
         IssueCmd::Link { number, pr } => {
-            let cur: Issue = ctx
-                .client
-                .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
-            let old = cur.body.clone().unwrap_or_default();
+            let repo = ctx.repo()?;
             let tag = format!("!{pr}");
-            if old.contains(tag.as_str()) {
-                println!("Issue #{number} already references {tag}");
+            let linked = ctx.client.issues(repo).link(&number, &tag)?;
+            let mut out = std::io::stdout().lock();
+            if linked {
+                writeln!(out, "Linked pull request {tag} on issue #{number}")?;
             } else {
-                let new = format!("{old}\n\nLinked: {tag}");
-                let body = serde_json::json!({
-                    "repo": ctx.repo.name,
-                    "title": cur.title,
-                    "body": new,
-                });
-                let _issue: Issue = ctx
-                    .client
-                    .patch_json(&format!("/repos/{o}/issues/{number}"), &body)?;
-                println!("Linked pull request {tag} on issue #{number}");
+                writeln!(out, "Issue #{number} already references {tag}")?;
             }
         }
         IssueCmd::Comment { number, body } => {
-            let f: Vec<(&str, String)> = vec![("body", body)];
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let c: Comment = ctx
-                .client
-                .post(&format!("/repos/{o}/{r}/issues/{number}/comments"), &form)?;
-            ctx.out.render(&c, || out::comment_line(&c));
+            let repo = ctx.repo()?;
+            let c = ctx.client.issues(repo).comment(&number, &body.body)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
         }
     }
     Ok(())
-}
-
-/// Gitee quirk: issue state changes are PATCH /repos/{owner}/issues/{number}
-/// with a JSON body `{repo, title, state}`. The current title must be echoed
-/// back or Gitee blanks it.
-fn set_state(ctx: &Ctx, number: &str, state: &str) -> Result<Issue> {
-    let o = ctx.repo.owner.as_str();
-    let name = &ctx.repo.name;
-    let cur: Issue = ctx
-        .client
-        .get(&format!("/repos/{o}/{name}/issues/{number}"), &[])?;
-    let body = serde_json::json!({
-        "repo": ctx.repo.name,
-        "title": cur.title,
-        "state": state,
-    });
-    ctx.client
-        .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
 }

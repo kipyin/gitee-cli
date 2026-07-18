@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::str::FromStr;
 
 use clap::CommandFactory;
@@ -18,8 +19,25 @@ pub mod repo;
 
 pub struct Ctx {
     pub client: Client,
-    pub repo: Repo,
     pub out: Output,
+    repo_arg: Option<String>,
+    remote_arg: Option<String>,
+    repo: OnceCell<Repo>,
+}
+
+impl Ctx {
+    pub fn repo(&self) -> Result<&Repo> {
+        if let Some(r) = self.repo.get() {
+            return Ok(r);
+        }
+        let r = Repo::resolve(self.repo_arg.as_deref(), self.remote_arg.as_deref())?;
+        let _ = self.repo.set(r);
+        Ok(self.repo.get().expect("repo just initialized"))
+    }
+
+    pub fn repo_arg(&self) -> Option<&str> {
+        self.repo_arg.as_deref()
+    }
 }
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -37,34 +55,32 @@ pub fn run(cli: Cli) -> Result<()> {
             let ctx = build(&cli)?;
             release::execute(&ctx, c.clone())
         }
-        // repo commands resolve their target themselves: list/clone/view-with-arg
-        // need no `origin`, so they must not require repo resolution at build time.
         Command::Repo(c) => {
-            let (client, out) = core(&cli)?;
-            repo::execute(&client, &out, c.clone(), cli.repo.clone(), cli.remote.clone())
+            let ctx = build(&cli)?;
+            repo::execute(&ctx, c.clone())
         }
         Command::Completions { shell } => completions(shell.clone()),
     }
 }
 
-/// HTTP client + output renderer, with no repo resolution.
-fn core(cli: &Cli) -> Result<(Client, Output)> {
+/// HTTP client with no repo resolution.
+fn core(cli: &Cli) -> Result<Client> {
     let token = Config::token(&cli.host)?;
-    let mut client = Client::new(format!("https://{}/api/v5", cli.host), token);
+    let mut client = Client::for_host(&cli.host, token);
     client.set_debug(cli.debug);
-    Ok((
-        client,
-        Output {
-            json: cli.json.clone(),
-        },
-    ))
+    Ok(client)
 }
 
-/// Full context for commands that operate on the resolved repo (pr/issue).
 fn build(cli: &Cli) -> Result<Ctx> {
-    let (client, out) = core(cli)?;
-    let repo = Repo::resolve(cli.repo.as_deref(), cli.remote.as_deref())?;
-    Ok(Ctx { client, repo, out })
+    Ok(Ctx {
+        client: core(cli)?,
+        out: Output {
+            json: cli.json.clone(),
+        },
+        repo_arg: cli.repo.clone(),
+        remote_arg: cli.remote.clone(),
+        repo: OnceCell::new(),
+    })
 }
 
 fn completions(shell: Option<String>) -> Result<()> {
@@ -76,9 +92,18 @@ fn completions(shell: Option<String>) -> Result<()> {
         })?,
         None => detect_shell()?,
     };
+    // Generate into a buffer first: clap_complete panics on write errors,
+    // and a closed pipe (`gitee completions bash | head`) must exit quietly.
     let mut cmd: clap::Command = crate::cli::Cli::command();
-    generate(shell, &mut cmd, "gitee", &mut std::io::stdout());
-    Ok(())
+    let mut buf = Vec::new();
+    generate(shell, &mut cmd, "gitee", &mut buf);
+    use std::io::Write;
+    let mut out = std::io::stdout().lock();
+    match out.write_all(&buf).and_then(|()| out.flush()) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 fn detect_shell() -> Result<Shell> {

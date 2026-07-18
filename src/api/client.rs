@@ -1,8 +1,11 @@
 use crate::error::{GiteeError, Result};
+use crate::repo::Repo;
 use reqwest::blocking::Client as Http;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::time::Duration;
+
+use super::{issues::Issues, pulls::Pulls, releases::Releases, repos::Repos};
 
 pub struct Client {
     http: Http,
@@ -29,6 +32,30 @@ impl Client {
 
     pub fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
+    }
+
+    pub fn for_host(host: &str, token: String) -> Self {
+        Self::new(format!("https://{host}/api/v5"), token)
+    }
+
+    pub fn pulls<'a>(&'a self, repo: &'a Repo) -> Pulls<'a> {
+        Pulls::new(self, repo)
+    }
+
+    pub fn issues<'a>(&'a self, repo: &'a Repo) -> Issues<'a> {
+        Issues::new(self, repo)
+    }
+
+    pub fn releases<'a>(&'a self, repo: &'a Repo) -> Releases<'a> {
+        Releases::new(self, repo)
+    }
+
+    pub fn repos<'a>(&'a self) -> Repos<'a> {
+        Repos::new(self)
+    }
+
+    pub(crate) fn str_refs<'a>(pairs: &'a [(&'a str, String)]) -> Vec<(&'a str, &'a str)> {
+        pairs.iter().map(|(k, v)| (*k, v.as_str())).collect()
     }
 
     /// Gitee accepts `Authorization: token <T>`. Sending the token in the header
@@ -101,7 +128,9 @@ impl Client {
             .header("Authorization", self.auth())
             .query(query)
             .send()?;
-        self.check(resp, "GET", path)?.json().map_err(GiteeError::Http)
+        self.check(resp, "GET", path)?
+            .json()
+            .map_err(GiteeError::Http)
     }
 
     pub fn get_paged<T: DeserializeOwned>(
@@ -114,10 +143,8 @@ impl Client {
         let mut page = 1u32;
         let per = 100;
         while out.len() < limit {
-            let mut q: Vec<(&str, String)> = vec![
-                ("page", page.to_string()),
-                ("per_page", per.to_string()),
-            ];
+            let mut q: Vec<(&str, String)> =
+                vec![("page", page.to_string()), ("per_page", per.to_string())];
             for (k, v) in query {
                 q.push((k, v.to_string()));
             }
@@ -156,16 +183,13 @@ impl Client {
             "PATCH" => self.http.patch(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req
-            .header("Authorization", self.auth())
-            .form(form)
-            .send()?;
+        let resp = req.header("Authorization", self.auth()).form(form).send()?;
         self.check(resp, method, path)?
             .json()
             .map_err(GiteeError::Http)
     }
 
-    /// Issue create/update require a JSON body (Gitee rejects form on these).
+    /// Issue update requires a JSON body (Gitee rejects form encoding here).
     pub fn patch_json<T: DeserializeOwned>(&self, path: &str, body: &Value) -> Result<T> {
         self.trace("PATCH", path);
         let resp = self
@@ -211,10 +235,7 @@ impl Client {
             "PUT" => self.http.put(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req
-            .header("Authorization", self.auth())
-            .form(form)
-            .send()?;
+        let resp = req.header("Authorization", self.auth()).form(form).send()?;
         self.check(resp, method, path).map(|_| ())
     }
 }

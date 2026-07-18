@@ -1,39 +1,38 @@
+use std::io::Write;
+
 use super::Ctx;
+use crate::api::pulls::{CreatePr, PrFilter};
 use crate::cli::PrCmd;
 use crate::error::{GiteeError, Result};
-use crate::models::{Comment, FileDiff, PrBranch, PullRequest, RepoDetails, RepoInfo};
+use crate::models::{MergeMethod, PrState};
 use crate::out;
 
 pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
-    let o = ctx.repo.owner.as_str();
-    let r = ctx.repo.name.as_str();
     match cmd {
-        PrCmd::List {
-            state,
-            author,
-            limit,
-        } => {
-            let mut q: Vec<(&str, String)> = Vec::new();
-            if let Some(s) = state {
-                q.push(("state", s));
-            }
-            if let Some(a) = author {
-                q.push(("author", a));
-            }
-            let qref: Vec<(&str, &str)> = q.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let path = format!("/repos/{o}/{r}/pulls");
-            let items: Vec<PullRequest> = ctx.client.get_paged(&path, &qref, limit)?;
-            ctx.out.render(&items, || out::pr_table(&items));
+        PrCmd::List { list, author } => {
+            let repo = ctx.repo()?;
+            let filter = PrFilter {
+                state: list.state.as_deref(),
+                author: author.as_deref(),
+                limit: list.limit,
+            };
+            let items = ctx.client.pulls(repo).list(&filter)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::pr_table(w, &items))?;
         }
         PrCmd::View { number } => {
-            let pr: PullRequest = ctx.client.get(&format!("/repos/{o}/{r}/pulls/{number}"), &[])?;
-            ctx.out.render(&pr, || out::one_pr(&pr));
+            let repo = ctx.repo()?;
+            let pr = ctx.client.pulls(repo).get(number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
         }
         PrCmd::Diff { number } => {
-            let files: Vec<FileDiff> = ctx
-                .client
-                .get(&format!("/repos/{o}/{r}/pulls/{number}/files"), &[])?;
-            ctx.out.render(&files, || out::pr_diff(&files));
+            let repo = ctx.repo()?;
+            let files = ctx.client.pulls(repo).files(number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &files, |w| out::pr_diff(w, &files))?;
         }
         PrCmd::Checkout { number } => checkout_pr(ctx, number)?,
         PrCmd::Create {
@@ -42,6 +41,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             head,
             base,
         } => {
+            let repo = ctx.repo()?;
             let head = match head {
                 Some(h) => h,
                 None => current_branch()?,
@@ -49,17 +49,24 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             let base = match base {
                 Some(b) => b,
                 None => {
-                    let info: RepoInfo = ctx.client.get(&format!("/repos/{o}/{r}"), &[])?;
-                    info.default_branch.unwrap_or_else(|| "master".to_string())
+                    let o = repo.owner.as_str();
+                    let r = repo.name.as_str();
+                    ctx.client
+                        .repos()
+                        .get(o, r)?
+                        .default_branch
+                        .unwrap_or_else(|| "master".to_string())
                 }
             };
-            let mut f: Vec<(&str, String)> = vec![("title", title), ("head", head), ("base", base)];
-            if let Some(b) = body {
-                f.push(("body", b));
-            }
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let pr: PullRequest = ctx.client.post(&format!("/repos/{o}/{r}/pulls"), &form)?;
-            ctx.out.render(&pr, || out::one_pr(&pr));
+            let req = CreatePr {
+                title: &title,
+                head: &head,
+                base: &base,
+                body: body.as_deref(),
+            };
+            let pr = ctx.client.pulls(repo).create(&req)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
         }
         PrCmd::Merge {
             number,
@@ -67,86 +74,62 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             rebase,
             no_close_issue,
         } => {
+            let repo = ctx.repo()?;
             let method = if rebase {
-                "rebase"
+                MergeMethod::Rebase
             } else if squash {
-                "squash"
+                MergeMethod::Squash
             } else {
-                "merge"
+                MergeMethod::Merge
             };
-            let close = if no_close_issue { "false" } else { "true" };
-            let f: Vec<(&str, String)> = vec![
-                ("merge_method", method.to_string()),
-                ("close_related_issue", close.to_string()),
-            ];
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
             ctx.client
-                .put_ok(&format!("/repos/{o}/{r}/pulls/{number}/merge"), &form)?;
-            println!("Merged pull request !{number}");
+                .pulls(repo)
+                .merge(number, method, !no_close_issue)?;
+            let mut out = std::io::stdout().lock();
+            writeln!(out, "Merged pull request !{number}")?;
         }
         PrCmd::Comment { number, body } => {
-            let f: Vec<(&str, String)> = vec![("body", body)];
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let c: Comment = ctx
-                .client
-                .post(&format!("/repos/{o}/{r}/pulls/{number}/comments"), &form)?;
-            ctx.out.render(&c, || out::comment_line(&c));
+            let repo = ctx.repo()?;
+            let c = ctx.client.pulls(repo).comment(number, &body.body)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
         }
         PrCmd::Approve { number, force } => {
-            // POST /review returns an empty body on success.
-            let mut f: Vec<(&str, String)> = Vec::new();
-            if force {
-                f.push(("force", "true".to_string()));
-            }
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            ctx.client
-                .post_ok(&format!("/repos/{o}/{r}/pulls/{number}/review"), &form)?;
-            println!("Approved pull request !{number}");
+            let repo = ctx.repo()?;
+            ctx.client.pulls(repo).approve(number, force)?;
+            let mut out = std::io::stdout().lock();
+            writeln!(out, "Approved pull request !{number}")?;
         }
         PrCmd::Close { number } => {
-            let pr = set_state(ctx, number, "closed")?;
-            ctx.out.render(&pr, || out::one_pr(&pr));
+            let repo = ctx.repo()?;
+            let pr = ctx.client.pulls(repo).set_state(number, PrState::Closed)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
         }
         PrCmd::Reopen { number } => {
-            let pr = set_state(ctx, number, "open")?;
-            ctx.out.render(&pr, || out::one_pr(&pr));
+            let repo = ctx.repo()?;
+            let pr = ctx.client.pulls(repo).set_state(number, PrState::Open)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
         }
         PrCmd::Link { number, issue } => {
-            let pr: PullRequest = ctx
-                .client
-                .get(&format!("/repos/{o}/{r}/pulls/{number}"), &[])?;
-            let cur = pr.body.clone().unwrap_or_default();
+            let repo = ctx.repo()?;
             let tag = format!("#{issue}");
-            if cur.contains(tag.as_str()) {
-                println!("Pull request !{number} already references {tag}");
+            let linked = ctx.client.pulls(repo).link(number, &tag)?;
+            let mut out = std::io::stdout().lock();
+            if linked {
+                writeln!(out, "Linked issue {tag} on pull request !{number}")?;
             } else {
-                let new = format!("{cur}\n\nLinked: {tag}");
-                let f: Vec<(&str, String)> = vec![("body", new)];
-                let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-                let _pr: PullRequest = ctx
-                    .client
-                    .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)?;
-                println!("Linked issue {tag} on pull request !{number}");
+                writeln!(out, "Pull request !{number} already references {tag}")?;
             }
         }
     }
     Ok(())
 }
 
-/// Flip a PR's `state` via PATCH (form-encoded; Gitee accepts form on PRs).
-fn set_state(ctx: &Ctx, number: i64, state: &str) -> Result<PullRequest> {
-    let o = ctx.repo.owner.as_str();
-    let r = ctx.repo.name.as_str();
-    let f: Vec<(&str, String)> = vec![("state", state.to_string())];
-    let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    ctx.client
-        .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)
-}
-
 fn checkout_pr(ctx: &Ctx, number: i64) -> Result<()> {
-    let o = ctx.repo.owner.as_str();
-    let r = ctx.repo.name.as_str();
-    let pr: PullRequest = ctx.client.get(&format!("/repos/{o}/{r}/pulls/{number}"), &[])?;
+    let repo = ctx.repo()?;
+    let pr = ctx.client.pulls(repo).get(number)?;
     let head_ref = pr.head.git_ref.trim();
     if head_ref.is_empty() {
         return Err(GiteeError::Usage(format!(
@@ -154,8 +137,15 @@ fn checkout_pr(ctx: &Ctx, number: i64) -> Result<()> {
         )));
     }
 
-    let base: RepoDetails = ctx.client.get(&format!("/repos/{o}/{r}"), &[])?;
-    let fetch_url = head_fetch_url(&pr.head, &base);
+    let o = repo.owner.as_str();
+    let r = repo.name.as_str();
+    let base = ctx.client.repos().get(o, r)?;
+    let fetch_url = pr
+        .head
+        .repo
+        .as_ref()
+        .and_then(|hr| hr.fetch_url())
+        .unwrap_or_else(|| base.preferred_url(true));
     let branch = format!("pr-{number}");
     let refspec = format!("+{head_ref}:{branch}");
 
@@ -183,44 +173,17 @@ fn checkout_pr(ctx: &Ctx, number: i64) -> Result<()> {
         )));
     }
 
-    println!("Checked out branch '{branch}' for pull request !{number}");
-    println!(
+    let mut out = std::io::stdout().lock();
+    writeln!(
+        out,
+        "Checked out branch '{branch}' for pull request !{number}"
+    )?;
+    writeln!(
+        out,
         "Hint: run `git log --oneline {}..{}` to see PR commits",
         pr.base.git_ref, branch
-    );
+    )?;
     Ok(())
-}
-
-/// Prefer the head fork's clone URL; fall back to the base repo.
-fn head_fetch_url(head: &PrBranch, base: &RepoDetails) -> String {
-    if let Some(repo) = &head.repo {
-        if let Some(u) = &repo.ssh_url {
-            if !u.is_empty() {
-                return u.clone();
-            }
-        }
-        if let Some(u) = &repo.clone_url {
-            if !u.is_empty() {
-                return u.clone();
-            }
-        }
-        if let Some(u) = &repo.html_url {
-            if !u.is_empty() {
-                return u.clone();
-            }
-        }
-    }
-    if let Some(u) = &base.ssh_url {
-        if !u.is_empty() {
-            return u.clone();
-        }
-    }
-    if let Some(u) = &base.clone_url {
-        if !u.is_empty() {
-            return u.clone();
-        }
-    }
-    base.html_url.clone()
 }
 
 fn current_branch() -> Result<String> {

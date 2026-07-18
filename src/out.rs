@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::io::IsTerminal;
+use std::io::{self, Write};
 use tabled::{Table, Tabled};
 
 use crate::models::*;
@@ -10,15 +11,21 @@ pub struct Output {
 
 impl Output {
     /// Render either as JSON (when `--json` was given) or via the human printer.
-    pub fn render<T: Serialize>(&self, data: &T, human: impl FnOnce()) {
+    pub fn render<T: serde::Serialize, W: Write>(
+        &self,
+        w: &mut W,
+        data: &T,
+        human: impl FnOnce(&mut W) -> io::Result<()>,
+    ) -> crate::error::Result<()> {
         match &self.json {
-            Some(spec) => print_json(data, spec),
-            None => human(),
+            Some(spec) => print_json(w, data, spec)?,
+            None => human(w)?,
         }
+        Ok(())
     }
 }
 
-fn print_json<T: Serialize>(data: &T, spec: &str) {
+fn print_json<T: Serialize, W: Write>(w: &mut W, data: &T, spec: &str) -> io::Result<()> {
     let value = serde_json::to_value(data)
         .unwrap_or_else(|e| serde_json::json!({"error": format!("serialize: {e}")}));
     let out = if spec.trim().is_empty() {
@@ -31,20 +38,20 @@ fn print_json<T: Serialize>(data: &T, spec: &str) {
             .collect();
         project(value, &fields)
     };
-    println!(
+    writeln!(
+        w,
         "{}",
-        serde_json::to_string_pretty(&out)
-            .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
-    );
+        serde_json::to_string_pretty(&out).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+    )
 }
 
 /// Project a JSON value down to the requested fields. Arrays project each
 /// element; objects keep only listed keys; scalars pass through unchanged.
 fn project(value: serde_json::Value, fields: &[String]) -> serde_json::Value {
     match value {
-        serde_json::Value::Array(items) => serde_json::Value::Array(
-            items.into_iter().map(|v| project(v, fields)).collect(),
-        ),
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.into_iter().map(|v| project(v, fields)).collect())
+        }
         other => pick(other, fields),
     }
 }
@@ -62,7 +69,6 @@ fn pick(value: serde_json::Value, fields: &[String]) -> serde_json::Value {
         value
     }
 }
-
 
 #[cfg(test)]
 mod project_tests {
@@ -83,10 +89,7 @@ mod project_tests {
             {"a": 3, "b": 4}
         ]);
         let fields = vec!["a".to_string()];
-        assert_eq!(
-            project(value, &fields),
-            json!([{"a": 1}, {"a": 3}])
-        );
+        assert_eq!(project(value, &fields), json!([{"a": 1}, {"a": 3}]));
     }
 
     #[test]
@@ -147,17 +150,24 @@ pub fn dim(s: &str) -> String {
     paint("2", s)
 }
 
-/// Color a PR/issue state. `merged` flags merged-ness even when state == "closed".
-fn color_state(state: &str, merged: bool) -> String {
-    let s = state.to_lowercase();
-    if merged || s == "merged" {
-        magenta(&s)
-    } else if s == "closed" || s == "rejected" {
-        red(&s)
-    } else if s == "open" || s == "progressing" {
-        green(&s)
-    } else {
-        s
+/// Style a PR state. `merged` flags merged-ness even when state == closed.
+fn pr_state_style(state: PrState, merged: bool) -> String {
+    if merged || state == PrState::Merged {
+        return magenta(state.as_str());
+    }
+    match state {
+        PrState::Open => green(state.as_str()),
+        PrState::Closed => red(state.as_str()),
+        _ => state.as_str().to_string(),
+    }
+}
+
+/// Style an issue state.
+fn issue_state_style(state: IssueState) -> String {
+    match state {
+        IssueState::Open | IssueState::Progressing => green(state.as_str()),
+        IssueState::Closed | IssueState::Rejected => red(state.as_str()),
+        _ => state.as_str().to_string(),
     }
 }
 
@@ -172,31 +182,38 @@ struct PrRow {
     author: String,
 }
 
-pub fn pr_table(items: &[PullRequest]) {
+pub fn pr_table(w: &mut impl Write, items: &[PullRequest]) -> std::io::Result<()> {
     let rows: Vec<PrRow> = items
         .iter()
         .map(|p| PrRow {
             number: p.number,
-            state: color_state(&p.state, p.merged_at.is_some()),
+            state: pr_state_style(p.state, p.merged_at.is_some()),
             title: p.title.clone(),
             branch: format!("{} -> {}", p.head.git_ref, p.base.git_ref),
             author: p.user.as_ref().map(|u| u.login.clone()).unwrap_or_default(),
         })
         .collect();
-    println!("{}", Table::new(rows));
+    writeln!(w, "{}", Table::new(rows))
 }
 
-pub fn one_pr(p: &PullRequest) {
-    let state = color_state(&p.state, p.merged_at.is_some());
-    println!("{}  {}  [{}]", bold(&format!("!{}", p.number)), p.title, state);
-    println!("{} -> {}", dim(&p.head.git_ref), dim(&p.base.git_ref));
-    println!("{}", dim(&p.html_url));
+pub fn one_pr(w: &mut impl Write, p: &PullRequest) -> std::io::Result<()> {
+    let state = pr_state_style(p.state, p.merged_at.is_some());
+    writeln!(
+        w,
+        "{}  {}  [{}]",
+        bold(&format!("!{}", p.number)),
+        p.title,
+        state
+    )?;
+    writeln!(w, "{} -> {}", dim(&p.head.git_ref), dim(&p.base.git_ref))?;
+    writeln!(w, "{}", dim(&p.html_url))?;
     if let Some(b) = &p.body {
         let b = b.trim();
         if !b.is_empty() {
-            println!("\n{b}");
+            writeln!(w, "\n{b}")?;
         }
     }
+    Ok(())
 }
 
 /// Colorize one line of unified diff output.
@@ -212,27 +229,28 @@ pub fn color_diff_line(line: &str) -> String {
     }
 }
 
-pub fn pr_diff(files: &[FileDiff]) {
+pub fn pr_diff(w: &mut impl Write, files: &[FileDiff]) -> std::io::Result<()> {
     if files.is_empty() {
-        println!("(no changed files)");
-        return;
+        writeln!(w, "(no changed files)")?;
+        return Ok(());
     }
     for (i, f) in files.iter().enumerate() {
         if i > 0 {
-            println!();
+            writeln!(w)?;
         }
         let name = &f.filename;
-        println!("{}", bold(&format!("diff --git a/{name} b/{name}")));
-        println!("{}", bold(name));
+        writeln!(w, "{}", bold(&format!("diff --git a/{name} b/{name}")))?;
+        writeln!(w, "{}", bold(name))?;
         match &f.patch {
             Some(p) if !p.is_empty() => {
                 for line in p.lines() {
-                    println!("{}", color_diff_line(line));
+                    writeln!(w, "{}", color_diff_line(line))?;
                 }
             }
-            _ => println!("{}", dim("(no text diff — binary or too large)")),
+            _ => writeln!(w, "{}", dim("(no text diff — binary or too large)"))?,
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -260,12 +278,12 @@ struct IssueRow {
     assignee: String,
 }
 
-pub fn issue_table(items: &[Issue]) {
+pub fn issue_table(w: &mut impl Write, items: &[Issue]) -> std::io::Result<()> {
     let rows: Vec<IssueRow> = items
         .iter()
         .map(|i| IssueRow {
             number: i.number.clone(),
-            state: color_state(&i.state, false),
+            state: issue_state_style(i.state),
             title: i.title.clone(),
             assignee: i
                 .assignee
@@ -274,28 +292,36 @@ pub fn issue_table(items: &[Issue]) {
                 .unwrap_or_default(),
         })
         .collect();
-    println!("{}", Table::new(rows));
+    writeln!(w, "{}", Table::new(rows))
 }
 
-pub fn one_issue(i: &Issue) {
-    let state = color_state(&i.state, false);
-    println!("{}  {}  [{}]", bold(&format!("#{}", i.number)), i.title, state);
-    println!("{}", dim(&i.html_url));
+pub fn one_issue(w: &mut impl Write, i: &Issue) -> std::io::Result<()> {
+    let state = issue_state_style(i.state);
+    writeln!(
+        w,
+        "{}  {}  [{}]",
+        bold(&format!("#{}", i.number)),
+        i.title,
+        state
+    )?;
+    writeln!(w, "{}", dim(&i.html_url))?;
     if let Some(b) = &i.body {
         let b = b.trim();
         if !b.is_empty() {
-            println!("\n{b}");
+            writeln!(w, "\n{b}")?;
         }
     }
+    Ok(())
 }
 
-pub fn comment_line(c: &Comment) {
+pub fn comment_line(w: &mut impl Write, c: &Comment) -> std::io::Result<()> {
     let who = c.user.as_ref().map(|u| u.login.as_str()).unwrap_or("?");
-    println!(
+    writeln!(
+        w,
         "@{who} commented:\n{}\n{}",
         c.body,
         c.html_url.as_deref().unwrap_or("")
-    );
+    )
 }
 
 // --- releases -----------------------------------------------------------
@@ -316,7 +342,7 @@ fn release_status(prerelease: Option<bool>) -> String {
     }
 }
 
-pub fn release_table(items: &[Release]) {
+pub fn release_table(w: &mut impl Write, items: &[Release]) -> std::io::Result<()> {
     let rows: Vec<ReleaseRow> = items
         .iter()
         .map(|rel| ReleaseRow {
@@ -326,32 +352,34 @@ pub fn release_table(items: &[Release]) {
             created: rel.created_at.clone().unwrap_or_default(),
         })
         .collect();
-    println!("{}", Table::new(rows));
+    writeln!(w, "{}", Table::new(rows))
 }
 
-pub fn one_release(rel: &Release) {
+pub fn one_release(w: &mut impl Write, rel: &Release) -> std::io::Result<()> {
     let title = rel
         .name
         .as_deref()
         .filter(|n| !n.is_empty())
         .unwrap_or(&rel.tag_name);
-    println!(
+    writeln!(
+        w,
         "{}  {}  [{}]",
         bold(&rel.tag_name),
         title,
         release_status(rel.prerelease)
-    );
+    )?;
     if let Some(b) = &rel.body {
         let b = b.trim();
         if !b.is_empty() {
-            println!("\n{b}");
+            writeln!(w, "\n{b}")?;
         }
     }
     let assets = rel.assets.as_deref().unwrap_or(&[]);
-    println!("\n{} asset(s)", assets.len());
+    writeln!(w, "\n{} asset(s)", assets.len())?;
     for asset in assets {
-        println!("  {}", asset.name);
+        writeln!(w, "  {}", asset.name)?;
     }
+    Ok(())
 }
 
 // --- repositories -------------------------------------------------------
@@ -364,7 +392,7 @@ struct RepoRow {
     description: String,
 }
 
-pub fn repo_table(items: &[RepoDetails]) {
+pub fn repo_table(w: &mut impl Write, items: &[RepoDetails]) -> std::io::Result<()> {
     let rows: Vec<RepoRow> = items
         .iter()
         .map(|r| RepoRow {
@@ -378,30 +406,147 @@ pub fn repo_table(items: &[RepoDetails]) {
             description: r.description.clone().unwrap_or_default(),
         })
         .collect();
-    println!("{}", Table::new(rows));
+    writeln!(w, "{}", Table::new(rows))
 }
 
-pub fn one_repo(r: &RepoDetails) {
+pub fn one_repo(w: &mut impl Write, r: &RepoDetails) -> std::io::Result<()> {
     let vis = if r.private.unwrap_or(false) {
         red("private")
     } else {
         green("public")
     };
-    println!("{}  [{}]", bold(&r.full_name), vis);
+    writeln!(w, "{}  [{}]", bold(&r.full_name), vis)?;
     if let Some(d) = &r.description {
         let d = d.trim();
         if !d.is_empty() {
-            println!("{d}");
+            writeln!(w, "{d}")?;
         }
     }
-    println!(
+    writeln!(
+        w,
         "default: {}  stars: {}  forks: {}  issues: {}",
         r.default_branch.as_deref().unwrap_or("-"),
         r.stargazers_count.unwrap_or(0),
         r.fork_count.unwrap_or(0),
         r.open_issues_count.unwrap_or(0),
-    );
+    )?;
     if !r.html_url.is_empty() {
-        println!("{}", dim(&r.html_url));
+        writeln!(w, "{}", dim(&r.html_url))?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod printer_tests {
+    use super::*;
+
+    fn pr_fixture() -> PullRequest {
+        PullRequest {
+            number: 12,
+            title: "Add pagination helpers".into(),
+            head: PrBranch {
+                git_ref: "feature/paging".into(),
+                ..Default::default()
+            },
+            base: PrBranch {
+                git_ref: "master".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn pr_table_contains_number_title_and_branch() {
+        let mut buf = Vec::new();
+        pr_table(&mut buf, &[pr_fixture()]).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("12"));
+        assert!(out.contains("Add pagination helpers"));
+        assert!(out.contains("feature/paging -> master"));
+    }
+
+    #[test]
+    fn one_issue_shows_number_and_title() {
+        let issue = Issue {
+            number: "88".into(),
+            title: "Login fails with expired token".into(),
+            html_url: "https://gitee.com/oschina/gitee-cli/issues/I88".into(),
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        one_issue(&mut buf, &issue).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("#88"));
+        assert!(out.contains("Login fails with expired token"));
+    }
+
+    #[test]
+    fn pr_diff_renders_git_header_and_no_text_fallback() {
+        let with_patch = FileDiff {
+            filename: "pom.xml".into(),
+            patch: Some("@@ -1 +1 @@\n-old\n+new".into()),
+            ..Default::default()
+        };
+
+        let without_patch = FileDiff {
+            filename: "logo.png".into(),
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        pr_diff(&mut buf, &[with_patch, without_patch]).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("diff --git a/pom.xml b/pom.xml"));
+        assert!(out.contains("@@ -1 +1 @@"));
+        assert!(out.contains("(no text diff — binary or too large)"));
+    }
+
+    #[test]
+    fn one_release_prints_asset_count_and_names() {
+        let release = Release {
+            tag_name: "v1.2.0".into(),
+            name: Some("v1.2.0".into()),
+            prerelease: Some(false),
+            assets: Some(vec![
+                ReleaseAsset {
+                    name: "gitee-linux-amd64.tar.xz".into(),
+                    browser_download_url: "https://example.com/linux".into(),
+                },
+                ReleaseAsset {
+                    name: "gitee-darwin-arm64.tar.xz".into(),
+                    browser_download_url: "https://example.com/darwin".into(),
+                },
+            ]),
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        one_release(&mut buf, &release).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("2 asset(s)"));
+        assert!(out.contains("gitee-linux-amd64.tar.xz"));
+        assert!(out.contains("gitee-darwin-arm64.tar.xz"));
+    }
+
+    #[test]
+    fn comment_line_format() {
+        let comment = Comment {
+            body: "Looks good to me".into(),
+            html_url: Some("https://gitee.com/oschina/gitee-cli/pulls/12#note_1".into()),
+            user: Some(UserBasic {
+                login: "dev1".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mut buf = Vec::new();
+        comment_line(&mut buf, &comment).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("@dev1 commented:"));
+        assert!(out.contains("Looks good to me"));
+        assert!(out.contains("https://gitee.com/oschina/gitee-cli/pulls/12#note_1"));
     }
 }

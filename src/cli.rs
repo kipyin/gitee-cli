@@ -36,20 +36,36 @@ pub enum Command {
     #[command(subcommand)]
     Auth(AuthCmd),
     /// Print a shell completion script (bash, zsh, fish, powershell, elvish).
-    Completions {
-        shell: Option<String>,
-    },
+    Completions { shell: Option<String> },
+}
+
+#[derive(clap::Args, Clone, Debug)]
+pub struct ListArgs {
+    #[arg(long)]
+    pub state: Option<String>,
+    #[arg(long, default_value_t = 30)]
+    pub limit: usize,
+}
+
+#[derive(clap::Args, Clone, Debug)]
+pub struct LimitArgs {
+    #[arg(long, default_value_t = 30)]
+    pub limit: usize,
+}
+
+#[derive(clap::Args, Clone, Debug)]
+pub struct CommentArgs {
+    #[arg(long, short = 'm')]
+    pub body: String,
 }
 
 #[derive(Subcommand, Clone)]
 pub enum PrCmd {
     List {
-        #[arg(long)]
-        state: Option<String>,
+        #[command(flatten)]
+        list: ListArgs,
         #[arg(long)]
         author: Option<String>,
-        #[arg(long, default_value_t = 30)]
-        limit: usize,
     },
     /// Show details of a pull request.
     View {
@@ -84,8 +100,8 @@ pub enum PrCmd {
     },
     Comment {
         number: i64,
-        #[arg(long, short = 'm')]
-        body: String,
+        #[command(flatten)]
+        body: CommentArgs,
     },
     Approve {
         number: i64,
@@ -108,12 +124,10 @@ pub enum PrCmd {
 #[derive(Subcommand, Clone)]
 pub enum IssueCmd {
     List {
-        #[arg(long)]
-        state: Option<String>,
+        #[command(flatten)]
+        list: ListArgs,
         #[arg(long)]
         assignee: Option<String>,
-        #[arg(long, default_value_t = 30)]
-        limit: usize,
     },
     /// Show details of an issue.
     View {
@@ -142,16 +156,16 @@ pub enum IssueCmd {
     },
     Comment {
         number: String,
-        #[arg(long, short = 'm')]
-        body: String,
+        #[command(flatten)]
+        body: CommentArgs,
     },
 }
 
 #[derive(Subcommand, Clone)]
 pub enum ReleaseCmd {
     List {
-        #[arg(long, default_value_t = 30)]
-        limit: usize,
+        #[command(flatten)]
+        limit: LimitArgs,
     },
     View {
         tag: String,
@@ -185,8 +199,8 @@ pub enum RepoCmd {
     /// lists that user/org's public repos.
     List {
         owner: Option<String>,
-        #[arg(long, default_value_t = 30)]
-        limit: usize,
+        #[command(flatten)]
+        limit: LimitArgs,
     },
     /// Clone a repository via git.
     Clone {

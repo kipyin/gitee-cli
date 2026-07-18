@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 
 use crate::api::client::Client;
 use crate::cli::AuthCmd;
@@ -27,7 +27,7 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
             // Validate before storing so a typo doesn't land silently and explode
             // on the next command. --force skips this (offline, restricted token).
             if !force {
-                let client = Client::new(format!("https://{host}/api/v5"), token.clone());
+                let client = Client::for_host(host, token.clone());
                 let who = client
                     .get::<UserBasic>("/user", &[])
                     .map(|u| u.name.filter(|n| !n.is_empty()).unwrap_or(u.login))
@@ -63,5 +63,3 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
         }
     }
 }
-
-use std::io::Write;

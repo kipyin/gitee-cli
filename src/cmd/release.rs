@@ -1,23 +1,26 @@
+use std::io::Write;
+
 use super::Ctx;
+use crate::api::releases::CreateRelease;
 use crate::cli::ReleaseCmd;
 use crate::error::Result;
-use crate::models::{Release, ReleaseAsset};
 use crate::out;
 
 pub fn execute(ctx: &Ctx, cmd: ReleaseCmd) -> Result<()> {
-    let o = ctx.repo.owner.as_str();
-    let r = ctx.repo.name.as_str();
     match cmd {
         ReleaseCmd::List { limit } => {
-            let path = format!("/repos/{o}/{r}/releases");
-            let items: Vec<Release> = ctx.client.get_paged(&path, &[], limit)?;
-            ctx.out.render(&items, || out::release_table(&items));
+            let repo = ctx.repo()?;
+            let items = ctx.client.releases(repo).list(limit.limit)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::release_table(w, &items))?;
         }
         ReleaseCmd::View { tag } => {
-            let release: Release = ctx
-                .client
-                .get(&format!("/repos/{o}/{r}/releases/tags/{tag}"), &[])?;
-            ctx.out.render(&release, || out::one_release(&release));
+            let repo = ctx.repo()?;
+            let release = ctx.client.releases(repo).get_by_tag(&tag)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &release, |w| out::one_release(w, &release))?;
         }
         ReleaseCmd::Create {
             tag,
@@ -26,37 +29,26 @@ pub fn execute(ctx: &Ctx, cmd: ReleaseCmd) -> Result<()> {
             target,
             prerelease,
         } => {
-            let display_name = name.unwrap_or_else(|| tag.clone());
-            let mut f: Vec<(&str, String)> = vec![("tag_name", tag), ("name", display_name)];
-            if let Some(n) = notes {
-                f.push(("body", n));
-            }
-            if let Some(t) = target {
-                f.push(("target_commitish", t));
-            }
-            f.push((
-                "prerelease",
-                if prerelease {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
-                },
-            ));
-            let form: Vec<(&str, &str)> = f.iter().map(|(k, v)| (*k, v.as_str())).collect();
-            let release: Release = ctx.client.post(&format!("/repos/{o}/{r}/releases"), &form)?;
-            ctx.out.render(&release, || out::one_release(&release));
+            let repo = ctx.repo()?;
+            let req = CreateRelease {
+                tag: &tag,
+                name: name.as_deref(),
+                notes: notes.as_deref(),
+                target: target.as_deref(),
+                prerelease,
+            };
+            let release = ctx.client.releases(repo).create(&req)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &release, |w| out::one_release(w, &release))?;
         }
         ReleaseCmd::Upload { tag, files } => {
-            let release: Release = ctx
-                .client
-                .get(&format!("/repos/{o}/{r}/releases/tags/{tag}"), &[])?;
-            let id = release.id;
+            let repo = ctx.repo()?;
+            let releases = ctx.client.releases(repo);
+            let mut out = std::io::stdout().lock();
             for file_path in files {
-                let asset: ReleaseAsset = ctx.client.post_multipart(
-                    &format!("/repos/{o}/{r}/releases/{id}/attach_files"),
-                    &file_path,
-                )?;
-                println!("{}", asset.name);
+                let asset = releases.upload(&tag, &file_path)?;
+                writeln!(out, "{}", asset.name)?;
             }
         }
     }
