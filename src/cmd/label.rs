@@ -6,6 +6,7 @@ use crate::cli::LabelCmd;
 use crate::error::Result;
 use crate::out;
 
+// Follow-up (ticket 08 non-goal): `gh label clone` cross-repo copy is not implemented.
 pub fn execute(ctx: &Ctx, cmd: LabelCmd) -> Result<()> {
     match cmd {
         LabelCmd::List { limit } => {

@@ -117,7 +117,7 @@ impl Pulls<'_> {
     pub fn merge(&self, number: i64, method: MergeMethod, close_related_issue: bool) -> Result<()> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let close = if close_related_issue { "true" } else { "false" };
+        let close = Client::bool_str(close_related_issue);
         let f: Vec<(&str, String)> = vec![
             ("merge_method", method.as_str().to_string()),
             ("close_related_issue", close.to_string()),

@@ -25,7 +25,7 @@ pub fn execute(ctx: &Ctx, cmd: SearchCmd) -> Result<()> {
                 limit: limit.limit,
             };
             let items = ctx.client.search().repos(&filter)?;
-            if items.is_empty() && ctx.out.json.is_none() {
+            if skip_if_empty(ctx, &items) {
                 return Ok(());
             }
             let mut out = std::io::stdout().lock();
@@ -56,7 +56,7 @@ pub fn execute(ctx: &Ctx, cmd: SearchCmd) -> Result<()> {
                 limit: limit.limit,
             };
             let items = ctx.client.search().issues(&filter)?;
-            if items.is_empty() && ctx.out.json.is_none() {
+            if skip_if_empty(ctx, &items) {
                 return Ok(());
             }
             let mut out = std::io::stdout().lock();
@@ -76,7 +76,7 @@ pub fn execute(ctx: &Ctx, cmd: SearchCmd) -> Result<()> {
                 limit: limit.limit,
             };
             let items = ctx.client.search().users(&filter)?;
-            if items.is_empty() && ctx.out.json.is_none() {
+            if skip_if_empty(ctx, &items) {
                 return Ok(());
             }
             let mut out = std::io::stdout().lock();
@@ -85,4 +85,10 @@ pub fn execute(ctx: &Ctx, cmd: SearchCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Ticket acceptance: empty search results print NOTHING and exit 0 in human
+/// mode; `--json` still prints `[]`.
+fn skip_if_empty<T>(ctx: &Ctx, items: &[T]) -> bool {
+    items.is_empty() && ctx.out.json.is_none()
 }

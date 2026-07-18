@@ -38,15 +38,11 @@ impl Gists<'_> {
             ("description".to_string(), req.description.to_string()),
             (
                 "public".to_string(),
-                if req.public {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
-                },
+                Client::bool_str(req.public).to_string(),
             ),
         ];
         push_file_fields(&mut pairs, req.files);
-        let form = form_refs(&pairs);
+        let form = Client::str_refs(&pairs);
         self.client.post("/gists", &form)
     }
 
@@ -56,7 +52,7 @@ impl Gists<'_> {
             pairs.push(("description".to_string(), d.to_string()));
         }
         push_file_fields(&mut pairs, req.files);
-        let form = form_refs(&pairs);
+        let form = Client::str_refs(&pairs);
         self.client.patch(&format!("/gists/{id}"), &form)
     }
 
@@ -71,6 +67,16 @@ fn push_file_fields(pairs: &mut Vec<(String, String)>, files: &[(String, String)
     }
 }
 
-fn form_refs(pairs: &[(String, String)]) -> Vec<(&str, &str)> {
-    pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect()
+/// Gitee requires a non-empty `description` (1–30 chars). When `--desc` is
+/// omitted the CLI defaults to the first file name, truncated to fit the limit.
+pub fn truncate_description(desc: &str) -> String {
+    let trimmed = desc.trim();
+    if trimmed.is_empty() {
+        return "gist".to_string();
+    }
+    if trimmed.chars().count() <= 30 {
+        trimmed.to_string()
+    } else {
+        trimmed.chars().take(30).collect()
+    }
 }

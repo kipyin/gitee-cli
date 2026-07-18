@@ -85,8 +85,13 @@ impl Client {
         Milestones::new(self, repo)
     }
 
-    pub(crate) fn str_refs<'a>(pairs: &'a [(&'a str, String)]) -> Vec<(&'a str, &'a str)> {
-        pairs.iter().map(|(k, v)| (*k, v.as_str())).collect()
+    pub(crate) fn str_refs<K: AsRef<str>>(pairs: &[(K, String)]) -> Vec<(&str, &str)> {
+        pairs.iter().map(|(k, v)| (k.as_ref(), v.as_str())).collect()
+    }
+
+    /// Gitee form booleans are urlencoded as the strings `"true"`/`"false"`.
+    pub(crate) fn bool_str(b: bool) -> &'static str {
+        if b { "true" } else { "false" }
     }
 
     /// Gitee accepts `Authorization: token <T>`. Sending the token in the header

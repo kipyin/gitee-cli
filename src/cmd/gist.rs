@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 
 use super::{confirm, Ctx};
-use crate::api::gists::{CreateGist, UpdateGist};
+use crate::api::gists::{truncate_description, CreateGist, UpdateGist};
 use crate::cli::GistCmd;
 use crate::error::{GiteeError, Result};
 use crate::out;
@@ -31,6 +31,7 @@ pub fn execute(ctx: &Ctx, cmd: GistCmd) -> Result<()> {
             filename,
         } => {
             let pairs = read_gist_files(&files, filename.as_deref())?;
+            // --desc omitted → default to the first file name (API requires a description).
             let description = desc
                 .as_deref()
                 .unwrap_or(&pairs[0].0)
@@ -73,20 +74,6 @@ pub fn execute(ctx: &Ctx, cmd: GistCmd) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// Gitee requires a non-empty `description` (1–30 chars). When `--desc` is
-/// omitted we default to the first file name, truncated to fit the limit.
-fn truncate_description(desc: &str) -> String {
-    let trimmed = desc.trim();
-    if trimmed.is_empty() {
-        return "gist".to_string();
-    }
-    if trimmed.chars().count() <= 30 {
-        trimmed.to_string()
-    } else {
-        trimmed.chars().take(30).collect()
-    }
 }
 
 fn read_gist_files(files: &[String], stdin_name: Option<&str>) -> Result<Vec<(String, String)>> {

@@ -700,8 +700,7 @@ pub fn one_gist(w: &mut impl Write, g: &Gist) -> std::io::Result<()> {
 }
 
 pub fn gist_raw(w: &mut impl Write, g: &Gist) -> std::io::Result<()> {
-    let files = g.files.as_ref().cloned().unwrap_or_default();
-    for (i, (_name, file)) in files.iter().enumerate() {
+    for (i, (_name, file)) in g.files.iter().flatten().enumerate() {
         if i > 0 {
             writeln!(w)?;
         }

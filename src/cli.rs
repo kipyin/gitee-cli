@@ -388,6 +388,8 @@ pub enum ReleaseCmd {
         tag: String,
         #[arg(long, default_value = ".")]
         dir: String,
+        /// Download only assets matching the glob (`*` and `?` supported;
+        /// character classes like `[ab]` are not).
         #[arg(long)]
         pattern: Option<String>,
     },

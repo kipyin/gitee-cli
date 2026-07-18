@@ -132,7 +132,13 @@ fn glob_at(p: &[char], pi: usize, n: &[char], ni: usize) -> bool {
         }
         return false;
     }
-    if ni == n.len() || p[pi] != n[ni] {
+    if ni == n.len() {
+        return false;
+    }
+    if p[pi] == '?' {
+        return glob_at(p, pi + 1, n, ni + 1);
+    }
+    if p[pi] != n[ni] {
         return false;
     }
     glob_at(p, pi + 1, n, ni + 1)
@@ -159,5 +165,13 @@ mod glob_tests {
     fn literal_must_match() {
         assert!(glob_match("exact", "exact"));
         assert!(!glob_match("exact", "exactx"));
+    }
+
+    #[test]
+    fn glob_match_question_mark_matches_one_char() {
+        assert!(glob_match("v?.txt", "v1.txt"));
+        assert!(!glob_match("v?.txt", "v12.txt"));
+        assert!(!glob_match("v?.txt", "v.txt"));
+        assert!(glob_match("?.txt", "a.txt"));
     }
 }

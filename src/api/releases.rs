@@ -63,14 +63,7 @@ impl Releases<'_> {
         if let Some(t) = req.target {
             f.push(("target_commitish", t.to_string()));
         }
-        f.push((
-            "prerelease",
-            if req.prerelease {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            },
-        ));
+        f.push(("prerelease", Client::bool_str(req.prerelease).to_string()));
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/{r}/releases"), &form)
     }

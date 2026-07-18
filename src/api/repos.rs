@@ -70,14 +70,7 @@ impl Repos<'_> {
         }
         // Gitee bool quirk: booleans are urlencoded as "true"/"false" strings.
         // Swagger also documents integer `public`; we send `private` instead.
-        f.push((
-            "private",
-            if req.private {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            },
-        ));
+        f.push(("private", Client::bool_str(req.private).to_string()));
         let form = Client::str_refs(&f);
         self.client.post(&path, &form)
     }
@@ -93,14 +86,7 @@ impl Repos<'_> {
             f.push(("homepage", h.to_string()));
         }
         if let Some(p) = req.private {
-            f.push((
-                "private",
-                if p {
-                    "true".to_string()
-                } else {
-                    "false".to_string()
-                },
-            ));
+            f.push(("private", Client::bool_str(p).to_string()));
         }
         if let Some(b) = req.default_branch {
             f.push(("default_branch", b.to_string()));
