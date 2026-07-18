@@ -76,6 +76,29 @@ fn core(cli: &Cli) -> Result<Client> {
     Ok(client)
 }
 
+/// Guard a destructive operation behind explicit confirmation. `--yes` skips
+/// the prompt; an interactive terminal must type `yes`; anything else (piped
+/// stdin, no TTY) is a usage error, so scripts can't delete by accident.
+pub fn confirm(action: &str, yes: bool) -> Result<()> {
+    use std::io::IsTerminal;
+    if yes {
+        return Ok(());
+    }
+    if !std::io::stdin().is_terminal() {
+        return Err(GiteeError::Usage(format!(
+            "{action}: pass --yes to confirm (stdin is not a terminal)"
+        )));
+    }
+    eprintln!("{action}? Type 'yes' to confirm: ");
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).ok();
+    if line.trim() == "yes" {
+        Ok(())
+    } else {
+        Err(GiteeError::Usage("aborted".into()))
+    }
+}
+
 /// Flatten repeatable, comma-splittable flag values (e.g. `--label a,b --label c`)
 /// into one comma-joined string; `None` when nothing was given.
 pub(crate) fn join_flags(values: &[String]) -> Option<String> {

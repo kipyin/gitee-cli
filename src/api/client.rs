@@ -215,6 +215,11 @@ impl Client {
         self.send_ok("PUT", path, form)
     }
 
+    /// DELETE expecting an empty-body 2xx (204), e.g. gist/label/repo delete.
+    pub fn delete_ok(&self, path: &str) -> Result<()> {
+        self.send_ok("DELETE", path, &[])
+    }
+
     pub fn post_multipart<T: DeserializeOwned>(&self, path: &str, file_path: &str) -> Result<T> {
         self.trace("POST", path);
         let form = reqwest::blocking::multipart::Form::new()
@@ -236,6 +241,7 @@ impl Client {
         let req = match method {
             "POST" => self.http.post(self.full(path)),
             "PUT" => self.http.put(self.full(path)),
+            "DELETE" => self.http.delete(self.full(path)),
             _ => unreachable!(),
         };
         let resp = req.header("Authorization", self.auth()).form(form).send()?;
