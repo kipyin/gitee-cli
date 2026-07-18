@@ -1,4 +1,5 @@
 use crate::error::{GiteeError, Result};
+use super::search::Search;
 use crate::repo::Repo;
 
 use super::gists::Gists;
@@ -57,6 +58,10 @@ impl Client {
 
     pub fn issues<'a>(&'a self, repo: &'a Repo) -> Issues<'a> {
         Issues::new(self, repo)
+    }
+
+    pub fn search<'a>(&'a self) -> Search<'a> {
+        Search::new(self)
     }
 
     pub fn releases<'a>(&'a self, repo: &'a Repo) -> Releases<'a> {

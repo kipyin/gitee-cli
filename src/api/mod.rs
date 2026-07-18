@@ -5,3 +5,4 @@ pub mod pulls;
 pub mod milestones;
 pub mod releases;
 pub mod repos;
+pub mod search;

@@ -42,6 +42,8 @@ pub enum Command {
     Repo(RepoCmd),
     #[command(subcommand)]
     Auth(AuthCmd),
+    #[command(subcommand)]
+    Search(SearchCmd),
     /// Raw Gitee REST API request (like `gh api`).
     Api(ApiArgs),
     #[command(subcommand)]
@@ -198,6 +200,58 @@ pub enum PrCmd {
     Link {
         number: i64,
         issue: String,
+    },
+}
+
+
+#[derive(Subcommand, Clone)]
+pub enum SearchCmd {
+    /// Search repositories.
+    Repos {
+        query: String,
+        #[arg(long)]
+        owner: Option<String>,
+        #[arg(long)]
+        language: Option<String>,
+        /// Only include forked repositories.
+        #[arg(long)]
+        fork: bool,
+        #[arg(long)]
+        sort: Option<String>,
+        #[arg(long)]
+        order: Option<String>,
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+    /// Search issues (globally unless --repo is set).
+    Issues {
+        query: String,
+        #[arg(long)]
+        state: Option<String>,
+        #[arg(long)]
+        author: Option<String>,
+        #[arg(long)]
+        assignee: Option<String>,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        language: Option<String>,
+        #[arg(long)]
+        sort: Option<String>,
+        #[arg(long)]
+        order: Option<String>,
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
+    /// Search users.
+    Users {
+        query: String,
+        #[arg(long)]
+        sort: Option<String>,
+        #[arg(long)]
+        order: Option<String>,
+        #[command(flatten)]
+        limit: LimitArgs,
     },
 }
 
@@ -434,6 +488,125 @@ mod parse_tests {
         assert!(title.is_none());
         assert!(fill);
     }
+
+    #[test]
+    fn search_requires_query_positional() {
+        assert!(Cli::try_parse_from(["gitee", "search", "repos"]).is_err());
+        assert!(Cli::try_parse_from(["gitee", "search", "issues"]).is_err());
+        assert!(Cli::try_parse_from(["gitee", "search", "users"]).is_err());
+    }
+
+    #[test]
+    fn search_parses_flags() {
+        let cli = Cli::try_parse_from([
+            "gitee", "search", "repos", "gitee",
+            "--owner", "oschina",
+            "--language", "Rust",
+            "--fork",
+            "--sort", "stars_count",
+            "--order", "desc",
+            "--limit", "5",
+        ])
+        .expect("search repos should parse");
+        let Command::Search(super::SearchCmd::Repos {
+            query,
+            owner,
+            language,
+            fork,
+            sort,
+            order,
+            limit,
+        }) = cli.cmd
+        else {
+            panic!("expected search repos");
+        };
+        assert_eq!(query, "gitee");
+        assert_eq!(owner.as_deref(), Some("oschina"));
+        assert_eq!(language.as_deref(), Some("Rust"));
+        assert!(fork);
+        assert_eq!(sort.as_deref(), Some("stars_count"));
+        assert_eq!(order.as_deref(), Some("desc"));
+        assert_eq!(limit.limit, 5);
+
+        let cli = Cli::try_parse_from([
+            "gitee", "search", "issues", "login",
+            "--state", "open",
+            "--author", "alice",
+            "--assignee", "bob",
+            "--label", "bug",
+            "--language", "Go",
+            "--sort", "updated_at",
+            "--order", "asc",
+            "--limit", "3",
+        ])
+        .expect("search issues should parse");
+        let Command::Search(super::SearchCmd::Issues {
+            query,
+            state,
+            author,
+            assignee,
+            label,
+            language,
+            sort,
+            order,
+            limit,
+        }) = cli.cmd
+        else {
+            panic!("expected search issues");
+        };
+        assert_eq!(query, "login");
+        assert_eq!(state.as_deref(), Some("open"));
+        assert_eq!(author.as_deref(), Some("alice"));
+        assert_eq!(assignee.as_deref(), Some("bob"));
+        assert_eq!(label.as_deref(), Some("bug"));
+        assert_eq!(language.as_deref(), Some("Go"));
+        assert_eq!(sort.as_deref(), Some("updated_at"));
+        assert_eq!(order.as_deref(), Some("asc"));
+        assert_eq!(limit.limit, 3);
+
+        let cli = Cli::try_parse_from([
+            "gitee", "search", "users", "kip",
+            "--sort", "followers_count",
+            "--order", "desc",
+            "--limit", "3",
+        ])
+        .expect("search users should parse");
+        let Command::Search(super::SearchCmd::Users {
+            query,
+            sort,
+            order,
+            limit,
+        }) = cli.cmd
+        else {
+            panic!("expected search users");
+        };
+        assert_eq!(query, "kip");
+        assert_eq!(sort.as_deref(), Some("followers_count"));
+        assert_eq!(order.as_deref(), Some("desc"));
+        assert_eq!(limit.limit, 3);
+    }
+
+    #[test]
+    fn search_issues_accepts_global_repo_flag() {
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "--repo",
+            "oschina/gitee-cli",
+            "search",
+            "issues",
+            "bug",
+            "--limit",
+            "3",
+        ])
+        .expect("search issues with global --repo should parse");
+        assert_eq!(cli.repo.as_deref(), Some("oschina/gitee-cli"));
+        let Command::Search(super::SearchCmd::Issues { query, limit, .. }) = cli.cmd else {
+            panic!("expected search issues");
+        };
+        assert_eq!(query, "bug");
+        assert_eq!(limit.limit, 3);
+    }
+
 
     #[test]
     fn pr_create_parses_full_flag_surface() {

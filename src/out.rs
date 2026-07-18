@@ -745,6 +745,28 @@ pub fn one_repo(w: &mut impl Write, r: &RepoDetails) -> std::io::Result<()> {
     Ok(())
 }
 
+// --- users --------------------------------------------------------------
+
+#[derive(Tabled)]
+struct UserRow {
+    login: String,
+    name: String,
+    html_url: String,
+}
+
+pub fn user_table(w: &mut impl Write, items: &[UserBasic]) -> std::io::Result<()> {
+    let rows: Vec<UserRow> = items
+        .iter()
+        .map(|u| UserRow {
+            login: u.login.clone(),
+            name: u.name.clone().unwrap_or_default(),
+            html_url: u.html_url.clone().unwrap_or_default(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+
 #[cfg(test)]
 mod printer_tests {
     use super::*;
@@ -881,4 +903,22 @@ mod printer_tests {
         assert!(out.contains("Looks good to me"));
         assert!(out.contains("https://gitee.com/oschina/gitee-cli/pulls/12#note_1"));
     }
+
+    #[test]
+    fn user_table_contains_login_name_and_url() {
+        let users = vec![UserBasic {
+            login: "kip".into(),
+            name: Some("Kip Yin".into()),
+            html_url: Some("https://gitee.com/kip".into()),
+            ..Default::default()
+        }];
+
+        let mut buf = Vec::new();
+        user_table(&mut buf, &users).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("kip"));
+        assert!(out.contains("Kip Yin"));
+        assert!(out.contains("https://gitee.com/kip"));
+    }
+
 }
