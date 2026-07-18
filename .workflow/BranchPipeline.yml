@@ -2,12 +2,9 @@
 # The heavy lifting (4-platform build, GitHub Release) stays in GitHub Actions;
 # this is the Gitee-side first-pass check (option C: lightweight verification).
 #
-# Uses the documented build@gcc plugin (Ubuntu 20.04 base) + rustup install,
-# the standard CI pattern. A dedicated build@rust plugin was announced by
-# Gitee but its YAML schema is not yet documented — migrate later if desired.
-#
-# If the pipeline fails to parse on first push, the stage-id form is the
-# likely culprit: try the inline variant `- stage: test` (dropping `name:`).
+# Uses the documented build@gcc plugin (Ubuntu 20.04 base). Rust toolchain and
+# crates.io downloads go through the rsproxy.cn mirror — direct access to
+# static.rust-lang.org from Gitee runners stalls for 10+ minutes.
 version: '1.0'
 name: cargo-test
 displayName: Cargo Test
@@ -27,11 +24,11 @@ stages:
         displayName: cargo test
         gccVersion: 9.4
         commands:
-          # If crate downloads from the Gitee runner network are slow, switch
-          # to the rsproxy mirror by uncommenting these four lines:
-          # - export RUSTUP_DIST_SERVER=https://rsproxy.cn
-          # - export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
-          # - mkdir -p ~/.cargo && printf '[source.crates-io]\nreplace-with = "rsproxy-sparse"\n[source.rsproxy-sparse]\nregistry = "sparse+https://rsproxy.cn/index/"\n' > ~/.cargo/config.toml
-          - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          - source ~/.cargo/env
+          # China-network mirrors: rustup dist server + crates.io sparse index.
+          - export RUSTUP_DIST_SERVER=https://rsproxy.cn
+          - export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
+          - mkdir -p ~/.cargo && printf '[source.crates-io]\nreplace-with = "rsproxy-sparse"\n[source.rsproxy-sparse]\nregistry = "sparse+https://rsproxy.cn/index/"\n' > ~/.cargo/config.toml
+          # Install rustup only if the runner image lacks it (it persists between runs).
+          - export PATH="$HOME/.cargo/bin:$PATH"
+          - command -v cargo >/dev/null || (curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable)
           - cargo test --locked
