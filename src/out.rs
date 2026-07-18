@@ -815,6 +815,18 @@ pub fn one_repo(w: &mut impl Write, r: &RepoDetails) -> std::io::Result<()> {
         r.fork_count.unwrap_or(0),
         r.open_issues_count.unwrap_or(0),
     )?;
+    if r.starred.is_some() || r.watching.is_some() {
+        writeln!(
+            w,
+            "starred: {}  watching: {}",
+            r.starred
+                .map(|b| if b { "yes" } else { "no" })
+                .unwrap_or("-"),
+            r.watching
+                .map(|b| if b { "yes" } else { "no" })
+                .unwrap_or("-"),
+        )?;
+    }
     if !r.html_url.is_empty() {
         writeln!(w, "{}", dim(&r.html_url))?;
     }

@@ -15,3 +15,4 @@ BASE (before Batch 1): 9a71135 docs: refresh README for tickets 01-14 + platform
 
 ## Ledger
 - Task 18-21: complete (in-controller; full cargo test green; pending commit)
+- Task 22: complete (commit pending)

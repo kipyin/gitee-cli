@@ -278,3 +278,75 @@ fn delete_hits_repos_owner_name() {
     mock.assert();
 }
 
+#[test]
+fn star_puts_user_starred() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("PUT", api_path("/user/starred/oschina/gitee-cli").as_str())
+        .with_status(204)
+        .create();
+    client(&server)
+        .repos()
+        .star("oschina", "gitee-cli")
+        .expect("star");
+    mock.assert();
+}
+
+#[test]
+fn unstar_deletes_user_starred() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("DELETE", api_path("/user/starred/oschina/gitee-cli").as_str())
+        .with_status(204)
+        .create();
+    client(&server)
+        .repos()
+        .unstar("oschina", "gitee-cli")
+        .expect("unstar");
+    mock.assert();
+}
+
+#[test]
+fn is_starred_true_on_204_false_on_404() {
+    let mut server = mockito::Server::new();
+    let ok = server
+        .mock("GET", api_path("/user/starred/oschina/gitee-cli").as_str())
+        .with_status(204)
+        .create();
+    assert!(client(&server).repos().is_starred("oschina", "gitee-cli").unwrap());
+    ok.assert();
+
+    let mut server = mockito::Server::new();
+    let missing = server
+        .mock("GET", api_path("/user/starred/oschina/gitee-cli").as_str())
+        .with_status(404)
+        .with_body("{}")
+        .create();
+    assert!(!client(&server).repos().is_starred("oschina", "gitee-cli").unwrap());
+    missing.assert();
+}
+
+#[test]
+fn watch_and_unwatch_hit_subscriptions() {
+    let mut server = mockito::Server::new();
+    let put = server
+        .mock("PUT", api_path("/user/subscriptions/oschina/gitee-cli").as_str())
+        .with_status(204)
+        .create();
+    client(&server)
+        .repos()
+        .watch("oschina", "gitee-cli")
+        .expect("watch");
+    put.assert();
+
+    let mut server = mockito::Server::new();
+    let del = server
+        .mock("DELETE", api_path("/user/subscriptions/oschina/gitee-cli").as_str())
+        .with_status(204)
+        .create();
+    client(&server)
+        .repos()
+        .unwatch("oschina", "gitee-cli")
+        .expect("unwatch");
+    del.assert();
+}

@@ -536,6 +536,14 @@ pub enum RepoCmd {
     Rename {
         new_path: String,
     },
+        /// Star the resolved repository.
+    Star,
+    /// Unstar the resolved repository.
+    Unstar,
+    /// Watch (subscribe to) the resolved repository.
+    Watch,
+    /// Unwatch the resolved repository.
+    Unwatch,
     /// Delete a repository.
     Delete {
         #[arg(long)]
@@ -1232,4 +1240,17 @@ mod parse_tests {
         assert_eq!(id, 55);
         assert!(yes);
     }
+
+    #[test]
+    fn repo_star_watch_parse() {
+        let cli = Cli::try_parse_from(["gitee", "repo", "star"]).expect("star");
+        assert!(matches!(cli.cmd, Command::Repo(RepoCmd::Star)));
+        let cli = Cli::try_parse_from(["gitee", "repo", "unstar"]).expect("unstar");
+        assert!(matches!(cli.cmd, Command::Repo(RepoCmd::Unstar)));
+        let cli = Cli::try_parse_from(["gitee", "repo", "watch"]).expect("watch");
+        assert!(matches!(cli.cmd, Command::Repo(RepoCmd::Watch)));
+        let cli = Cli::try_parse_from(["gitee", "repo", "unwatch"]).expect("unwatch");
+        assert!(matches!(cli.cmd, Command::Repo(RepoCmd::Unwatch)));
+    }
+
 }

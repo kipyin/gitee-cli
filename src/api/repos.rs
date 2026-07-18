@@ -119,6 +119,35 @@ impl Repos<'_> {
             .delete_ok(&format!("/repos/{owner}/{name}"))
     }
 
+    pub fn star(&self, owner: &str, name: &str) -> Result<()> {
+        self.client
+            .put_ok(&format!("/user/starred/{owner}/{name}"), &[])
+    }
+
+    pub fn unstar(&self, owner: &str, name: &str) -> Result<()> {
+        self.client
+            .delete_ok(&format!("/user/starred/{owner}/{name}"))
+    }
+
+    pub fn is_starred(&self, owner: &str, name: &str) -> Result<bool> {
+        self.client.exists(&format!("/user/starred/{owner}/{name}"))
+    }
+
+    pub fn watch(&self, owner: &str, name: &str) -> Result<()> {
+        self.client
+            .put_ok(&format!("/user/subscriptions/{owner}/{name}"), &[])
+    }
+
+    pub fn unwatch(&self, owner: &str, name: &str) -> Result<()> {
+        self.client
+            .delete_ok(&format!("/user/subscriptions/{owner}/{name}"))
+    }
+
+    pub fn is_watching(&self, owner: &str, name: &str) -> Result<bool> {
+        self.client
+            .exists(&format!("/user/subscriptions/{owner}/{name}"))
+    }
+
     /// All milestones of a repo (used to resolve --milestone titles to numbers).
     pub fn list_milestones(&self, owner: &str, name: &str) -> Result<Vec<Milestone>> {
         self.client

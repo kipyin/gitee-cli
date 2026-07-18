@@ -441,6 +441,12 @@ pub struct RepoDetails {
     pub private: Option<bool>,
     #[serde(default)]
     pub stargazers_count: Option<i64>,
+    /// Set by `repo view` via GET /user/starred/... (not from repo payload).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starred: Option<bool>,
+    /// Set by `repo view` via GET /user/subscriptions/... (not from repo payload).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watching: Option<bool>,
     #[serde(default)]
     pub fork_count: Option<i64>,
     #[serde(default)]

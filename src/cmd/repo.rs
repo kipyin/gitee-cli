@@ -14,7 +14,10 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
                 Some(s) => Repo::from_spec(&s)?,
                 None => ctx.repo()?.clone(),
             };
-            let details = ctx.client.repos().get(&rr.owner, &rr.name)?;
+            let mut details = ctx.client.repos().get(&rr.owner, &rr.name)?;
+            // Cheap check endpoints for JSON/human extras (ticket 22).
+            details.starred = Some(ctx.client.repos().is_starred(&rr.owner, &rr.name)?);
+            details.watching = Some(ctx.client.repos().is_watching(&rr.owner, &rr.name)?);
             let mut out = std::io::stdout().lock();
             ctx.out
                 .render(&mut out, &details, |w| out::one_repo(w, &details))?;
@@ -130,6 +133,46 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
             ctx.client.repos().delete(&rr.owner, &rr.name)?;
             let mut out = std::io::stdout().lock();
             writeln!(out, "Deleted repository {full_name}")?;
+        }
+        RepoCmd::Star => {
+            let rr = ctx.repo()?.clone();
+            ctx.client.repos().star(&rr.owner, &rr.name)?;
+            let starred = ctx.client.repos().is_starred(&rr.owner, &rr.name)?;
+            writeln!(
+                std::io::stdout().lock(),
+                "Starred {}/{} (starred={starred})",
+                rr.owner, rr.name
+            )?;
+        }
+        RepoCmd::Unstar => {
+            let rr = ctx.repo()?.clone();
+            ctx.client.repos().unstar(&rr.owner, &rr.name)?;
+            let starred = ctx.client.repos().is_starred(&rr.owner, &rr.name)?;
+            writeln!(
+                std::io::stdout().lock(),
+                "Unstarred {}/{} (starred={starred})",
+                rr.owner, rr.name
+            )?;
+        }
+        RepoCmd::Watch => {
+            let rr = ctx.repo()?.clone();
+            ctx.client.repos().watch(&rr.owner, &rr.name)?;
+            let watching = ctx.client.repos().is_watching(&rr.owner, &rr.name)?;
+            writeln!(
+                std::io::stdout().lock(),
+                "Watching {}/{} (watching={watching})",
+                rr.owner, rr.name
+            )?;
+        }
+        RepoCmd::Unwatch => {
+            let rr = ctx.repo()?.clone();
+            ctx.client.repos().unwatch(&rr.owner, &rr.name)?;
+            let watching = ctx.client.repos().is_watching(&rr.owner, &rr.name)?;
+            writeln!(
+                std::io::stdout().lock(),
+                "Unwatched {}/{} (watching={watching})",
+                rr.owner, rr.name
+            )?;
         }
     }
     Ok(())

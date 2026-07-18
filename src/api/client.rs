@@ -259,6 +259,23 @@ impl Client {
         self.send_ok("DELETE", path, &[])
     }
 
+    /// GET that treats 2xx as present and 404 as absent (star/watch check endpoints).
+    pub fn exists(&self, path: &str) -> Result<bool> {
+        self.trace("GET", path);
+        let resp = self
+            .http
+            .get(self.full(path))
+            .header("Authorization", self.auth())
+            .send()?;
+        if resp.status().is_success() {
+            return Ok(true);
+        }
+        if resp.status().as_u16() == 404 {
+            return Ok(false);
+        }
+        self.check(resp, "GET", path).map(|_| false)
+    }
+
     pub fn post_multipart<T: DeserializeOwned>(&self, path: &str, file_path: &str) -> Result<T> {
         self.trace("POST", path);
         let form = reqwest::blocking::multipart::Form::new()
