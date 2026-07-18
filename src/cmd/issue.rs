@@ -64,6 +64,24 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             security_hole,
         } => {
             let repo = ctx.repo()?;
+            let mut title = title;
+            let mut body = body;
+            if super::interactive::should_run_interactive_create(title.as_deref(), false) {
+                if !super::interactive::stdin_is_tty() {
+                    return Err(super::interactive::missing_title_usage(
+                        "issue create",
+                        false,
+                    ));
+                }
+                title = Some(super::interactive::prompt_title(None)?);
+                if body.is_none() {
+                    let editor = super::interactive::resolve_editor_from_env_and_config()?;
+                    body = super::interactive::edit_body_in_editor("", &editor)?;
+                }
+            }
+            let title = title.ok_or_else(|| {
+                super::interactive::missing_title_usage("issue create", false)
+            })?;
             let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
             let req = CreateIssue {
                 title: &title,

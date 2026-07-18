@@ -156,7 +156,7 @@ pub enum PrCmd {
     /// Create a pull request. --fill derives title/body from commits; without
     /// --body/--fill, the repo's pull request template prefills the body.
     Create {
-        #[arg(long, required_unless_present = "fill")]
+        #[arg(long)]
         title: Option<String>,
         #[arg(long)]
         body: Option<String>,
@@ -319,7 +319,7 @@ pub enum IssueCmd {
     },
     Create {
         #[arg(long)]
-        title: String,
+        title: Option<String>,
         #[arg(long)]
         body: Option<String>,
         #[arg(long)]
@@ -757,8 +757,15 @@ mod parse_tests {
     use clap::Parser;
 
     #[test]
-    fn pr_create_requires_title_unless_fill() {
-        assert!(Cli::try_parse_from(["gitee", "pr", "create"]).is_err());
+    fn pr_create_parses_without_title_for_interactive() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "create"])
+            .expect("pr create without flags should parse (interactive or usage at runtime)");
+        let Command::Pr(PrCmd::Create { title, fill, .. }) = cli.cmd else {
+            panic!("expected pr create");
+        };
+        assert!(title.is_none());
+        assert!(!fill);
+
         let cli = Cli::try_parse_from(["gitee", "pr", "create", "--fill"])
             .expect("--fill alone should parse");
         let Command::Pr(PrCmd::Create { title, fill, .. }) = cli.cmd else {
@@ -766,6 +773,16 @@ mod parse_tests {
         };
         assert!(title.is_none());
         assert!(fill);
+    }
+
+    #[test]
+    fn issue_create_parses_without_title_for_interactive() {
+        let cli = Cli::try_parse_from(["gitee", "issue", "create"])
+            .expect("issue create without flags should parse (interactive or usage at runtime)");
+        let Command::Issue(IssueCmd::Create { title, .. }) = cli.cmd else {
+            panic!("expected issue create");
+        };
+        assert!(title.is_none());
     }
 
     #[test]

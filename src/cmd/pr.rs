@@ -139,8 +139,20 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     body = Some(fb);
                 }
             }
+            if super::interactive::should_run_interactive_create(title.as_deref(), fill) {
+                if !super::interactive::stdin_is_tty() {
+                    return Err(super::interactive::missing_title_usage("pr create", true));
+                }
+                title = Some(super::interactive::prompt_title(None)?);
+                if body.is_none() {
+                    let initial =
+                        fetch_pr_template(ctx, repo, &base)?.unwrap_or_default();
+                    let editor = super::interactive::resolve_editor_from_env_and_config()?;
+                    body = super::interactive::edit_body_in_editor(&initial, &editor)?;
+                }
+            }
             let title = title.ok_or_else(|| {
-                GiteeError::Usage("pr create needs --title (or --fill)".into())
+                super::interactive::missing_title_usage("pr create", true)
             })?;
             if body.is_none() {
                 body = fetch_pr_template(ctx, repo, &base)?;

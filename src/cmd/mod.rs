@@ -20,6 +20,7 @@ pub mod browse;
 pub mod collaborator;
 pub mod config_cmd;
 pub mod gist;
+pub mod interactive;
 pub mod issue;
 pub mod label;
 pub mod org;
