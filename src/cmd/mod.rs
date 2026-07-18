@@ -15,6 +15,7 @@ use crate::repo::Repo;
 pub mod api;
 pub mod alias;
 pub mod auth;
+pub mod browse;
 pub mod collaborator;
 pub mod config_cmd;
 pub mod gist;
@@ -33,6 +34,7 @@ pub mod webhook;
 pub struct Ctx {
     pub client: Client,
     pub out: Output,
+    pub host: String,
     repo_arg: Option<String>,
     remote_arg: Option<String>,
     repo: OnceCell<Repo>,
@@ -69,6 +71,10 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Auth(c) => auth::execute(c.clone(), &cli.host),
         Command::Config(c) => config_cmd::execute(c.clone()),
         Command::Alias(c) => alias::execute(c.clone()),
+        Command::Browse => {
+            let ctx = build(&cli)?;
+            browse::execute(&ctx)
+        }
         Command::Api(a) => {
             let client = core(&cli)?;
             api::execute(&client, a.clone())
@@ -213,6 +219,7 @@ fn build(cli: &Cli) -> Result<Ctx> {
             json: cli.json.clone(),
             jq: cli.jq.clone(),
         },
+        host: cli.host.clone(),
         repo_arg: cli.repo.clone(),
         remote_arg: cli.remote.clone(),
         repo: OnceCell::new(),

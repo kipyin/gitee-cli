@@ -44,8 +44,12 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &status, |w| out::issue_status(w, &status))?;
         }
-        IssueCmd::View { number } => {
+        IssueCmd::View { number, web } => {
             let repo = ctx.repo()?;
+            if web {
+                let url = crate::web::issue_url(&ctx.host, repo, &number);
+                return crate::web::open_or_print(&url);
+            }
             let issue = ctx.client.issues(repo).get(&number)?;
             let mut out = std::io::stdout().lock();
             ctx.out

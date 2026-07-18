@@ -16,8 +16,12 @@ pub fn execute(ctx: &Ctx, cmd: ReleaseCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &items, |w| out::release_table(w, &items))?;
         }
-        ReleaseCmd::View { tag } => {
+        ReleaseCmd::View { tag, web } => {
             let repo = ctx.repo()?;
+            if web {
+                let url = crate::web::release_url(&ctx.host, repo, &tag);
+                return crate::web::open_or_print(&url);
+            }
             let release = ctx.client.releases(repo).get_by_tag(&tag)?;
             let mut out = std::io::stdout().lock();
             ctx.out

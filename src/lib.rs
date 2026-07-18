@@ -6,3 +6,4 @@ pub mod error;
 pub mod models;
 pub mod out;
 pub mod repo;
+pub mod web;

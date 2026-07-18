@@ -9,11 +9,15 @@ use crate::repo::Repo;
 
 pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
     match cmd {
-        RepoCmd::View { target } => {
+        RepoCmd::View { target, web } => {
             let rr = match target {
                 Some(s) => Repo::from_spec(&s)?,
                 None => ctx.repo()?.clone(),
             };
+            if web {
+                let url = crate::web::repo_url(&ctx.host, &rr);
+                return crate::web::open_or_print(&url);
+            }
             let mut details = ctx.client.repos().get(&rr.owner, &rr.name)?;
             // Cheap check endpoints for JSON/human extras (ticket 22).
             details.starred = Some(ctx.client.repos().is_starred(&rr.owner, &rr.name)?);

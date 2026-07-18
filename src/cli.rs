@@ -62,6 +62,8 @@ pub enum Command {
     Config(ConfigCmd),
     #[command(subcommand)]
     Alias(AliasCmd),
+    /// Open the repository in a browser.
+    Browse,
     /// Cross-repo dashboard of your open issues. PR sections are omitted: Gitee v5 has no user-level pulls endpoint (swagger verified 2026-07-18).
     Status {
         #[command(flatten)]
@@ -133,6 +135,9 @@ pub enum PrCmd {
     /// Show details of a pull request.
     View {
         number: i64,
+        /// Open in a browser instead of printing.
+        #[arg(long)]
+        web: bool,
     },
     /// Show the unified diff of a pull request.
     Diff {
@@ -302,6 +307,9 @@ pub enum IssueCmd {
     /// Show details of an issue.
     View {
         number: String,
+        /// Open in a browser instead of printing.
+        #[arg(long)]
+        web: bool,
     },
     Create {
         #[arg(long)]
@@ -401,6 +409,9 @@ pub enum ReleaseCmd {
     },
     View {
         tag: String,
+        /// Open in a browser instead of printing.
+        #[arg(long)]
+        web: bool,
     },
     Create {
         #[arg(long)]
@@ -481,6 +492,9 @@ pub enum RepoCmd {
     View {
         #[arg(value_name = "REPO")]
         target: Option<String>,
+        /// Open in a browser instead of printing.
+        #[arg(long)]
+        web: bool,
     },
     /// List repositories. Bare lists the authenticated user's; with an arg,
     /// lists that user/org's public repos.
@@ -1330,6 +1344,28 @@ mod parse_tests {
             Command::Auth(AuthCmd::GitCredential(GitCredentialCmd::Get))
         ));
     }
+
+    #[test]
+    fn browse_and_web_parse() {
+        let cli = Cli::try_parse_from(["gitee", "browse"]).unwrap();
+        assert!(matches!(cli.cmd, Command::Browse));
+        let cli = Cli::try_parse_from(["gitee", "pr", "view", "12", "--web"]).unwrap();
+        let Command::Pr(PrCmd::View { number, web }) = cli.cmd else { panic!("pr view") };
+        assert_eq!(number, 12);
+        assert!(web);
+        let cli = Cli::try_parse_from(["gitee", "issue", "view", "I1", "--web"]).unwrap();
+        let Command::Issue(IssueCmd::View { number, web }) = cli.cmd else { panic!("issue view") };
+        assert_eq!(number, "I1");
+        assert!(web);
+        let cli = Cli::try_parse_from(["gitee", "release", "view", "v1", "--web"]).unwrap();
+        let Command::Release(ReleaseCmd::View { tag, web }) = cli.cmd else { panic!("release view") };
+        assert_eq!(tag, "v1");
+        assert!(web);
+        let cli = Cli::try_parse_from(["gitee", "repo", "view", "--web"]).unwrap();
+        let Command::Repo(RepoCmd::View { web, .. }) = cli.cmd else { panic!("repo view") };
+        assert!(web);
+    }
+
 
 
 
