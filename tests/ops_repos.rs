@@ -1,4 +1,5 @@
 use gitee_cli_rs::api::client::Client;
+use gitee_cli_rs::api::repos::{CreateRepo, EditRepo};
 
 const REPO_LIST_JSON: &str = include_str!("fixtures/repo_list.json");
 const REPO_JSON: &str = r#"{
@@ -131,3 +132,149 @@ fn fork_posts_repos_owner_name_forks() {
     assert_eq!(repo.full_name, "dev1/gitee-cli");
     assert!(repo.parent.is_some());
 }
+#[test]
+fn create_posts_user_repos_with_private_true() {
+    let mut server = mockito::Server::new();
+    let path = "/user/repos";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("name".into(), "smoke-repo".into()),
+            mockito::Matcher::UrlEncoded("description".into(), "A test repo".into()),
+            mockito::Matcher::UrlEncoded("homepage".into(), "https://example.com".into()),
+            mockito::Matcher::UrlEncoded("gitignore_template".into(), "Rust".into()),
+            mockito::Matcher::UrlEncoded("license_template".into(), "MIT".into()),
+            mockito::Matcher::UrlEncoded("private".into(), "true".into()),
+        ]))
+        .with_status(201)
+        .with_header("content-type", "application/json")
+        .with_body(REPO_JSON)
+        .create();
+
+    let repo = client(&server)
+        .repos()
+        .create(&CreateRepo {
+            name: "smoke-repo",
+            org: None,
+            description: Some("A test repo"),
+            homepage: Some("https://example.com"),
+            gitignore_template: Some("Rust"),
+            license_template: Some("MIT"),
+            private: true,
+        })
+        .expect("create should succeed");
+
+    mock.assert();
+    assert_eq!(repo.full_name, "oschina/gitee-cli");
+}
+
+#[test]
+fn create_org_posts_orgs_repos_path() {
+    let mut server = mockito::Server::new();
+    let path = "/orgs/acme/repos";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("name".into(), "team-repo".into()),
+            mockito::Matcher::UrlEncoded("private".into(), "false".into()),
+        ]))
+        .with_status(201)
+        .with_header("content-type", "application/json")
+        .with_body(REPO_JSON)
+        .create();
+
+    client(&server)
+        .repos()
+        .create(&CreateRepo {
+            name: "team-repo",
+            org: Some("acme"),
+            description: None,
+            homepage: None,
+            gitignore_template: None,
+            license_template: None,
+            private: false,
+        })
+        .expect("create should succeed");
+
+    mock.assert();
+}
+
+#[test]
+fn edit_sends_current_name_and_only_provided_flags() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli";
+
+    let mock = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("name".into(), "gitee-cli".into()),
+            mockito::Matcher::UrlEncoded("description".into(), "updated".into()),
+            mockito::Matcher::UrlEncoded("private".into(), "true".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(REPO_JSON)
+        .create();
+
+    client(&server)
+        .repos()
+        .edit(
+            "oschina",
+            "gitee-cli",
+            &EditRepo {
+                name: "gitee-cli",
+                description: Some("updated"),
+                homepage: None,
+                private: Some(true),
+                default_branch: None,
+            },
+        )
+        .expect("edit should succeed");
+
+    mock.assert();
+}
+
+#[test]
+fn rename_sends_name_and_path() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli";
+
+    let mock = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("name".into(), "gitee-cli".into()),
+            mockito::Matcher::UrlEncoded("path".into(), "gitee-cli-renamed".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(REPO_JSON)
+        .create();
+
+    client(&server)
+        .repos()
+        .rename("oschina", "gitee-cli", "gitee-cli", "gitee-cli-renamed")
+        .expect("rename should succeed");
+
+    mock.assert();
+}
+
+#[test]
+fn delete_hits_repos_owner_name() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli";
+
+    let mock = server
+        .mock("DELETE", api_path(path).as_str())
+        .with_status(204)
+        .create();
+
+    client(&server)
+        .repos()
+        .delete("oschina", "gitee-cli")
+        .expect("delete should succeed");
+
+    mock.assert();
+}
+

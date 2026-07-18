@@ -1,6 +1,7 @@
 use std::io::Write;
 
 use super::Ctx;
+use crate::api::repos::{CreateRepo, EditRepo};
 use crate::cli::RepoCmd;
 use crate::error::{GiteeError, Result};
 use crate::out;
@@ -60,6 +61,75 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
                     writeln!(out, "Added remote '{name}' -> {url}")?;
                 }
             }
+        }
+        RepoCmd::Create {
+            name,
+            org,
+            private,
+            description,
+            homepage,
+            gitignore,
+            license,
+        } => {
+            let req = CreateRepo {
+                name: &name,
+                org: org.as_deref(),
+                description: description.as_deref(),
+                homepage: homepage.as_deref(),
+                gitignore_template: gitignore.as_deref(),
+                license_template: license.as_deref(),
+                private,
+            };
+            let details = ctx.client.repos().create(&req)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &details, |w| out::one_repo(w, &details))?;
+        }
+        RepoCmd::Edit {
+            description,
+            homepage,
+            private,
+            public,
+            default_branch,
+        } => {
+            let rr = ctx.repo()?.clone();
+            let private_val = if private {
+                Some(true)
+            } else if public {
+                Some(false)
+            } else {
+                None
+            };
+            let req = EditRepo {
+                name: &rr.name,
+                description: description.as_deref(),
+                homepage: homepage.as_deref(),
+                private: private_val,
+                default_branch: default_branch.as_deref(),
+            };
+            // PATCH returns the updated repository (verified live 2026-07-18).
+            let details = ctx.client.repos().edit(&rr.owner, &rr.name, &req)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &details, |w| out::one_repo(w, &details))?;
+        }
+        RepoCmd::Rename { new_path } => {
+            let rr = ctx.repo()?.clone();
+            let details = ctx
+                .client
+                .repos()
+                .rename(&rr.owner, &rr.name, &rr.name, &new_path)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &details, |w| out::one_repo(w, &details))?;
+        }
+        RepoCmd::Delete { yes } => {
+            let rr = ctx.repo()?.clone();
+            let full_name = format!("{}/{}", rr.owner, rr.name);
+            super::confirm(&format!("Delete repository {full_name}"), yes)?;
+            ctx.client.repos().delete(&rr.owner, &rr.name)?;
+            let mut out = std::io::stdout().lock();
+            writeln!(out, "Deleted repository {full_name}")?;
         }
     }
     Ok(())

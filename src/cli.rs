@@ -386,6 +386,7 @@ pub enum ReleaseCmd {
     },
 }
 
+/// Repo subcommands. `repo sync` omitted: no fork-synchronize endpoint in v5 swagger (verified 2026-07-18).
 #[derive(Subcommand, Clone)]
 pub enum LabelCmd {
     List {
@@ -444,6 +445,46 @@ pub enum RepoCmd {
         /// After forking, add the new repo as a git remote with this name.
         #[arg(long = "add-remote")]
         add_remote: Option<String>,
+    },
+    /// Create a repository under your account or an organization.
+    Create {
+        name: String,
+        /// Create under this organization (POST /orgs/{org}/repos).
+        #[arg(long)]
+        org: Option<String>,
+        #[arg(long)]
+        private: bool,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        homepage: Option<String>,
+        #[arg(long = "gitignore")]
+        gitignore: Option<String>,
+        #[arg(long)]
+        license: Option<String>,
+    },
+    /// Edit repository settings. At least one flag is required.
+    #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["description", "homepage", "private", "public", "default_branch"]))]
+    Edit {
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        homepage: Option<String>,
+        #[arg(long, conflicts_with = "public")]
+        private: bool,
+        #[arg(long, conflicts_with = "private")]
+        public: bool,
+        #[arg(long = "default-branch")]
+        default_branch: Option<String>,
+    },
+    /// Rename a repository's URL slug (`path` on the API).
+    Rename {
+        new_path: String,
+    },
+    /// Delete a repository.
+    Delete {
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -505,7 +546,7 @@ pub enum AuthCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{Cli, Command, GistCmd, IssueCmd, MilestoneCmd, PrCmd};
+    use super::{Cli, Command, GistCmd, IssueCmd, MilestoneCmd, PrCmd, RepoCmd};
     use clap::Parser;
 
     #[test]
@@ -756,6 +797,59 @@ mod parse_tests {
         };
         assert_eq!(milestone.as_deref(), Some("3"));
         assert!(security_hole);
+    }
+
+    #[test]
+    fn repo_edit_requires_at_least_one_flag() {
+        let r = Cli::try_parse_from(["gitee", "repo", "edit"]);
+        assert!(r.is_err(), "repo edit with no flags must fail");
+    }
+
+    #[test]
+    fn repo_edit_private_public_conflict() {
+        let r = Cli::try_parse_from(["gitee", "repo", "edit", "--private", "--public"]);
+        assert!(r.is_err(), "--private and --public must conflict");
+    }
+
+    #[test]
+    fn repo_create_flags_parse() {
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "repo",
+            "create",
+            "my-repo",
+            "--org",
+            "acme",
+            "--private",
+            "--description",
+            "desc",
+            "--homepage",
+            "https://example.com",
+            "--gitignore",
+            "Rust",
+            "--license",
+            "MIT",
+        ])
+        .expect("repo create should parse");
+        let Command::Repo(RepoCmd::Create {
+            name,
+            org,
+            private,
+            description,
+            homepage,
+            gitignore,
+            license,
+        }) = cli.cmd
+        else {
+            panic!("expected repo create");
+        };
+        assert_eq!(name, "my-repo");
+        assert_eq!(org.as_deref(), Some("acme"));
+        assert!(private);
+        assert_eq!(description.as_deref(), Some("desc"));
+        assert_eq!(homepage.as_deref(), Some("https://example.com"));
+        assert_eq!(gitignore.as_deref(), Some("Rust"));
+        assert_eq!(license.as_deref(), Some("MIT"));
     }
 
     #[test]
