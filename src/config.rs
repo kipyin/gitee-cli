@@ -863,9 +863,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn migrate_keeps_legacy_if_new_store_unreadable() {
-        // With test-dir isolation, store goes to files. After a successful
-        // migrate the legacy file must be gone and the per-user file present.
+        // Regression for "token disappeared mid-migration": if the new
+        // per-user store cannot be written, the legacy `{host}.token` must
+        // survive untouched. Force the failure by making the config dir
+        // read-only after seeding the legacy file (keyring is disabled under
+        // set_test_dir, so store falls back to a file write).
+        use std::os::unix::fs::PermissionsExt;
+
         let _env = test_config_env_lock();
         let dir = std::env::temp_dir().join(format!(
             "gitee-cli-migrate-keep-{}",
@@ -875,10 +881,35 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
         let host = "gitee.test";
-        fs::write(dir.join(format!("{host}.token")), "legacy-token\n").unwrap();
-        Config::migrate_legacy_user(host).unwrap();
-        assert_eq!(Config::token_for_user(host, "oauth2").unwrap(), "legacy-token");
-        assert!(!dir.join(format!("{host}.token")).exists());
+        let legacy = dir.join(format!("{host}.token"));
+        fs::write(&legacy, "legacy-token\n").unwrap();
+
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&dir, perms).unwrap();
+
+        let err = Config::migrate_legacy_user(host).expect_err("store should fail");
+        assert!(
+            matches!(err, crate::error::GiteeError::Config(_)),
+            "expected Config error, got {err:?}"
+        );
+        assert!(
+            legacy.exists(),
+            "legacy token must survive a failed migrate"
+        );
+        assert_eq!(
+            fs::read_to_string(&legacy).unwrap().trim(),
+            "legacy-token"
+        );
+        assert!(
+            !dir.join(format!("{host}.oauth2.token")).exists(),
+            "failed migrate must not leave a partial per-user token"
+        );
+        assert!(Config::active_user(host).unwrap().is_none());
+
+        let mut perms = fs::metadata(&dir).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&dir, perms).unwrap();
         set_test_dir(None);
         let _ = fs::remove_dir_all(&dir);
     }
