@@ -160,6 +160,19 @@ impl Pulls<'_> {
             .post_ok(&format!("/repos/{o}/{r}/pulls/{number}/review"), &form)
     }
 
+    /// Gitee quirk: POST /test returns an empty body on success; force sent only when true.
+    pub fn test(&self, number: i64, force: bool) -> Result<()> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let mut f: Vec<(&str, String)> = Vec::new();
+        if force {
+            f.push(("force", "true".to_string()));
+        }
+        let form = Client::str_refs(&f);
+        self.client
+            .post_ok(&format!("/repos/{o}/{r}/pulls/{number}/test"), &form)
+    }
+
     /// Gitee accepts form-encoded PATCH on pull requests.
     pub fn set_state(&self, number: i64, state: PrState) -> Result<PullRequest> {
         let o = self.repo.owner.as_str();

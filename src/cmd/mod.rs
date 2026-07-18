@@ -21,6 +21,7 @@ pub mod pr;
 pub mod milestone;
 pub mod release;
 pub mod search;
+pub mod status;
 pub mod repo;
 
 pub struct Ctx {
@@ -79,6 +80,10 @@ pub fn run(cli: Cli) -> Result<()> {
         Command::Search(c) => {
             let ctx = build(&cli)?;
             search::execute(&ctx, c.clone())
+        }
+        Command::Status { limit } => {
+            let ctx = build(&cli)?;
+            status::execute(&ctx, limit.clone())
         }
         Command::Release(c) => {
             let ctx = build(&cli)?;

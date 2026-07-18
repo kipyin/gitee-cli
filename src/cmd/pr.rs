@@ -22,6 +22,38 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &items, |w| out::pr_table(w, &items))?;
         }
+        PrCmd::Status { limit } => {
+            let repo = ctx.repo()?;
+            let me = ctx.me()?;
+            let login = me.login.as_str();
+            let open = Some("open");
+            let created = ctx.client.pulls(repo).list(&PrFilter {
+                state: open,
+                author: Some(login),
+                limit: limit.limit,
+                ..Default::default()
+            })?;
+            let assigned = ctx.client.pulls(repo).list(&PrFilter {
+                state: open,
+                assignee: Some(login),
+                limit: limit.limit,
+                ..Default::default()
+            })?;
+            let awaiting_test = ctx.client.pulls(repo).list(&PrFilter {
+                state: open,
+                tester: Some(login),
+                limit: limit.limit,
+                ..Default::default()
+            })?;
+            let status = out::PrStatus {
+                created,
+                assigned,
+                awaiting_test,
+            };
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &status, |w| out::pr_status(w, &status))?;
+        }
         PrCmd::View { number } => {
             let repo = ctx.repo()?;
             let pr = ctx.client.pulls(repo).get(number)?;
@@ -160,6 +192,13 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             ctx.client.pulls(repo).approve(number, force)?;
             let mut out = std::io::stdout().lock();
             writeln!(out, "Approved pull request !{number}")?;
+        }
+        PrCmd::Test { number, force } => {
+            let repo = ctx.repo()?;
+            ctx.client.pulls(repo).test(number, force)?;
+            let pr = ctx.client.pulls(repo).get(number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
         }
         PrCmd::Close { number } => {
             let repo = ctx.repo()?;

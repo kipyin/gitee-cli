@@ -324,7 +324,7 @@ fn pr_state_style(state: PrState, merged: bool) -> String {
 }
 
 /// Style an issue state.
-fn issue_state_style(state: IssueState) -> String {
+pub(crate) fn issue_state_style(state: IssueState) -> String {
     match state {
         IssueState::Open | IssueState::Progressing => green(state.as_str()),
         IssueState::Closed | IssueState::Rejected => red(state.as_str()),
@@ -554,6 +554,62 @@ pub fn one_issue(w: &mut impl Write, i: &Issue) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+
+#[derive(Serialize)]
+pub struct PrStatus {
+    pub created: Vec<PullRequest>,
+    pub assigned: Vec<PullRequest>,
+    pub awaiting_test: Vec<PullRequest>,
+}
+
+#[derive(Serialize)]
+pub struct IssueStatus {
+    pub created: Vec<Issue>,
+    pub assigned: Vec<Issue>,
+}
+
+pub fn pr_status(w: &mut impl Write, s: &PrStatus) -> std::io::Result<()> {
+    writeln!(w, "{}", bold("Created by me"))?;
+    if s.created.is_empty() {
+        writeln!(w, "{}", dim("(none)"))?;
+    } else {
+        pr_table(w, &s.created)?;
+    }
+    writeln!(w)?;
+    writeln!(w, "{}", bold("Assigned to me"))?;
+    if s.assigned.is_empty() {
+        writeln!(w, "{}", dim("(none)"))?;
+    } else {
+        pr_table(w, &s.assigned)?;
+    }
+    writeln!(w)?;
+    writeln!(w, "{}", bold("Awaiting my test"))?;
+    if s.awaiting_test.is_empty() {
+        writeln!(w, "{}", dim("(none)"))?;
+    } else {
+        pr_table(w, &s.awaiting_test)?;
+    }
+    Ok(())
+}
+
+pub fn issue_status(w: &mut impl Write, s: &IssueStatus) -> std::io::Result<()> {
+    writeln!(w, "{}", bold("Created by me"))?;
+    if s.created.is_empty() {
+        writeln!(w, "{}", dim("(none)"))?;
+    } else {
+        issue_table(w, &s.created)?;
+    }
+    writeln!(w)?;
+    writeln!(w, "{}", bold("Assigned to me"))?;
+    if s.assigned.is_empty() {
+        writeln!(w, "{}", dim("(none)"))?;
+    } else {
+        issue_table(w, &s.assigned)?;
+    }
+    Ok(())
+}
+
 
 pub fn comment_line(w: &mut impl Write, c: &Comment) -> std::io::Result<()> {
     let who = c.user.as_ref().map(|u| u.login.as_str()).unwrap_or("?");
@@ -955,4 +1011,185 @@ mod printer_tests {
         assert!(out.contains("#ff0000"));
         assert!(out.contains("42"));
     }
+
+    #[test]
+    fn pr_status_renders_sections_and_titles() {
+        let status = PrStatus {
+            created: vec![pr_fixture()],
+            assigned: vec![],
+            awaiting_test: vec![PullRequest {
+                number: 7,
+                title: "Needs QA sign-off".into(),
+                ..Default::default()
+            }],
+        };
+
+        let mut buf = Vec::new();
+        pr_status(&mut buf, &status).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("Created by me"));
+        assert!(out.contains("Assigned to me"));
+        assert!(out.contains("Awaiting my test"));
+        assert!(out.contains("Add pagination helpers"));
+        assert!(out.contains("Needs QA sign-off"));
+        assert!(out.contains("(none)"));
+    }
+
+    #[test]
+    fn issue_status_renders_sections_and_empty_placeholder() {
+        let status = IssueStatus {
+            created: vec![Issue {
+                number: "42".into(),
+                title: "Broken deploy".into(),
+                ..Default::default()
+            }],
+            assigned: vec![],
+        };
+
+        let mut buf = Vec::new();
+        issue_status(&mut buf, &status).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("Created by me"));
+        assert!(out.contains("Assigned to me"));
+        assert!(out.contains("Broken deploy"));
+        assert!(out.contains("(none)"));
+    }
+
+    #[test]
+    fn status_structs_serialize_expected_json_keys() {
+        let pr_status = PrStatus {
+            created: vec![pr_fixture()],
+            assigned: vec![],
+            awaiting_test: vec![],
+        };
+        let pr_json = serde_json::to_value(&pr_status).unwrap();
+        assert!(pr_json.get("created").unwrap().is_array());
+        assert!(pr_json.get("assigned").unwrap().is_array());
+        assert!(pr_json.get("awaiting_test").unwrap().is_array());
+        assert_eq!(pr_json["created"][0]["title"], "Add pagination helpers");
+
+        let issue_status = IssueStatus {
+            created: vec![],
+            assigned: vec![Issue {
+                number: "1".into(),
+                title: "Assigned item".into(),
+                ..Default::default()
+            }],
+        };
+        let issue_json = serde_json::to_value(&issue_status).unwrap();
+        assert!(issue_json.get("created").unwrap().is_array());
+        assert!(issue_json.get("assigned").unwrap().is_array());
+        assert_eq!(issue_json["assigned"][0]["title"], "Assigned item");
+    }
+
 }
+// --- status dashboard ---------------------------------------------------
+
+#[derive(Serialize)]
+pub struct Dashboard {
+    pub assigned: Vec<Issue>,
+    pub created: Vec<Issue>,
+}
+
+#[derive(Tabled)]
+struct DashboardIssueRow {
+    repo: String,
+    number: String,
+    state: String,
+    title: String,
+}
+
+fn dashboard_issue_table(w: &mut impl Write, items: &[Issue]) -> std::io::Result<()> {
+    let rows: Vec<DashboardIssueRow> = items
+        .iter()
+        .map(|i| DashboardIssueRow {
+            repo: i
+                .repository
+                .as_ref()
+                .and_then(|r| r.full_name.clone())
+                .unwrap_or_default(),
+            number: i.number.clone(),
+            state: issue_state_style(i.state),
+            title: i.title.clone(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+pub fn dashboard(w: &mut impl Write, d: &Dashboard) -> std::io::Result<()> {
+    writeln!(w, "{}", bold("Assigned to me"))?;
+    if d.assigned.is_empty() {
+        writeln!(w, "{}", dim("(none)"))?;
+    } else {
+        dashboard_issue_table(w, &d.assigned)?;
+    }
+    writeln!(w)?;
+    writeln!(w, "{}", bold("Created by me"))?;
+    if d.created.is_empty() {
+        writeln!(w, "{}", dim("(none)"))?;
+    } else {
+        dashboard_issue_table(w, &d.created)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod dashboard_printer_tests {
+    use super::*;
+
+    #[test]
+    fn dashboard_shows_repo_when_set() {
+        let d = Dashboard {
+            assigned: vec![Issue {
+                number: "1".into(),
+                title: "Fix bug".into(),
+                state: IssueState::Open,
+                repository: Some(IssueRepoRef {
+                    full_name: Some("owner/repo".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            created: vec![],
+        };
+
+        let mut buf = Vec::new();
+        dashboard(&mut buf, &d).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("owner/repo"));
+        assert!(out.contains("(none)"));
+    }
+
+    #[test]
+    fn dashboard_serialization_has_assigned_created_keys() {
+        let d = Dashboard {
+            assigned: vec![],
+            created: vec![],
+        };
+        let value = serde_json::to_value(&d).unwrap();
+        let obj = value.as_object().unwrap();
+        assert!(obj.contains_key("assigned"));
+        assert!(obj.contains_key("created"));
+    }
+
+    #[test]
+    fn dashboard_json_projection_keeps_section_arrays() {
+        let d = Dashboard {
+            assigned: vec![Issue {
+                number: "1".into(),
+                ..Default::default()
+            }],
+            created: vec![Issue {
+                number: "2".into(),
+                ..Default::default()
+            }],
+        };
+        let value = serde_json::to_value(&d).unwrap();
+        let fields = vec!["assigned".to_string(), "created".to_string()];
+        let projected = project(value, &fields);
+        let obj = projected.as_object().unwrap();
+        assert_eq!(obj["assigned"].as_array().unwrap().len(), 1);
+        assert_eq!(obj["created"].as_array().unwrap().len(), 1);
+    }
+}
+

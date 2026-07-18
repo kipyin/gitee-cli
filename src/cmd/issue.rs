@@ -22,6 +22,28 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &items, |w| out::issue_table(w, &items))?;
         }
+        IssueCmd::Status { limit } => {
+            let repo = ctx.repo()?;
+            let me = ctx.me()?;
+            let login = me.login.as_str();
+            let open = Some("open");
+            let created = ctx.client.issues(repo).list(&IssueFilter {
+                state: open,
+                creator: Some(login),
+                limit: limit.limit,
+                ..Default::default()
+            })?;
+            let assigned = ctx.client.issues(repo).list(&IssueFilter {
+                state: open,
+                assignee: Some(login),
+                limit: limit.limit,
+                ..Default::default()
+            })?;
+            let status = out::IssueStatus { created, assigned };
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &status, |w| out::issue_status(w, &status))?;
+        }
         IssueCmd::View { number } => {
             let repo = ctx.repo()?;
             let issue = ctx.client.issues(repo).get(&number)?;

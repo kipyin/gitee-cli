@@ -355,6 +355,44 @@ fn approve_force_false_sends_empty_form() {
 }
 
 #[test]
+fn test_force_true_sends_force_field() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/test";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded("force".into(), "true".into()))
+        .with_status(200)
+        .create();
+
+    client(&server)
+        .pulls(&test_repo())
+        .test(12, true)
+        .expect("test should succeed");
+
+    mock.assert();
+}
+
+#[test]
+fn test_force_false_sends_empty_form() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/test";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::Exact(String::new()))
+        .with_status(200)
+        .create();
+
+    client(&server)
+        .pulls(&test_repo())
+        .test(12, false)
+        .expect("test should succeed");
+
+    mock.assert();
+}
+
+#[test]
 fn link_get_then_patch_appends_linked_tag() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/gitee-cli/pulls/12";

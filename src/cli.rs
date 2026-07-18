@@ -50,6 +50,11 @@ pub enum Command {
     Api(ApiArgs),
     #[command(subcommand)]
     Gist(GistCmd),
+    /// Cross-repo dashboard of your open issues. PR sections are omitted: Gitee v5 has no user-level pulls endpoint (swagger verified 2026-07-18).
+    Status {
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
     /// Print a shell completion script (bash, zsh, fish, powershell, elvish).
     Completions { shell: Option<String> },
 }
@@ -107,6 +112,11 @@ pub enum PrCmd {
         list: ListArgs,
         #[arg(long)]
         author: Option<String>,
+    },
+    /// Show open PRs relevant to you: created, assigned, awaiting your test.
+    Status {
+        #[command(flatten)]
+        limit: LimitArgs,
     },
     /// Show details of a pull request.
     View {
@@ -192,6 +202,12 @@ pub enum PrCmd {
         #[arg(long)]
         force: bool,
     },
+    /// Mark a pull request as tested (测试通过). Gitee-specific: approve covers 审查, test covers 测试.
+    Test {
+        number: i64,
+        #[arg(long)]
+        force: bool,
+    },
     Close {
         number: i64,
     },
@@ -203,6 +219,7 @@ pub enum PrCmd {
         number: i64,
         issue: String,
     },
+    // pr update-branch omitted: no such endpoint in the v5 swagger (verified 2026-07-18).
 }
 
 
@@ -264,6 +281,11 @@ pub enum IssueCmd {
         list: ListArgs,
         #[arg(long)]
         assignee: Option<String>,
+    },
+    /// Show open issues relevant to you: created by me, assigned to me.
+    Status {
+        #[command(flatten)]
+        limit: LimitArgs,
     },
     /// Show details of an issue.
     View {
@@ -911,6 +933,25 @@ mod parse_tests {
     }
 
     #[test]
+    fn pr_test_parses() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "test", "12"])
+            .expect("pr test should parse");
+        let Command::Pr(PrCmd::Test { number, force }) = cli.cmd else {
+            panic!("expected pr test");
+        };
+        assert_eq!(number, 12);
+        assert!(!force);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "test", "12", "--force"])
+            .expect("pr test --force should parse");
+        let Command::Pr(PrCmd::Test { number, force }) = cli.cmd else {
+            panic!("expected pr test");
+        };
+        assert_eq!(number, 12);
+        assert!(force);
+    }
+
+    #[test]
     fn label_edit_requires_at_least_one_flag() {
         let r = Cli::try_parse_from(["gitee", "label", "edit", "bug"]);
         assert!(r.is_err(), "label edit with no flags must fail");
@@ -1004,5 +1045,54 @@ mod parse_tests {
         .expect("--json fields --jq should parse");
         assert_eq!(cli.json.as_deref(), Some("number,title"));
         assert_eq!(cli.jq.as_deref(), Some("map(.number)"));
+    }
+
+    #[test]
+    fn status_parses() {
+        let cli = Cli::try_parse_from(["gitee", "status"]).expect("status should parse");
+        let Command::Status { limit } = cli.cmd else {
+            panic!("expected status");
+        };
+        assert_eq!(limit.limit, 30);
+
+        let cli = Cli::try_parse_from(["gitee", "status", "--limit", "5"])
+            .expect("status with limit should parse");
+        let Command::Status { limit } = cli.cmd else {
+            panic!("expected status with limit");
+        };
+        assert_eq!(limit.limit, 5);
+    }
+
+    #[test]
+    fn pr_status_parses() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "status"]).expect("pr status should parse");
+        let Command::Pr(PrCmd::Status { limit }) = cli.cmd else {
+            panic!("expected pr status");
+        };
+        assert_eq!(limit.limit, 30);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "status", "--limit", "5"])
+            .expect("pr status --limit should parse");
+        let Command::Pr(PrCmd::Status { limit }) = cli.cmd else {
+            panic!("expected pr status");
+        };
+        assert_eq!(limit.limit, 5);
+    }
+
+    #[test]
+    fn issue_status_parses() {
+        let cli = Cli::try_parse_from(["gitee", "issue", "status"])
+            .expect("issue status should parse");
+        let Command::Issue(IssueCmd::Status { limit }) = cli.cmd else {
+            panic!("expected issue status");
+        };
+        assert_eq!(limit.limit, 30);
+
+        let cli = Cli::try_parse_from(["gitee", "issue", "status", "--limit", "5"])
+            .expect("issue status --limit should parse");
+        let Command::Issue(IssueCmd::Status { limit }) = cli.cmd else {
+            panic!("expected issue status");
+        };
+        assert_eq!(limit.limit, 5);
     }
 }
