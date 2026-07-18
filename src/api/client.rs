@@ -10,7 +10,7 @@ use super::milestones::Milestones;
 use serde_json::Value;
 use std::time::Duration;
 
-use super::{issues::Issues, pulls::Pulls, releases::Releases, repos::Repos};
+use super::{issues::Issues, pulls::Pulls, releases::Releases, repos::Repos, users::Users};
 
 pub struct Client {
     http: Http,
@@ -83,6 +83,10 @@ impl Client {
 
     pub fn milestones<'a>(&'a self, repo: &'a Repo) -> Milestones<'a> {
         Milestones::new(self, repo)
+    }
+
+    pub fn users<'a>(&'a self) -> Users<'a> {
+        Users::new(self)
     }
 
     pub(crate) fn str_refs<K: AsRef<str>>(pairs: &[(K, String)]) -> Vec<(&str, &str)> {

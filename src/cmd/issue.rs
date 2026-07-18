@@ -15,6 +15,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 state: list.state.as_deref(),
                 assignee: assignee.as_deref(),
                 limit: list.limit,
+                ..Default::default()
             };
             let items = ctx.client.issues(repo).list(&filter)?;
             let mut out = std::io::stdout().lock();

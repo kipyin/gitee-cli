@@ -296,3 +296,34 @@ fn edit_title_uses_new_title_not_echo() {
 
     patch.assert();
 }
+
+#[test]
+fn list_sends_creator_filter() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("state".into(), "open".into()),
+            mockito::Matcher::UrlEncoded("creator".into(), "reporter".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(format!("[{ISSUE_JSON}]"))
+        .create();
+
+    let items = client(&server)
+        .issues(&test_repo())
+        .list(&gitee_cli_rs::api::issues::IssueFilter {
+            state: Some("open"),
+            creator: Some("reporter"),
+            limit: 50,
+            ..Default::default()
+        })
+        .expect("list should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].number, "88");
+}

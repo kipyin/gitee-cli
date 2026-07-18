@@ -15,6 +15,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 state: list.state.as_deref(),
                 author: author.as_deref(),
                 limit: list.limit,
+                ..Default::default()
             };
             let items = ctx.client.pulls(repo).list(&filter)?;
             let mut out = std::io::stdout().lock();

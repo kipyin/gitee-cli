@@ -8,9 +8,12 @@ pub struct Issues<'a> {
     repo: &'a Repo,
 }
 
+#[derive(Default)]
 pub struct IssueFilter<'a> {
     pub state: Option<&'a str>,
     pub assignee: Option<&'a str>,
+    /// Creator login — server-side filter per the v5 swagger.
+    pub creator: Option<&'a str>,
     pub limit: usize,
 }
 
@@ -51,6 +54,9 @@ impl Issues<'_> {
         }
         if let Some(a) = filter.assignee {
             q.push(("assignee", a.to_string()));
+        }
+        if let Some(c) = filter.creator {
+            q.push(("creator", c.to_string()));
         }
         let qref = Client::str_refs(&q);
         let path = format!("/repos/{o}/{r}/issues");

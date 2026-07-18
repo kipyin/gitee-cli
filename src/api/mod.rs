@@ -7,3 +7,4 @@ pub mod milestones;
 pub mod releases;
 pub mod repos;
 pub mod search;
+pub mod users;

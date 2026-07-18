@@ -8,6 +8,7 @@ use crate::api::client::Client;
 use crate::cli::{Cli, Command};
 use crate::config::Config;
 use crate::error::{GiteeError, Result};
+use crate::models::UserBasic;
 use crate::out::Output;
 use crate::repo::Repo;
 
@@ -28,6 +29,7 @@ pub struct Ctx {
     repo_arg: Option<String>,
     remote_arg: Option<String>,
     repo: OnceCell<Repo>,
+    me: OnceCell<UserBasic>,
 }
 
 impl Ctx {
@@ -42,6 +44,16 @@ impl Ctx {
 
     pub fn repo_arg(&self) -> Option<&str> {
         self.repo_arg.as_deref()
+    }
+
+    /// The authenticated user, fetched once per invocation and cached.
+    pub fn me(&self) -> Result<&UserBasic> {
+        if let Some(u) = self.me.get() {
+            return Ok(u);
+        }
+        let u = self.client.users().me()?;
+        let _ = self.me.set(u);
+        Ok(self.me.get().expect("user just initialized"))
     }
 }
 
@@ -175,6 +187,7 @@ fn build(cli: &Cli) -> Result<Ctx> {
         repo_arg: cli.repo.clone(),
         remote_arg: cli.remote.clone(),
         repo: OnceCell::new(),
+        me: OnceCell::new(),
     })
 }
 

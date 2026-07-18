@@ -290,6 +290,15 @@ pub struct PullRequest {
     pub mergeable: Option<bool>,
 }
 
+/// Minimal repo reference embedded in user-level issues (`GET /user/issues`).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct IssueRepoRef {
+    #[serde(default)]
+    pub full_name: Option<String>,
+    #[serde(default)]
+    pub html_url: Option<String>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Issue {
     #[serde(default)]
@@ -318,6 +327,9 @@ pub struct Issue {
     pub created_at: Option<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
+    /// Present on user-level lists (`GET /user/issues`); absent on repo lists.
+    #[serde(default)]
+    pub repository: Option<IssueRepoRef>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]

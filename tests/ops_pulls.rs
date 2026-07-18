@@ -45,6 +45,7 @@ fn list_hits_pulls_path_with_state_and_author_single_page() {
             state: Some("open"),
             author: Some("dev1"),
             limit: 50,
+            ..Default::default()
         })
         .expect("list should succeed");
 
@@ -504,4 +505,37 @@ fn list_milestones_hits_milestones_path() {
     assert_eq!(milestones.len(), 2);
     assert_eq!(milestones[0].number, 7);
     assert_eq!(milestones[1].title, "v2.0");
+}
+
+#[test]
+fn list_sends_assignee_and_tester_filters() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("state".into(), "open".into()),
+            mockito::Matcher::UrlEncoded("assignee".into(), "dev1".into()),
+            mockito::Matcher::UrlEncoded("tester".into(), "qa1".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(format!("[{PULL_REQUEST_JSON}]"))
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .list(&PrFilter {
+            state: Some("open"),
+            assignee: Some("dev1"),
+            tester: Some("qa1"),
+            limit: 50,
+            ..Default::default()
+        })
+        .expect("list should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].number, 12);
 }

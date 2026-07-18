@@ -8,9 +8,14 @@ pub struct Pulls<'a> {
     repo: &'a Repo,
 }
 
+#[derive(Default)]
 pub struct PrFilter<'a> {
     pub state: Option<&'a str>,
     pub author: Option<&'a str>,
+    /// 评审者 (reviewer) login — server-side filter per the v5 swagger.
+    pub assignee: Option<&'a str>,
+    /// 测试者 (tester) login — server-side filter per the v5 swagger.
+    pub tester: Option<&'a str>,
     pub limit: usize,
 }
 
@@ -61,6 +66,12 @@ impl Pulls<'_> {
         }
         if let Some(a) = filter.author {
             q.push(("author", a.to_string()));
+        }
+        if let Some(a) = filter.assignee {
+            q.push(("assignee", a.to_string()));
+        }
+        if let Some(t) = filter.tester {
+            q.push(("tester", t.to_string()));
         }
         let qref = Client::str_refs(&q);
         let path = format!("/repos/{o}/{r}/pulls");
