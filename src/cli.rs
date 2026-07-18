@@ -384,6 +384,29 @@ pub enum ReleaseCmd {
         tag: String,
         files: Vec<String>,
     },
+    Download {
+        tag: String,
+        #[arg(long, default_value = ".")]
+        dir: String,
+        #[arg(long)]
+        pattern: Option<String>,
+    },
+    /// Edit a release. At least one flag is required.
+    #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["name", "notes", "prerelease"]))]
+    Edit {
+        tag: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        prerelease: bool,
+    },
+    Delete {
+        tag: String,
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 /// Repo subcommands. `repo sync` omitted: no fork-synchronize endpoint in v5 swagger (verified 2026-07-18).
@@ -546,7 +569,7 @@ pub enum AuthCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{Cli, Command, GistCmd, IssueCmd, MilestoneCmd, PrCmd, RepoCmd};
+    use super::{Cli, Command, GistCmd, IssueCmd, MilestoneCmd, PrCmd, ReleaseCmd, RepoCmd};
     use clap::Parser;
 
     #[test]
@@ -708,6 +731,33 @@ mod parse_tests {
         assert_eq!(label, vec!["bug,ui".to_string()]);
         assert_eq!(milestone.as_deref(), Some("v1.0"));
         assert_eq!(close_issue.as_deref(), Some("I1AB2C"));
+    }
+
+    #[test]
+    fn release_edit_requires_at_least_one_flag() {
+        let r = Cli::try_parse_from(["gitee", "release", "edit", "v1.0"]);
+        assert!(r.is_err(), "release edit with no flags must fail");
+    }
+
+    #[test]
+    fn release_download_parses_flags() {
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "release",
+            "download",
+            "v1.0",
+            "--dir",
+            "/tmp/out",
+            "--pattern",
+            "*.tar.xz",
+        ])
+        .expect("release download should parse");
+        let Command::Release(ReleaseCmd::Download { tag, dir, pattern }) = cli.cmd else {
+            panic!("expected release download");
+        };
+        assert_eq!(tag, "v1.0");
+        assert_eq!(dir, "/tmp/out");
+        assert_eq!(pattern.as_deref(), Some("*.tar.xz"));
     }
 
     #[test]

@@ -8,6 +8,13 @@ pub struct Releases<'a> {
     repo: &'a Repo,
 }
 
+
+pub struct EditRelease<'a> {
+    pub name: Option<&'a str>,
+    pub notes: Option<&'a str>,
+    pub prerelease: Option<bool>,
+}
+
 pub struct CreateRelease<'a> {
     pub tag: &'a str,
     pub name: Option<&'a str>,
@@ -67,6 +74,48 @@ impl Releases<'_> {
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/{r}/releases"), &form)
     }
+
+
+    /// Gitee quirk (swagger 2026-07-18): PATCH requires `tag_name`, `name`, and
+    /// `body` on every request — GET-by-tag first, then send the flag value or
+    /// the current value for all three. `prerelease` is sent only when requested.
+    /// `--latest` omitted: PATCH /releases/{id} has no latest param (swagger 2026-07-18).
+    pub fn edit(&self, tag: &str, req: &EditRelease<'_>) -> Result<Release> {
+        let current = self.get_by_tag(tag)?;
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let display_name = req
+            .name
+            .or(current.name.as_deref())
+            .unwrap_or(tag);
+        let body = req
+            .notes
+            .or(current.body.as_deref())
+            .unwrap_or(display_name);
+        let mut f: Vec<(&str, String)> = vec![
+            ("tag_name", tag.to_string()),
+            ("name", display_name.to_string()),
+            ("body", body.to_string()),
+        ];
+        if req.prerelease == Some(true) {
+            f.push(("prerelease", "true".to_string()));
+        }
+        let form = Client::str_refs(&f);
+        self.client
+            .patch(&format!("/repos/{o}/{r}/releases/{}", current.id), &form)
+    }
+
+    pub fn delete(&self, tag: &str) -> Result<()> {
+        let release = self.get_by_tag(tag)?;
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        self.client
+            .delete_ok(&format!("/repos/{o}/{r}/releases/{}", release.id))
+    }
+
+    // Follow-up (2026-07-18): asset-level DELETE
+    // /repos/{owner}/{repo}/releases/{rid}/attach_files/{aid} exists in swagger
+    // but is out of scope for this ticket.
 
     pub fn upload(&self, tag: &str, file_path: &str) -> Result<ReleaseAsset> {
         let o = self.repo.owner.as_str();

@@ -257,6 +257,95 @@ impl Client {
             .map_err(GiteeError::Http)
     }
 
+    /// GET an absolute URL. Public assets are fetched without auth first; on
+    /// 401 or 403 the request is retried with the Authorization header. reqwest
+    /// follows redirects and forwards headers — note that a redirect to a host
+    /// that rejects the forwarded token may still fail, so redirects are followed
+    /// manually with auth only on `gitee.com` hosts (excluding the CDN).
+    pub fn get_bytes(&self, url: &str) -> Result<Vec<u8>> {
+        let mut url = url.to_string();
+        let mut with_auth = false;
+        for _ in 0..8 {
+            if self.debug {
+                eprintln!(
+                    "-> GET {url}{}",
+                    if with_auth { " (auth)" } else { "" }
+                );
+            }
+            let mut req = self.http_no_redirect().get(&url);
+            if with_auth {
+                req = req.header("Authorization", self.auth());
+            }
+            let resp = req.send().map_err(GiteeError::Http)?;
+            let status = resp.status();
+            if status.is_success() {
+                return resp.bytes().map(|b| b.to_vec()).map_err(GiteeError::Http);
+            }
+            let code = status.as_u16();
+            if (code == 401 || code == 403) && !with_auth {
+                with_auth = true;
+                continue;
+            }
+            if status.is_redirection() {
+                let loc = resp
+                    .headers()
+                    .get(reqwest::header::LOCATION)
+                    .and_then(|v| v.to_str().ok())
+                    .ok_or_else(|| GiteeError::Api {
+                        status: code,
+                        message: "redirect response missing Location header".into(),
+                    })?;
+                url = Self::resolve_location(&url, loc);
+                with_auth = Self::asset_url_needs_auth(&url);
+                continue;
+            }
+            return self.bytes_or_api_error(resp);
+        }
+        Err(GiteeError::Api {
+            status: 0,
+            message: "too many redirects fetching asset".into(),
+        })
+    }
+
+    fn asset_url_needs_auth(url: &str) -> bool {
+        url.contains("gitee.com") && !url.contains("foruda.gitee.com")
+    }
+
+    fn resolve_location(base: &str, loc: &str) -> String {
+        if loc.starts_with("http://") || loc.starts_with("https://") {
+            return loc.to_string();
+        }
+        let base_url = reqwest::Url::parse(base).expect("asset base url");
+        base_url.join(loc).expect("redirect location").to_string()
+    }
+
+    fn http_no_redirect(&self) -> Http {
+        // Gitee's release asset endpoints reject the API user-agent on auth'd downloads.
+        Http::builder()
+            .gzip(true)
+            .timeout(Duration::from_secs(30))
+            .user_agent("curl/8.5.0")
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("reqwest client")
+    }
+
+
+    fn bytes_or_api_error(&self, resp: reqwest::blocking::Response) -> Result<Vec<u8>> {
+        let status = resp.status();
+        if status.is_success() {
+            return resp.bytes().map(|b| b.to_vec()).map_err(GiteeError::Http);
+        }
+        let code = status.as_u16();
+        let body = resp.text().unwrap_or_default();
+        let message = Self::trim_cap(&body, 2048);
+        Err(GiteeError::Api {
+            status: code,
+            message,
+        })
+    }
+
+
     fn send_ok(&self, method: &str, path: &str, form: &[(&str, &str)]) -> Result<()> {
         self.trace(method, path);
         let req = match method {
