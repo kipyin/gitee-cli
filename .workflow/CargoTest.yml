@@ -17,8 +17,7 @@ triggers:
       precise:
         - main
 stages:
-  - stage:
-    name: test
+  - stage: test
     displayName: 测试
     strategy: fast
     trigger: auto
