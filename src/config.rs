@@ -51,8 +51,21 @@ pub struct Settings {
 
 pub struct Config;
 
+#[cfg(test)]
+static TEST_CONFIG_DIR: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub fn set_test_dir(dir: Option<PathBuf>) {
+    *TEST_CONFIG_DIR.lock().unwrap_or_else(|e| e.into_inner()) = dir;
+}
+
+
 impl Config {
     pub fn dir() -> Result<PathBuf> {
+        #[cfg(test)]
+        if let Some(p) = TEST_CONFIG_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+            return Ok(p);
+        }
         if let Ok(p) = std::env::var(ENV_CONFIG_DIR) {
             let p = p.trim();
             if !p.is_empty() {
@@ -155,7 +168,29 @@ impl Config {
     }
 
 
+    /// Reject usernames that would be unsafe or ambiguous in token file paths.
+    pub fn sanitize_username(user: &str) -> Result<()> {
+        if user.is_empty() {
+            return Err(GiteeError::Usage("username must not be empty".into()));
+        }
+        if user.contains('/') || user.contains('\\') || user.contains('\0') {
+            return Err(GiteeError::Usage(format!("invalid username: {user}")));
+        }
+        if user == ".." || user.contains("..") {
+            return Err(GiteeError::Usage(format!("invalid username: {user}")));
+        }
+        Ok(())
+    }
+
+    /// Username emitted to git for credential fill; never expose synthetic `default`.
+    pub fn credential_display_username(active: Option<String>) -> String {
+        active
+            .filter(|s| !s.is_empty() && s != "default")
+            .unwrap_or_else(|| "oauth2".into())
+    }
+
     fn user_token_path(host: &str, user: &str) -> Result<PathBuf> {
+        Self::sanitize_username(user)?;
         Ok(Self::dir()?.join(format!("{host}.{user}.token")))
     }
 
@@ -174,6 +209,7 @@ impl Config {
     }
 
     pub fn set_active_user(host: &str, user: &str) -> Result<()> {
+        Self::sanitize_username(user)?;
         let mut s = Self::load_settings()?;
         s.active_users.insert(host.to_string(), user.to_string());
         let users = s.known_users.entry(host.to_string()).or_default();
@@ -184,6 +220,7 @@ impl Config {
     }
 
     pub fn remember_user(host: &str, user: &str) -> Result<()> {
+        Self::sanitize_username(user)?;
         let mut s = Self::load_settings()?;
         let users = s.known_users.entry(host.to_string()).or_default();
         if !users.iter().any(|u| u == user) {
@@ -201,7 +238,8 @@ impl Config {
     }
 
     pub fn switch_user(host: &str, user: &str) -> Result<()> {
-        // Ensure a token exists for this user (or legacy default).
+        Self::sanitize_username(user)?;
+        Self::migrate_legacy_user(host)?;
         let _ = Self::token_for_user(host, user)?;
         Self::set_active_user(host, user)
     }
@@ -223,24 +261,30 @@ impl Config {
         }
     }
 
-    pub fn set_token_for_user(host: &str, user: &str, token: &str) -> Result<()> {
+    fn store_user_token(host: &str, user: &str, token: &str) -> Result<()> {
         let account = Self::keyring_account(host, Some(user));
-        match keyring::Entry::new(KEYRING_SERVICE, &account).and_then(|e| e.set_password(token)) {
-            Ok(()) => {
-                let _ = fs::remove_file(Self::user_token_path(host, user)?);
-            }
-            Err(_) => {
-                let p = Self::user_token_path(host, user)?;
-                if let Some(parent) = p.parent() {
-                    fs::create_dir_all(parent).map_err(|e| GiteeError::Config(e.to_string()))?;
-                }
-                fs::write(&p, token).map_err(|e| GiteeError::Config(e.to_string()))?;
-                restrict_perms(&p)?;
-            }
+        let keyring_ok = keyring::Entry::new(KEYRING_SERVICE, &account)
+            .and_then(|e| e.set_password(token))
+            .is_ok()
+            && keyring_get(&account).ok().as_deref() == Some(token);
+        if keyring_ok {
+            let _ = fs::remove_file(Self::user_token_path(host, user)?);
+            return Ok(());
         }
+        let p = Self::user_token_path(host, user)?;
+        if let Some(parent) = p.parent() {
+            fs::create_dir_all(parent).map_err(|e| GiteeError::Config(e.to_string()))?;
+        }
+        fs::write(&p, token).map_err(|e| GiteeError::Config(e.to_string()))?;
+        restrict_perms(&p)?;
+        Ok(())
+    }
+
+    pub fn set_token_for_user(host: &str, user: &str, token: &str) -> Result<()> {
+        Self::sanitize_username(user)?;
+        Self::store_user_token(host, user, token)?;
         Self::remember_user(host, user)?;
         Self::set_active_user(host, user)?;
-        // Drop legacy host-only token so active user wins unambiguously.
         let _ = fs::remove_file(Self::token_path(host)?);
         if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
             let _ = entry.delete_credential();
@@ -259,6 +303,7 @@ impl Config {
                 return Ok(t);
             }
         }
+        Self::migrate_legacy_user(host)?;
         if let Some(user) = Self::active_user(host)? {
             if let Ok(t) = Self::token_for_user(host, &user) {
                 return Ok(t);
@@ -332,47 +377,133 @@ impl Config {
         }
     }
 
-    /// Forget tokens for a host (legacy + all known per-user stores).
-    pub fn logout(host: &str) -> Result<()> {
-        let users = Self::known_users(host).unwrap_or_default();
-        for user in &users {
-            let account = Self::keyring_account(host, Some(user));
-            if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &account) {
-                let _ = entry.delete_credential();
-            }
-            let _ = fs::remove_file(Self::user_token_path(host, user)?);
+    fn keyring_delete_error(account: &str, err: keyring::Error) -> Option<String> {
+        let msg = err.to_string();
+        if msg.contains("No matching entry") || msg.to_ascii_lowercase().contains("not found") {
+            None
+        } else {
+            Some(format!("keyring ({account}): {err}"))
         }
-        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
-            let _ = entry.delete_credential();
-        }
-        let _ = fs::remove_file(Self::token_path(host)?);
-        let mut settings = Self::load_settings()?;
-        settings.active_users.remove(host);
-        settings.known_users.remove(host);
-        Self::save_settings(&settings)?;
-        Ok(())
     }
 
-    /// If a legacy host-only token exists and no active user is recorded, probe
-    /// `/user` is not available here — record a synthetic default user slot so
-    /// `auth status` / `auth switch` can see it. The login name is `"default"`
-    /// until the next validated `auth login` rewrites it.
-    pub fn migrate_legacy_user(host: &str) -> Result<()> {
-        if Self::active_user(host)?.is_some() {
-            return Ok(());
-        }
-        let legacy = keyring_get(host).ok().or_else(|| {
+    fn legacy_token(host: &str) -> Option<String> {
+        keyring_get(host).ok().or_else(|| {
             fs::read_to_string(Self::token_path(host).ok()?)
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
-        });
-        let Some(token) = legacy else {
+        })
+    }
+
+    pub fn has_legacy_token(host: &str) -> Result<bool> {
+        Ok(Self::legacy_token(host).is_some())
+    }
+
+    fn clear_legacy_token(host: &str) -> Result<()> {
+        let mut errors = Vec::new();
+        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, host) {
+            if let Err(e) = entry.delete_credential() {
+                if let Some(msg) = Self::keyring_delete_error(host, e) {
+                    errors.push(msg);
+                }
+            }
+        }
+        match fs::remove_file(Self::token_path(host)?) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => errors.push(format!("legacy token file: {e}")),
+        }
+        if !errors.is_empty() {
+            return Err(GiteeError::Config(errors.join("; ")));
+        }
+        Ok(())
+    }
+
+    pub fn clear_token_for_user(host: &str, user: &str) -> Result<()> {
+        Self::sanitize_username(user)?;
+        let mut errors = Vec::new();
+        let account = Self::keyring_account(host, Some(user));
+        if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, &account) {
+            if let Err(e) = entry.delete_credential() {
+                if let Some(msg) = Self::keyring_delete_error(&account, e) {
+                    errors.push(msg);
+                }
+            }
+        }
+        match fs::remove_file(Self::user_token_path(host, user)?) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => errors.push(format!("token file ({user}): {e}")),
+        }
+        let mut settings = Self::load_settings()?;
+        if let Some(users) = settings.known_users.get_mut(host) {
+            users.retain(|u| u != user);
+            if users.is_empty() {
+                settings.known_users.remove(host);
+            }
+        }
+        if settings.active_users.get(host) == Some(&user.to_string()) {
+            settings.active_users.remove(host);
+        }
+        Self::save_settings(&settings)?;
+        if !errors.is_empty() {
+            return Err(GiteeError::Config(errors.join("; ")));
+        }
+        Ok(())
+    }
+
+    pub fn clear_stored_credentials(host: &str, username: Option<&str>) -> Result<()> {
+        match username {
+            Some(u) => Self::clear_token_for_user(host, u),
+            None => {
+                if let Some(active) = Self::active_user(host)? {
+                    return Self::clear_token_for_user(host, &active);
+                }
+                Self::clear_legacy_token(host)
+            }
+        }
+    }
+
+    /// Forget tokens for a host (legacy + all known per-user stores).
+    pub fn logout(host: &str) -> Result<()> {
+        let mut errors = Vec::new();
+        let users = Self::known_users(host).unwrap_or_default();
+        for user in &users {
+            if let Err(e) = Self::clear_token_for_user(host, user) {
+                errors.push(e.to_string());
+            }
+        }
+        if let Err(e) = Self::clear_legacy_token(host) {
+            errors.push(e.to_string());
+        }
+        let mut settings = Self::load_settings()?;
+        settings.active_users.remove(host);
+        settings.known_users.remove(host);
+        if let Err(e) = Self::save_settings(&settings) {
+            errors.push(e.to_string());
+        }
+        if !errors.is_empty() {
+            return Err(GiteeError::Config(errors.join("; ")));
+        }
+        Ok(())
+    }
+
+    /// Migrate legacy host-only tokens and the old synthetic `default` user slot
+    /// into the per-user store under `oauth2`.
+    pub fn migrate_legacy_user(host: &str) -> Result<()> {
+        if Self::active_user(host)?.as_deref() == Some("default") {
+            if let Ok(token) = Self::token_for_user(host, "default") {
+                let _ = Self::clear_token_for_user(host, "default");
+                return Self::set_token_for_user(host, "oauth2", &token);
+            }
+        }
+        if Self::active_user(host)?.is_some() {
+            return Ok(());
+        }
+        let Some(token) = Self::legacy_token(host) else {
             return Ok(());
         };
-        // Copy legacy secret into per-user slot named "default".
-        Self::set_token_for_user(host, "default", &token)?;
-        Ok(())
+        Self::set_token_for_user(host, "oauth2", &token)
     }
 }
 
@@ -522,6 +653,13 @@ fn restrict_perms(_p: &Path) -> Result<()> {
     Ok(())
 }
 
+
+#[cfg(test)]
+pub fn test_config_env_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,14 +708,74 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_username_rejects_unsafe_values() {
+        assert!(Config::sanitize_username("alice").is_ok());
+        assert!(Config::sanitize_username("oauth2").is_ok());
+        assert!(Config::sanitize_username("").is_err());
+        assert!(Config::sanitize_username("../x").is_err());
+        assert!(Config::sanitize_username("a/b").is_err());
+        assert!(Config::sanitize_username("..").is_err());
+    }
+
+    #[test]
+    fn credential_display_username_never_emits_default() {
+        assert_eq!(Config::credential_display_username(None), "oauth2");
+        assert_eq!(Config::credential_display_username(Some("default".into())), "oauth2");
+        assert_eq!(Config::credential_display_username(Some("alice".into())), "alice");
+    }
+
+    #[test]
+    fn migrate_legacy_user_uses_oauth2_not_default() {
+        let _env = test_config_env_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "gitee-cli-migrate-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        set_test_dir(Some(dir.clone()));
+        let host = "gitee.com";
+        fs::write(dir.join(format!("{host}.token")), "legacy-token\n").unwrap();
+        Config::migrate_legacy_user(host).unwrap();
+        assert_eq!(Config::active_user(host).unwrap().as_deref(), Some("oauth2"));
+        assert!(!dir.join(format!("{host}.token")).exists());
+        assert_eq!(
+            Config::token_for_user(host, "oauth2").unwrap(),
+            "legacy-token"
+        );
+        set_test_dir(None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_stored_credentials_removes_user_token_file() {
+        let _env = test_config_env_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "gitee-cli-clear-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        set_test_dir(Some(dir.clone()));
+        let host = "gitee.com";
+        Config::set_token_for_user(host, "alice", "secret").unwrap();
+        assert!(dir.join(format!("{host}.alice.token")).exists());
+        Config::clear_stored_credentials(host, Some("alice")).unwrap();
+        assert!(!dir.join(format!("{host}.alice.token")).exists());
+        set_test_dir(None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn settings_round_trip_in_temp_dir() {
+        let _env = test_config_env_lock();
         let dir = std::env::temp_dir().join(format!(
             "gitee-cli-config-test-{}",
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        std::env::set_var(ENV_CONFIG_DIR, &dir);
+        set_test_dir(Some(dir.clone()));
         Config::set_key("host", "gitee.com").unwrap();
         Config::set_key("editor", "vim").unwrap();
         Config::alias_set("co", "pr checkout").unwrap();
@@ -587,7 +785,7 @@ mod tests {
         assert_eq!(aliases, vec![("co".into(), "pr checkout".into())]);
         Config::alias_delete("co").unwrap();
         assert!(Config::alias_list().unwrap().is_empty());
-        std::env::remove_var(ENV_CONFIG_DIR);
+        set_test_dir(None);
         let _ = fs::remove_dir_all(&dir);
     }
 }

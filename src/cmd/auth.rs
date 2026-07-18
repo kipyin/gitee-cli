@@ -44,9 +44,14 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
                 Config::set_token_for_user(host, &login, &token)?;
                 println!("Logged in to {host} as {who}.");
             } else {
-                // Without validation we cannot discover the username; keep legacy host token.
-                Config::set_token(host, &token)?;
-                println!("Logged in to {host} (--force; token not validated).");
+                Config::migrate_legacy_user(host)?;
+                if let Some(active) = Config::active_user(host)? {
+                    Config::set_token_for_user(host, &active, &token)?;
+                    println!("Logged in to {host} as {active} (--force; token not validated).");
+                } else {
+                    Config::set_token_for_user(host, "oauth2", &token)?;
+                    println!("Logged in to {host} as oauth2 (--force; token not validated).");
+                }
             }
             Ok(())
         }
@@ -60,6 +65,14 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
         }
         AuthCmd::Logout => {
             Config::logout(host)?;
+            if std::env::var("GITEE_TOKEN")
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false)
+            {
+                eprintln!(
+                    "Warning: GITEE_TOKEN is set and will still override stored credentials."
+                );
+            }
             println!("Logged out of {host}.");
             Ok(())
         }
@@ -74,10 +87,18 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
 }
 
 fn status(host: &str) -> Result<()> {
-    Config::migrate_legacy_user(host)?;
     let active = Config::active_user(host)?;
     let mut users = Config::known_users(host)?;
     if users.is_empty() {
+        if Config::has_legacy_token(host)? {
+            println!(
+                "Logged in to {host} via legacy host-only token (not migrated to a user account)."
+            );
+            if let Some(src) = Config::locate(host) {
+                println!("Active token via {}.", src.as_str());
+            }
+            return Ok(());
+        }
         match Config::locate(host) {
             Some(src) => println!("Logged in to {host} (via {}).", src.as_str()),
             None => println!("Not logged in to {host}."),
@@ -100,15 +121,20 @@ fn status(host: &str) -> Result<()> {
     Ok(())
 }
 
+/// gh-style credential helper value; quotes the exe path for spaces.
+pub fn git_credential_helper_value(exe: &str) -> String {
+    format!("!\"{exe}\" auth git-credential")
+}
+
 fn setup_git(host: &str) -> Result<()> {
+    Config::migrate_legacy_user(host)?;
     let exe = std::env::current_exe()
         .map_err(|e| GiteeError::Usage(format!("current_exe: {e}")))?;
     let exe = exe
         .to_str()
         .ok_or_else(|| GiteeError::Usage("current_exe path is not UTF-8".into()))?;
-    // gh-style: credential.https://<host>.helper=!path auth git-credential
     let key = format!("credential.https://{host}.helper");
-    let value = format!("!{exe} auth git-credential");
+    let value = git_credential_helper_value(exe);
     let status = Command::new("git")
         .args(["config", "--global", &key, &value])
         .status()
@@ -126,14 +152,8 @@ fn git_credential(host: &str, action: GitCredentialCmd) -> Result<()> {
     let attrs = read_credential_attrs()?;
     match action {
         GitCredentialCmd::Get => credential_get(host, &attrs),
-        GitCredentialCmd::Store => {
-            // Tokens are managed by `auth login`; store is a no-op success.
-            Ok(())
-        }
-        GitCredentialCmd::Erase => {
-            // Do not wipe the CLI token store from git's erase; no-op.
-            Ok(())
-        }
+        GitCredentialCmd::Store => credential_store(host, &attrs),
+        GitCredentialCmd::Erase => credential_erase(host, &attrs),
     }
 }
 
@@ -159,14 +179,54 @@ fn credential_get(default_host: &str, attrs: &BTreeMap<String, String>) -> Resul
         Ok(t) => t,
         Err(_) => return Ok(()), // git treats empty helper output as "no credentials"
     };
-    let username = Config::active_user(host)?
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "oauth2".into());
+    let username = Config::credential_display_username(Config::active_user(host)?);
     print_credential_attrs(&[
         ("username", username.as_str()),
         ("password", token.as_str()),
     ])?;
     Ok(())
+}
+
+fn credential_host_from_attrs(default_host: &str, attrs: &BTreeMap<String, String>) -> Option<String> {
+    let protocol = attrs.get("protocol").map(String::as_str).unwrap_or("https");
+    if protocol != "https" && protocol != "http" {
+        return None;
+    }
+    let req_host = attrs
+        .get("host")
+        .map(|s| s.split(':').next().unwrap_or(s).to_string())
+        .unwrap_or_else(|| default_host.to_string());
+    if !default_host.is_empty() && req_host != default_host {
+        return None;
+    }
+    Some(req_host)
+}
+
+fn credential_store(default_host: &str, attrs: &BTreeMap<String, String>) -> Result<()> {
+    let Some(host) = credential_host_from_attrs(default_host, attrs) else {
+        return Ok(());
+    };
+    let password = match attrs.get("password").map(String::as_str) {
+        Some(p) if !p.is_empty() => p,
+        _ => return Ok(()),
+    };
+    let username = attrs
+        .get("username")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty() && *s != "default")
+        .unwrap_or("oauth2");
+    Config::set_token_for_user(&host, username, password)
+}
+
+fn credential_erase(default_host: &str, attrs: &BTreeMap<String, String>) -> Result<()> {
+    let Some(host) = credential_host_from_attrs(default_host, attrs) else {
+        return Ok(());
+    };
+    let username = attrs
+        .get("username")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty() && *s != "default");
+    Config::clear_stored_credentials(&host, username)
 }
 
 /// Parse git credential protocol lines (`key=value`) until a blank line.
@@ -220,5 +280,70 @@ mod tests {
             map.get("path").map(String::as_str),
             Some("oschina/gitee-cli")
         );
+    }
+
+    #[test]
+    fn git_credential_helper_quotes_exe_path() {
+        assert_eq!(
+            git_credential_helper_value("/Applications/Gitee CLI.app/gitee"),
+            "!\"/Applications/Gitee CLI.app/gitee\" auth git-credential"
+        );
+    }
+
+    #[test]
+    fn credential_host_from_attrs_requires_matching_host() {
+        let mut attrs = BTreeMap::new();
+        attrs.insert("protocol".into(), "https".into());
+        attrs.insert("host".into(), "gitee.com".into());
+        assert_eq!(
+            credential_host_from_attrs("gitee.com", &attrs).as_deref(),
+            Some("gitee.com")
+        );
+        assert!(credential_host_from_attrs("other.com", &attrs).is_none());
+    }
+
+    #[test]
+    fn credential_store_persists_token_for_host() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "gitee-cli-store-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        crate::config::set_test_dir(Some(dir.clone()));
+        let mut attrs = BTreeMap::new();
+        attrs.insert("protocol".into(), "https".into());
+        attrs.insert("host".into(), "gitee.com".into());
+        attrs.insert("username".into(), "alice".into());
+        attrs.insert("password".into(), "pat-from-git".into());
+        credential_store("gitee.com", &attrs).unwrap();
+        assert_eq!(
+            Config::token_for_user("gitee.com", "alice").unwrap(),
+            "pat-from-git"
+        );
+        crate::config::set_test_dir(None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn credential_erase_clears_active_user() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "gitee-cli-erase-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        crate::config::set_test_dir(Some(dir.clone()));
+        Config::set_token_for_user("gitee.com", "alice", "secret").unwrap();
+        let mut attrs = BTreeMap::new();
+        attrs.insert("protocol".into(), "https".into());
+        attrs.insert("host".into(), "gitee.com".into());
+        attrs.insert("username".into(), "alice".into());
+        credential_erase("gitee.com", &attrs).unwrap();
+        assert!(Config::token_for_user("gitee.com", "alice").is_err());
+        crate::config::set_test_dir(None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
