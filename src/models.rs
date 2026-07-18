@@ -86,6 +86,8 @@ pub struct UserBasic {
     pub html_url: Option<String>,
 }
 
+/// Organization from GET /user/orgs (swagger `Group`).
+/// List payload has `login` and `description` only — not `name` or membership `role`.
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Org {
     #[serde(default)]
@@ -93,10 +95,7 @@ pub struct Org {
     #[serde(default)]
     pub login: String,
     #[serde(default)]
-    pub name: Option<String>,
-    /// Membership role when present (`admin`/`member`, etc.).
-    #[serde(default)]
-    pub role: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -139,7 +138,7 @@ pub struct Webhook {
     pub id: i64,
     #[serde(default)]
     pub url: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     pub password: Option<String>,
     #[serde(default)]
     pub result_code: Option<i64>,
@@ -507,6 +506,23 @@ pub struct Release {
     pub author: Option<UserBasic>,
     #[serde(default)]
     pub assets: Option<Vec<ReleaseAsset>>,
+}
+
+#[cfg(test)]
+mod webhook_tests {
+    use super::Webhook;
+
+    #[test]
+    fn password_omitted_from_json_output() {
+        let hook = Webhook {
+            id: 1,
+            password: Some("s3cret".into()),
+            url: Some("https://example.com/hook".into()),
+            ..Default::default()
+        };
+        let value = serde_json::to_value(&hook).expect("serialize");
+        assert!(value.get("password").is_none());
+    }
 }
 
 #[cfg(test)]

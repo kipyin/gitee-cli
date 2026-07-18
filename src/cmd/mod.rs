@@ -69,8 +69,14 @@ impl Ctx {
 pub fn run(cli: Cli) -> Result<()> {
     match &cli.cmd {
         Command::Auth(c) => auth::execute(c.clone(), &cli.host),
-        Command::Config(c) => config_cmd::execute(c.clone()),
-        Command::Alias(c) => alias::execute(c.clone()),
+        Command::Config(c) => {
+            let ctx = build_inner(&cli, false)?;
+            config_cmd::execute(&ctx, c.clone())
+        }
+        Command::Alias(c) => {
+            let ctx = build_inner(&cli, false)?;
+            alias::execute(&ctx, c.clone())
+        }
         Command::Browse => {
             let ctx = build_inner(&cli, false)?;
             browse::execute(&ctx)
@@ -274,6 +280,37 @@ fn detect_shell() -> Result<Shell> {
             "could not detect shell from $SHELL='{shell}'; pass it explicitly (bash|zsh|fish|...)"
         ))
     })
+}
+
+#[cfg(test)]
+mod auth_free_tests {
+    use super::*;
+    use crate::cli::Cli;
+
+    #[test]
+    fn builds_without_auth_for_local_commands() {
+        use clap::Parser;
+
+        let dir = std::env::temp_dir().join(format!(
+            "gitee-cli-authfree-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("config.json"), "{}
+").unwrap();
+        std::env::set_var("GITEE_CONFIG_DIR", &dir);
+        for args in ["gitee config list", "gitee alias list", "gitee browse"] {
+            let cli = Cli::try_parse_from(args.split_whitespace()).expect("parse");
+            build_inner(&cli, false).expect("build without auth");
+        }
+        std::env::remove_var("GITEE_CONFIG_DIR");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]

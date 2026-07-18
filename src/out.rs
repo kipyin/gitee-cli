@@ -859,8 +859,7 @@ pub fn user_table(w: &mut impl Write, items: &[UserBasic]) -> std::io::Result<()
 #[derive(Tabled)]
 struct OrgRow {
     login: String,
-    name: String,
-    role: String,
+    description: String,
 }
 
 pub fn org_table(w: &mut impl Write, items: &[Org]) -> std::io::Result<()> {
@@ -868,8 +867,7 @@ pub fn org_table(w: &mut impl Write, items: &[Org]) -> std::io::Result<()> {
         .iter()
         .map(|o| OrgRow {
             login: o.login.clone(),
-            name: o.name.clone().unwrap_or_default(),
-            role: o.role.clone().unwrap_or_default(),
+            description: o.description.clone().unwrap_or_default(),
         })
         .collect();
     writeln!(w, "{}", Table::new(rows))

@@ -15,9 +15,7 @@ pub fn issue_url(host: &str, repo: &Repo, ident: &str) -> String {
 }
 
 pub fn release_url(host: &str, repo: &Repo, tag: &str) -> String {
-    // Ticket 15 shape: /releases/{tag}. Live Gitee also accepts /releases/tag/{tag}
-    // (often 302 to archive); we keep the ticket path.
-    format!("{}/releases/{tag}", repo_url(host, repo))
+    format!("{}/releases/tag/{tag}", repo_url(host, repo))
 }
 
 /// Open `url` in a browser when possible; on failure (headless / no opener)
@@ -62,7 +60,7 @@ mod tests {
         );
         assert_eq!(
             release_url("gitee.com", &r, "v1.2.3"),
-            "https://gitee.com/oschina/gitee-cli/releases/v1.2.3"
+            "https://gitee.com/oschina/gitee-cli/releases/tag/v1.2.3"
         );
     }
 }

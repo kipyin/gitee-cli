@@ -142,7 +142,7 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
         RepoCmd::Star => {
             let rr = ctx.repo()?.clone();
             ctx.client.repos().star(&rr.owner, &rr.name)?;
-            let starred = ctx.client.repos().is_starred(&rr.owner, &rr.name)?;
+            let starred = ctx.client.repos().is_starred(&rr.owner, &rr.name).unwrap_or(false);
             writeln!(
                 std::io::stdout().lock(),
                 "Starred {}/{} (starred={starred})",
@@ -152,7 +152,7 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
         RepoCmd::Unstar => {
             let rr = ctx.repo()?.clone();
             ctx.client.repos().unstar(&rr.owner, &rr.name)?;
-            let starred = ctx.client.repos().is_starred(&rr.owner, &rr.name)?;
+            let starred = ctx.client.repos().is_starred(&rr.owner, &rr.name).unwrap_or(false);
             writeln!(
                 std::io::stdout().lock(),
                 "Unstarred {}/{} (starred={starred})",
@@ -162,7 +162,7 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
         RepoCmd::Watch => {
             let rr = ctx.repo()?.clone();
             ctx.client.repos().watch(&rr.owner, &rr.name)?;
-            let watching = ctx.client.repos().is_watching(&rr.owner, &rr.name)?;
+            let watching = ctx.client.repos().is_watching(&rr.owner, &rr.name).unwrap_or(false);
             writeln!(
                 std::io::stdout().lock(),
                 "Watching {}/{} (watching={watching})",
@@ -172,7 +172,7 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
         RepoCmd::Unwatch => {
             let rr = ctx.repo()?.clone();
             ctx.client.repos().unwatch(&rr.owner, &rr.name)?;
-            let watching = ctx.client.repos().is_watching(&rr.owner, &rr.name)?;
+            let watching = ctx.client.repos().is_watching(&rr.owner, &rr.name).unwrap_or(false);
             writeln!(
                 std::io::stdout().lock(),
                 "Unwatched {}/{} (watching={watching})",

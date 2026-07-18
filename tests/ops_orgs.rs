@@ -12,10 +12,11 @@ fn api_path(path: &str) -> String {
 fn orgs_lists_user_orgs_and_respects_limit() {
     let mut server = mockito::Server::new();
 
+    // Swagger `Group` shape: no `name` or `role` on GET /user/orgs.
     let body = r#"[
-        {"id":1,"login":"acme","name":"Acme Org","role":"admin"},
-        {"id":2,"login":"beta","name":"Beta","role":"member"},
-        {"id":3,"login":"gamma","name":"Gamma","role":"member"}
+        {"id":1,"login":"acme","url":"https://gitee.com/acme","description":"Acme open source"},
+        {"id":2,"login":"beta","url":"https://gitee.com/beta","description":"Beta team"},
+        {"id":3,"login":"gamma","url":"https://gitee.com/gamma","description":""}
     ]"#;
 
     let mock = server
@@ -37,7 +38,6 @@ fn orgs_lists_user_orgs_and_respects_limit() {
     mock.assert();
     assert_eq!(items.len(), 2);
     assert_eq!(items[0].login, "acme");
-    assert_eq!(items[0].name.as_deref(), Some("Acme Org"));
-    assert_eq!(items[0].role.as_deref(), Some("admin"));
+    assert_eq!(items[0].description.as_deref(), Some("Acme open source"));
     assert_eq!(items[1].login, "beta");
 }

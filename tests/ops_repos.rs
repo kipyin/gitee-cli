@@ -350,3 +350,24 @@ fn watch_and_unwatch_hit_subscriptions() {
         .expect("unwatch");
     del.assert();
 }
+
+#[test]
+fn is_watching_true_on_204_false_on_404() {
+    let mut server = mockito::Server::new();
+    let ok = server
+        .mock("GET", api_path("/user/subscriptions/oschina/gitee-cli").as_str())
+        .with_status(204)
+        .create();
+    assert!(client(&server).repos().is_watching("oschina", "gitee-cli").unwrap());
+    ok.assert();
+
+    let mut server = mockito::Server::new();
+    let missing = server
+        .mock("GET", api_path("/user/subscriptions/oschina/gitee-cli").as_str())
+        .with_status(404)
+        .with_body("{}")
+        .create();
+    assert!(!client(&server).repos().is_watching("oschina", "gitee-cli").unwrap());
+    missing.assert();
+}
+

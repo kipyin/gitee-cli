@@ -259,21 +259,15 @@ impl Client {
         self.send_ok("DELETE", path, &[])
     }
 
-    /// GET that treats 2xx as present and 404 as absent (star/watch check endpoints).
-    pub fn exists(&self, path: &str) -> Result<bool> {
+    /// GET expecting an empty-body 2xx (204), e.g. star/watch check endpoints.
+    pub fn get_ok(&self, path: &str) -> Result<()> {
         self.trace("GET", path);
         let resp = self
             .http
             .get(self.full(path))
             .header("Authorization", self.auth())
             .send()?;
-        if resp.status().is_success() {
-            return Ok(true);
-        }
-        if resp.status().as_u16() == 404 {
-            return Ok(false);
-        }
-        self.check(resp, "GET", path).map(|_| false)
+        self.check(resp, "GET", path).map(|_| ())
     }
 
     pub fn post_multipart<T: DeserializeOwned>(&self, path: &str, file_path: &str) -> Result<T> {

@@ -1301,6 +1301,14 @@ mod parse_tests {
         let Command::Webhook(WebhookCmd::Delete { id, yes }) = cli.cmd else { panic!("delete") };
         assert_eq!(id, 55);
         assert!(yes);
+
+        let cli = Cli::try_parse_from([
+            "gitee", "webhook", "create",
+            "--url", "https://example.com/hook",
+            "--events", "pull_requests_events",
+        ]).expect("webhook alias event");
+        let Command::Webhook(WebhookCmd::Create { events, .. }) = cli.cmd else { panic!("create") };
+        assert_eq!(events, vec!["pull_requests_events".to_string()]);
     }
 
     #[test]

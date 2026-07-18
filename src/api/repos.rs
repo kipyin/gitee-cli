@@ -130,7 +130,12 @@ impl Repos<'_> {
     }
 
     pub fn is_starred(&self, owner: &str, name: &str) -> Result<bool> {
-        self.client.exists(&format!("/user/starred/{owner}/{name}"))
+        let path = format!("/user/starred/{owner}/{name}");
+        match self.client.get_ok(&path) {
+            Ok(()) => Ok(true),
+            Err(GiteeError::NotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn watch(&self, owner: &str, name: &str) -> Result<()> {
@@ -144,8 +149,12 @@ impl Repos<'_> {
     }
 
     pub fn is_watching(&self, owner: &str, name: &str) -> Result<bool> {
-        self.client
-            .exists(&format!("/user/subscriptions/{owner}/{name}"))
+        let path = format!("/user/subscriptions/{owner}/{name}");
+        match self.client.get_ok(&path) {
+            Ok(()) => Ok(true),
+            Err(GiteeError::NotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     /// All milestones of a repo (used to resolve --milestone titles to numbers).

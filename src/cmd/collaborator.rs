@@ -49,3 +49,20 @@ fn validate_permission(permission: &str) -> Result<()> {
         ))),
     }
 }
+
+#[cfg(test)]
+mod permission_tests {
+    use super::validate_permission;
+
+    #[test]
+    fn accepts_pull_push_admin() {
+        assert!(validate_permission("pull").is_ok());
+        assert!(validate_permission("push").is_ok());
+        assert!(validate_permission("admin").is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_permission() {
+        assert!(validate_permission("owner").is_err());
+    }
+}
