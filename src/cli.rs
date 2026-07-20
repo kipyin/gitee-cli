@@ -334,7 +334,12 @@ pub enum IssueCmd {
         security_hole: bool,
     },
     /// Edit an issue's metadata. At least one flag is required.
-    #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["title", "body", "assignee", "label", "milestone", "security_hole"]))]
+    ///
+    /// State changes use PATCH `/repos/{owner}/issues/{number}` with a JSON
+    /// body `{repo, title, state}` (current title must be echoed). Do not use
+    /// form fields on `/repos/{owner}/{repo}/issues/{number}` — that path
+    /// often returns an opaque `project or enterprise` 404.
+    #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["title", "body", "assignee", "label", "milestone", "security_hole", "state"]))]
     Edit {
         number: String,
         #[arg(long)]
@@ -352,6 +357,9 @@ pub enum IssueCmd {
         /// Mark the issue as a security hole (Gitee-specific).
         #[arg(long)]
         security_hole: bool,
+        /// Lifecycle state: `open`, `progressing`, `closed`, or `rejected`.
+        #[arg(long, value_parser = ["open", "progressing", "closed", "rejected"])]
+        state: Option<String>,
     },
     Close {
         number: String,
@@ -965,6 +973,17 @@ mod parse_tests {
     fn issue_edit_requires_at_least_one_flag() {
         let r = Cli::try_parse_from(["gitee", "issue", "edit", "I1AB"]);
         assert!(r.is_err(), "issue edit with no flags must fail");
+    }
+
+    #[test]
+    fn issue_edit_state_alone_parses() {
+        let cli = Cli::try_parse_from(["gitee", "issue", "edit", "I1AB", "--state", "progressing"])
+            .expect("issue edit --state alone should parse");
+        let Command::Issue(IssueCmd::Edit { number, state, .. }) = cli.cmd else {
+            panic!("expected issue edit");
+        };
+        assert_eq!(number, "I1AB");
+        assert_eq!(state.as_deref(), Some("progressing"));
     }
 
     #[test]

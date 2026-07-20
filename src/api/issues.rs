@@ -1,7 +1,34 @@
 use super::client::Client;
-use crate::error::Result;
+use crate::error::{GiteeError, Result};
 use crate::models::{Comment, Issue, IssueState};
 use crate::repo::Repo;
+
+/// When a state write hits Gitee's opaque enterprise/project 404, surface a
+/// clearer hint than a bare path. Non-state edits keep the original error.
+fn map_issue_state_err(err: GiteeError, changing_state: bool, owner: &str, number: &str) -> GiteeError {
+    if !changing_state {
+        return err;
+    }
+    let enterprise = matches!(
+        &err,
+        GiteeError::Api { message, .. } if message.to_lowercase().contains("project or enterprise")
+    );
+    if !enterprise {
+        return err;
+    }
+    GiteeError::Api {
+        status: 404,
+        message: format!(
+            "could not change issue {number} state (HTTP 404). Tried PATCH \
+             /repos/{owner}/issues/{number} with JSON {{repo, title, state}}. \
+             If this is an enterprise/project board issue, that personal/org \
+             endpoint may not apply — check --repo/--remote resolve to the \
+             right repository and that your token can access it. For raw \
+             `gitee api`, use that owner path with a JSON body (not form \
+             fields on /repos/{{owner}}/{{repo}}/issues/{{number}})."
+        ),
+    }
+}
 
 pub struct Issues<'a> {
     client: &'a Client,
@@ -38,6 +65,8 @@ pub struct EditIssue<'a> {
     pub labels: Option<&'a str>,
     pub milestone_number: Option<i64>,
     pub security_hole: Option<bool>,
+    /// Lifecycle state (`open` / `progressing` / `closed` / `rejected`).
+    pub state: Option<IssueState>,
 }
 
 impl Issues<'_> {
@@ -112,6 +141,7 @@ impl Issues<'_> {
         });
         self.client
             .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
+            .map_err(|e| map_issue_state_err(e, true, o, number))
     }
 
     /// PATCH metadata. Same JSON quirk as set_state: `repo` and the current
@@ -142,8 +172,12 @@ impl Issues<'_> {
         if let Some(b) = req.security_hole {
             map.insert("security_hole".into(), b.into());
         }
+        if let Some(s) = req.state {
+            map.insert("state".into(), s.as_str().into());
+        }
         self.client
             .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
+            .map_err(|e| map_issue_state_err(e, req.state.is_some(), o, number))
     }
 
     pub fn comment(&self, number: &str, body: &str) -> Result<Comment> {

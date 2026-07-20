@@ -29,6 +29,30 @@ fn get_401_maps_to_unauthorized() {
 }
 
 #[test]
+fn get_404_project_or_enterprise_maps_to_api() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/owner/issues/I1";
+    server
+        .mock("PATCH", api_path(path).as_str())
+        .with_status(404)
+        .with_body(r#"{"message":"project or enterprise"}"#)
+        .create();
+
+    let client = client(&server);
+    let err = client
+        .patch_json::<Issue>(path, &serde_json::json!({"repo": "r", "title": "t", "state": "open"}))
+        .expect_err("expected api error");
+
+    match err {
+        GiteeError::Api { status, message } => {
+            assert_eq!(status, 404);
+            assert!(message.to_lowercase().contains("project or enterprise"));
+        }
+        other => panic!("expected Api error, got {other:?}"),
+    }
+}
+
+#[test]
 fn get_404_maps_to_not_found_with_path() {
     let mut server = mockito::Server::new();
     let path = "/repos/owner/missing";

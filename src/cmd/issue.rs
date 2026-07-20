@@ -3,9 +3,22 @@ use std::io::Write;
 use super::{join_flags, resolve_milestone_opt, Ctx};
 use crate::api::issues::{CreateIssue, EditIssue, IssueFilter};
 use crate::cli::IssueCmd;
-use crate::error::Result;
+use crate::error::{GiteeError, Result};
 use crate::models::IssueState;
 use crate::out;
+
+/// Clap already restricts `--state` to known values; map them onto `IssueState`.
+fn parse_issue_state(raw: &str) -> Result<IssueState> {
+    match raw {
+        "open" => Ok(IssueState::Open),
+        "progressing" => Ok(IssueState::Progressing),
+        "closed" => Ok(IssueState::Closed),
+        "rejected" => Ok(IssueState::Rejected),
+        other => Err(GiteeError::Usage(format!(
+            "unsupported issue state '{other}' (want open|progressing|closed|rejected)"
+        ))),
+    }
+}
 
 pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
     match cmd {
@@ -112,10 +125,15 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             label,
             milestone,
             security_hole,
+            state,
         } => {
             let repo = ctx.repo()?;
             let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
             let labels = join_flags(&label);
+            let state = state
+                .as_deref()
+                .map(parse_issue_state)
+                .transpose()?;
             let req = EditIssue {
                 title: title.as_deref(),
                 body: body.as_deref(),
@@ -123,6 +141,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 labels: labels.as_deref(),
                 milestone_number,
                 security_hole: security_hole.then_some(true),
+                state,
             };
             let issue = ctx.client.issues(repo).edit(&number, &req)?;
             let mut out = std::io::stdout().lock();

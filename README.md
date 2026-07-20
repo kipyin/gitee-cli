@@ -111,6 +111,7 @@ gitee issue view I88 --web
 gitee issue create --title "Bug" --body "steps…"
 gitee issue create                   # interactive title/body on a TTY
 gitee issue edit I88 --label bug --milestone v1.0
+gitee issue edit I88 --state progressing   # open|progressing|closed|rejected
 gitee issue comment I88 -m "looking into it"
 gitee issue close I88
 
@@ -217,8 +218,8 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `status` | Open issues relevant to you: created, assigned (`--limit`) |
 | `view <n>` | Show issue details (`--web`; Gitee issue idents are strings, e.g. `I88`) |
 | `create` | Create (`--title` or interactive on a TTY; `--body`, `--assignee`, `--labels`, `--milestone`, `--security-hole`) |
-| `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`) |
-| `close <n>` / `reopen <n>` | Change state |
+| `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`, `--state`) |
+| `close <n>` / `reopen <n>` | Change state (`open`/`closed` shortcuts; prefer `edit --state` for `progressing`/`rejected`) |
 | `link <n> <pr>` | Link an issue to a pull request |
 | `comment <n>` | Add a comment (`-m/--body`) |
 
@@ -328,6 +329,14 @@ gitee api user
 gitee api /repos/oschina/git/issues -X POST -F title=Bug -F body=steps
 gitee api repos/oschina/git/releases --paginate
 ```
+
+Issue state changes are a common footgun: use
+`PATCH /repos/{owner}/issues/{number}` with a **JSON** body
+`{"repo":"<name>","title":"<current title>","state":"progressing"}`
+(title must be echoed or Gitee blanks it). The
+`/repos/{owner}/{repo}/issues/{number}` path with form `-f state=…` often
+returns `404 {"message":"project or enterprise"}`. Prefer
+`gitee issue edit <n> --state …` when you can.
 
 </details>
 

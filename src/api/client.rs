@@ -148,6 +148,13 @@ impl Client {
         }
         Err(match code {
             401 => GiteeError::Unauthorized,
+            // Gitee returns 404 + {"message":"project or enterprise"} for the
+            // wrong issue path / enterprise boards — keep it as Api so callers
+            // can surface an actionable hint instead of a bare path NotFound.
+            404 if message.to_lowercase().contains("project or enterprise") => GiteeError::Api {
+                status: 404,
+                message,
+            },
             404 => GiteeError::NotFound(path.to_string()),
             _ => GiteeError::Api {
                 status: code,

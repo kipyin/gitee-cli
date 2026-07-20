@@ -1,5 +1,6 @@
 use gitee_cli_rs::api::client::Client;
 use gitee_cli_rs::api::issues::{CreateIssue, EditIssue};
+use gitee_cli_rs::error::GiteeError;
 use gitee_cli_rs::models::IssueState;
 use gitee_cli_rs::repo::Repo;
 
@@ -255,6 +256,164 @@ fn edit_gets_first_then_patches_json_with_echoed_title() {
 
     get.assert();
     patch.assert();
+}
+
+#[test]
+fn edit_state_enterprise_404_is_actionable() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/issues/88";
+    let patch_path = "/repos/oschina/issues/88";
+
+    server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message":"project or enterprise"}"#)
+        .create();
+
+    let err = client(&server)
+        .issues(&test_repo())
+        .edit(
+            "88",
+            &EditIssue {
+                state: Some(IssueState::Progressing),
+                ..Default::default()
+            },
+        )
+        .expect_err("enterprise 404 should fail");
+
+    match err {
+        GiteeError::Api { status, message } => {
+            assert_eq!(status, 404);
+            assert!(
+                message.contains("enterprise/project") || message.contains("enterprise"),
+                "expected actionable enterprise hint, got: {message}"
+            );
+            assert!(
+                message.contains("/repos/oschina/issues/88"),
+                "expected path tried in message, got: {message}"
+            );
+        }
+        other => panic!("expected Api error, got {other:?}"),
+    }
+}
+
+#[test]
+fn edit_with_state_patches_json_including_state() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/issues/88";
+    let patch_path = "/repos/oschina/issues/88";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    let patch = server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::Json(serde_json::json!({
+            "repo": "gitee-cli",
+            "title": "Login fails with expired token",
+            "state": "progressing"
+        })))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"number":"88","title":"Login fails with expired token","state":"progressing","html_url":"https://gitee.com/oschina/gitee-cli/issues/I88"}"#,
+        )
+        .create();
+
+    let issue = client(&server)
+        .issues(&test_repo())
+        .edit(
+            "88",
+            &EditIssue {
+                state: Some(IssueState::Progressing),
+                ..Default::default()
+            },
+        )
+        .expect("edit with state should succeed");
+
+    get.assert();
+    patch.assert();
+    assert_eq!(issue.state, IssueState::Progressing);
+}
+
+/// open → progressing → closed through `edit` (acceptance: multi-step lifecycle).
+#[test]
+fn edit_state_open_to_progressing_to_closed() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/issues/88";
+    let patch_path = "/repos/oschina/issues/88";
+    let repo = test_repo();
+    let client = client(&server);
+
+    server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+    server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::Regex(r#""state"\s*:\s*"progressing""#.into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"number":"88","title":"Login fails with expired token","state":"progressing","html_url":"https://gitee.com/x"}"#,
+        )
+        .create();
+
+    let mid = client
+        .issues(&repo)
+        .edit(
+            "88",
+            &EditIssue {
+                state: Some(IssueState::Progressing),
+                ..Default::default()
+            },
+        )
+        .expect("open → progressing");
+    assert_eq!(mid.state, IssueState::Progressing);
+
+    server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"number":"88","title":"Login fails with expired token","state":"progressing","html_url":"https://gitee.com/x"}"#,
+        )
+        .create();
+    server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::Regex(r#""state"\s*:\s*"closed""#.into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"number":"88","title":"Login fails with expired token","state":"closed","html_url":"https://gitee.com/x"}"#,
+        )
+        .create();
+
+    let done = client
+        .issues(&repo)
+        .edit(
+            "88",
+            &EditIssue {
+                state: Some(IssueState::Closed),
+                ..Default::default()
+            },
+        )
+        .expect("progressing → closed");
+    assert_eq!(done.state, IssueState::Closed);
 }
 
 #[test]
