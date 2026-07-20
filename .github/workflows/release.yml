@@ -82,36 +82,3 @@ jobs:
         with:
           files: dist/*.tar.xz
           generate_release_notes: true
-
-  mirror-gitee:
-    name: Mirror release to Gitee
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      # Dogfood: use the x86_64-linux gitee binary built by the matrix above
-      # to create the Gitee Release and attach the same tarballs.
-      - name: Install gitee CLI from build artifact
-        run: |
-          tar -xJf dist/gitee-x86_64-unknown-linux-gnu-v*.tar.xz
-          sudo install -m 755 gitee-x86_64-unknown-linux-gnu-v*/gitee /usr/local/bin/gitee
-
-      - name: Create Gitee Release and upload assets
-        env:
-          # Config::token reads GITEE_TOKEN first — no `auth login` needed.
-          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: |
-          if [ -z "$GITEE_TOKEN" ]; then
-            echo "::warning::GITEE_TOKEN secret not set — skipping Gitee release mirror"
-            exit 0
-          fi
-          TAG="${GITHUB_REF_NAME}"
-          REPO="kipyt/gitee-cli"
-          # create is idempotent: an existing release just prints the API error.
-          gitee --repo "$REPO" release create --tag "$TAG" --name "$TAG" --target main || true
-          gitee --repo "$REPO" release upload "$TAG" dist/*.tar.xz
