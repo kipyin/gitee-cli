@@ -1,7 +1,7 @@
 //! Background GitHub Releases check and stderr Update notice tip.
 
 use std::io::{IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
 
@@ -210,14 +210,103 @@ impl UpdateNotice {
         if !is_strictly_newer(&info.version, &self.current) {
             return;
         }
+        let Some(brew_upgrade) =
+            homebrew_tip_mode(detect_homebrew_install(), &info.published_at, self.now)
+        else {
+            return;
+        };
         let tip = format_tip(
             strip_leading_v(&self.current),
             strip_leading_v(&info.version),
             &info.url,
             tip_color_enabled(),
+            brew_upgrade,
         );
         let _ = write!(w, "{tip}");
     }
+}
+
+/// True when `exe` lives under `{brew_prefix}/bin/` (path-component prefix).
+pub fn is_homebrew_install(exe: impl AsRef<Path>, brew_prefix: impl AsRef<Path>) -> bool {
+    let bin_dir = brew_prefix.as_ref().join("bin");
+    exe.as_ref().starts_with(bin_dir)
+}
+
+/// True when `published_at` parses as RFC3339 and falls within the last 24 hours
+/// before `now`. Invalid or future timestamps are not within the grace window.
+pub fn release_within_homebrew_grace(published_at: &str, now: SystemTime) -> bool {
+    // Same strict `< 24h` window as [`cache_is_fresh`].
+    cache_is_fresh(published_at, now)
+}
+
+/// Tip mode after a newer release is already known.
+///
+/// - `None` — Homebrew within grace: suppress the entire notice
+/// - `Some(true)` — Homebrew outside grace: include the brew upgrade line
+/// - `Some(false)` — non-Homebrew: headline + URL only
+pub fn homebrew_tip_mode(is_homebrew: bool, published_at: &str, now: SystemTime) -> Option<bool> {
+    if !is_homebrew {
+        return Some(false);
+    }
+    if release_within_homebrew_grace(published_at, now) {
+        None
+    } else {
+        Some(true)
+    }
+}
+
+#[cfg(test)]
+static TEST_HOMEBREW_PROBE: std::sync::Mutex<Option<(Option<PathBuf>, Option<PathBuf>)>> =
+    std::sync::Mutex::new(None);
+
+/// Inject `(current_exe, brew --prefix)` for tests. `None` either side ⇒ probe failure
+/// (non-Homebrew). Pass `None` for the whole override to restore production probing.
+#[cfg(test)]
+pub fn set_test_homebrew_probe(probe: Option<(Option<PathBuf>, Option<PathBuf>)>) {
+    *TEST_HOMEBREW_PROBE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = probe;
+}
+
+fn probe_brew_prefix() -> Option<PathBuf> {
+    let output = std::process::Command::new("brew")
+        .arg("--prefix")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let prefix = String::from_utf8(output.stdout).ok()?;
+    let prefix = prefix.trim();
+    if prefix.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(prefix))
+}
+
+/// Runtime Homebrew detect: `current_exe` under `{brew --prefix}/bin/`.
+/// Any failure (no brew, prefix fail, exe path fail, mismatch) ⇒ non-Homebrew.
+fn detect_homebrew_install() -> bool {
+    #[cfg(test)]
+    {
+        if let Some((exe, prefix)) = TEST_HOMEBREW_PROBE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
+            return match (exe, prefix) {
+                (Some(exe), Some(prefix)) => is_homebrew_install(exe, prefix),
+                _ => false,
+            };
+        }
+    }
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+    let Some(prefix) = probe_brew_prefix() else {
+        return false;
+    };
+    is_homebrew_install(exe, prefix)
 }
 
 fn format_rfc3339(t: SystemTime) -> String {
@@ -291,15 +380,28 @@ fn paint_if(enabled: bool, code: &str, s: &str) -> String {
 
 /// Format the Update notice tip (leading/trailing blank lines).
 /// When `color` is true, label + URL are yellow and version numbers cyan.
-pub fn format_tip(current: &str, latest: &str, url: &str, color: bool) -> String {
-    format!(
-        "\n{}{}{}{}\n{}\n\n",
+/// When `brew_upgrade` is true, inserts a plain (never colored) brew line
+/// between the headline and the URL.
+pub fn format_tip(
+    current: &str,
+    latest: &str,
+    url: &str,
+    color: bool,
+    brew_upgrade: bool,
+) -> String {
+    let headline = format!(
+        "{}{}{}{}",
         paint_if(color, "33", "A new release of gitee is available: "),
         paint_if(color, "36", current),
         paint_if(color, "33", " → "),
         paint_if(color, "36", latest),
-        paint_if(color, "33", url),
-    )
+    );
+    let url_line = paint_if(color, "33", url);
+    if brew_upgrade {
+        format!("\n{headline}\nTo upgrade, run: brew upgrade gitee\n{url_line}\n\n")
+    } else {
+        format!("\n{headline}\n{url_line}\n\n")
+    }
 }
 
 #[cfg(test)]
@@ -401,12 +503,21 @@ mod tests {
     }
 
     fn seed_state(dir: &std::path::Path, checked_at: &str, version: &str) {
+        seed_state_with_published(dir, checked_at, version, "2026-01-15T11:00:00Z");
+    }
+
+    fn seed_state_with_published(
+        dir: &std::path::Path,
+        checked_at: &str,
+        version: &str,
+        published_at: &str,
+    ) {
         let state = UpdateState {
             checked_for_update_at: checked_at.into(),
             latest_release: CachedRelease {
                 version: version.into(),
                 url: format!("https://github.com/kipyin/gitee-cli/releases/tag/{version}"),
-                published_at: "2026-01-15T11:00:00Z".into(),
+                published_at: published_at.into(),
             },
         };
         let body = serde_json::to_string_pretty(&state).unwrap();
@@ -543,10 +654,37 @@ mod tests {
             "0.2.0",
             "https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0",
             false,
+            false,
         );
         assert_eq!(
             tip,
             "\nA new release of gitee is available: 0.1.5 → 0.2.0\nhttps://github.com/kipyin/gitee-cli/releases/tag/v0.2.0\n\n"
+        );
+    }
+
+    #[test]
+    fn format_tip_includes_plain_brew_line_when_requested() {
+        let tip = format_tip(
+            "0.1.5",
+            "0.2.0",
+            "https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0",
+            true,
+            true,
+        );
+        let yellow = |s: &str| format!("\x1b[33m{s}\x1b[0m");
+        let cyan = |s: &str| format!("\x1b[36m{s}\x1b[0m");
+        let expected = format!(
+            "\n{}{}{}{}\nTo upgrade, run: brew upgrade gitee\n{}\n\n",
+            yellow("A new release of gitee is available: "),
+            cyan("0.1.5"),
+            yellow(" → "),
+            cyan("0.2.0"),
+            yellow("https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0"),
+        );
+        assert_eq!(tip, expected);
+        assert!(
+            !tip.contains("\x1b[33mTo upgrade"),
+            "brew line must stay uncolored"
         );
     }
 
@@ -557,6 +695,7 @@ mod tests {
             "0.2.0",
             "https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0",
             true,
+            false,
         );
         let yellow = |s: &str| format!("\x1b[33m{s}\x1b[0m");
         let cyan = |s: &str| format!("\x1b[36m{s}\x1b[0m");
@@ -569,6 +708,135 @@ mod tests {
             yellow("https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0"),
         );
         assert_eq!(tip, expected);
+    }
+
+    #[test]
+    fn is_homebrew_install_requires_prefix_bin_path() {
+        assert!(is_homebrew_install(
+            "/opt/homebrew/bin/gitee",
+            "/opt/homebrew"
+        ));
+        assert!(is_homebrew_install(
+            "/usr/local/bin/gitee",
+            "/usr/local"
+        ));
+        assert!(
+            !is_homebrew_install("/opt/homebrew/Cellar/gitee/0.2.0/bin/gitee", "/opt/homebrew"),
+            "Cellar path alone is not Homebrew for tip purposes"
+        );
+        assert!(!is_homebrew_install(
+            "/home/user/.cargo/bin/gitee",
+            "/opt/homebrew"
+        ));
+        assert!(!is_homebrew_install(
+            "/opt/homebrew/binfoo/gitee",
+            "/opt/homebrew"
+        ));
+    }
+
+    #[test]
+    fn release_within_homebrew_grace_matches_24h_strict_window() {
+        let published = rfc3339(1_000_000);
+        assert!(!release_within_homebrew_grace(
+            &published,
+            ts(1_000_000 + 24 * 60 * 60)
+        ));
+        assert!(release_within_homebrew_grace(
+            &published,
+            ts(1_000_000 + 24 * 60 * 60 - 1)
+        ));
+        assert!(release_within_homebrew_grace(
+            &published,
+            ts(1_000_000 + 60)
+        ));
+        assert!(!release_within_homebrew_grace(
+            &published,
+            ts(1_000_000 + 24 * 60 * 60 + 1)
+        ));
+        assert!(!release_within_homebrew_grace(
+            "not-a-timestamp",
+            ts(1_000_000)
+        ));
+        assert!(!release_within_homebrew_grace(
+            &rfc3339(1_000_000 + 60),
+            ts(1_000_000)
+        ));
+    }
+
+    #[test]
+    fn homebrew_tip_mode_suppresses_brew_or_plain() {
+        let now = ts(1_000_000);
+        let recent = rfc3339(1_000_000 - 60);
+        let older = rfc3339(1_000_000 - 25 * 60 * 60);
+
+        assert_eq!(homebrew_tip_mode(false, &recent, now), Some(false));
+        assert_eq!(homebrew_tip_mode(false, &older, now), Some(false));
+        assert_eq!(homebrew_tip_mode(true, &recent, now), None);
+        assert_eq!(homebrew_tip_mode(true, &older, now), Some(true));
+        assert_eq!(
+            homebrew_tip_mode(true, "not-a-timestamp", now),
+            Some(true),
+            "invalid published_at is outside grace"
+        );
+    }
+
+    #[test]
+    fn finish_on_success_homebrew_brew_line_and_grace_via_inject() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        crate::config::set_test_dir(Some(dir.path().to_path_buf()));
+
+        let now = ts(1_000_000);
+        let brew_prefix = PathBuf::from("/opt/homebrew");
+        let brew_exe = PathBuf::from("/opt/homebrew/bin/gitee");
+
+        // Outside grace + Homebrew → tip includes brew line.
+        seed_state_with_published(
+            dir.path(),
+            &rfc3339(1_000_000 - 60),
+            "v0.2.0",
+            &rfc3339(1_000_000 - 25 * 60 * 60),
+        );
+        set_test_homebrew_probe(Some((Some(brew_exe.clone()), Some(brew_prefix.clone()))));
+        let notice = UpdateNotice::spawn_at("0.1.5", "http://127.0.0.1:1", now);
+        let mut buf = Vec::new();
+        notice.finish_on_success(&mut buf);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains("To upgrade, run: brew upgrade gitee"),
+            "expected brew line, got {out:?}"
+        );
+
+        // Within grace + Homebrew → suppress entire notice.
+        seed_state_with_published(
+            dir.path(),
+            &rfc3339(1_000_000 - 60),
+            "v0.2.0",
+            &rfc3339(1_000_000 - 60),
+        );
+        let notice = UpdateNotice::spawn_at("0.1.5", "http://127.0.0.1:1", now);
+        let mut buf = Vec::new();
+        notice.finish_on_success(&mut buf);
+        assert!(
+            buf.is_empty(),
+            "Homebrew grace must suppress tip; got {:?}",
+            String::from_utf8_lossy(&buf)
+        );
+
+        // Probe failure → non-Homebrew tip (no brew line, still shown).
+        set_test_homebrew_probe(Some((Some(brew_exe), None)));
+        let notice = UpdateNotice::spawn_at("0.1.5", "http://127.0.0.1:1", now);
+        let mut buf = Vec::new();
+        notice.finish_on_success(&mut buf);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("0.1.5 → 0.2.0"), "got {out:?}");
+        assert!(
+            !out.contains("brew upgrade"),
+            "probe failure must omit brew line"
+        );
+
+        set_test_homebrew_probe(None);
+        crate::config::set_test_dir(None);
     }
 
     const SKIP_ENV_KEYS: &[&str] = &[
