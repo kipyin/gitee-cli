@@ -399,7 +399,7 @@ pub fn pr_diff(w: &mut impl Write, files: &[FileDiff]) -> std::io::Result<()> {
         if i > 0 {
             writeln!(w)?;
         }
-        let name = &f.filename;
+        let name = &f.path;
         writeln!(w, "{}", bold(&format!("diff --git a/{name} b/{name}")))?;
         writeln!(w, "{}", bold(name))?;
         match &f.patch {
@@ -1009,13 +1009,13 @@ mod printer_tests {
     #[test]
     fn pr_diff_renders_git_header_and_no_text_fallback() {
         let with_patch = FileDiff {
-            filename: "pom.xml".into(),
+            path: "pom.xml".into(),
             patch: Some("@@ -1 +1 @@\n-old\n+new".into()),
             ..Default::default()
         };
 
         let without_patch = FileDiff {
-            filename: "logo.png".into(),
+            path: "logo.png".into(),
             ..Default::default()
         };
 

@@ -296,12 +296,16 @@ where
 }
 
 /// One changed file from GET /repos/{owner}/{repo}/pulls/{number}/files.
+///
+/// `path` is the canonical JSON field name (matches `gh pr view --json files`).
+/// Gitee's v5 API returns `filename`, so deserialization also accepts that
+/// alias for forward-compatibility with the live response shape.
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct FileDiff {
     #[serde(default)]
     pub sha: Option<String>,
-    #[serde(default)]
-    pub filename: String,
+    #[serde(default, alias = "filename")]
+    pub path: String,
     #[serde(default)]
     pub status: Option<String>,
     #[serde(
@@ -314,6 +318,10 @@ pub struct FileDiff {
     pub additions: Option<String>,
     #[serde(default)]
     pub deletions: Option<String>,
+    /// Total changed lines (additions + deletions). Gitee doesn't always
+    /// return it, hence `Option`; populated when present.
+    #[serde(default)]
+    pub changes: Option<String>,
     #[serde(default)]
     pub raw_url: Option<String>,
     #[serde(default)]
@@ -358,6 +366,10 @@ pub struct PullRequest {
     pub closed_at: Option<String>,
     #[serde(default)]
     pub mergeable: Option<bool>,
+    /// Per-file diff list. Not returned by `GET /repos/.../pulls/{n}` —
+    /// populated by `pr view` via the separate `/pulls/{n}/files` endpoint.
+    #[serde(default)]
+    pub files: Option<Vec<FileDiff>>,
 }
 
 /// Minimal repo reference embedded in user-level issues (`GET /user/issues`).

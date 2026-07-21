@@ -98,7 +98,7 @@ fn files_deserializes_file_diffs() {
 
     mock.assert();
     assert_eq!(files.len(), 2);
-    assert_eq!(files[0].filename, "pom.xml");
+    assert_eq!(files[0].path, "pom.xml");
     assert!(files[0].patch.as_ref().unwrap().contains("3.5.15"));
     assert!(files[1].patch.is_none());
 }

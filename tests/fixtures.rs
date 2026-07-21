@@ -22,11 +22,11 @@ fn fixture_pull_request_deserializes() {
 fn fixture_pr_file_diff_deserializes() {
     let files: Vec<FileDiff> = serde_json::from_str(PR_FILE_DIFF_JSON).expect("file diff json");
     assert_eq!(files.len(), 2);
-    assert_eq!(files[0].filename, "pom.xml");
+    assert_eq!(files[0].path, "pom.xml");
     assert_eq!(files[0].additions.as_deref(), Some("5"));
     assert_eq!(files[0].deletions.as_deref(), Some("6"));
     assert!(files[0].patch.as_ref().expect("patch").contains("3.5.15"));
-    assert_eq!(files[1].filename, "logo.png");
+    assert_eq!(files[1].path, "logo.png");
     assert!(files[1].patch.is_none());
 }
 

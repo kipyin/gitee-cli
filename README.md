@@ -198,7 +198,7 @@ gitee --host git.example.com ...           # self-hosted Gitee
 |------------|-------------|
 | `list` | List PRs (`--state`, `--author`, `--limit`) |
 | `status` | Open PRs relevant to you: created, assigned, awaiting your test (`--limit`) |
-| `view <n>` | Show pull request details (`--web` opens in browser) |
+| `view <n>` | Show pull request details (`--web` opens in browser); `--json` includes a `files` array with per-file `path` / `additions` / `deletions` / `changes` |
 | `diff <n>` | Show pull request diff |
 | `checkout <n>` | Fetch and check out a pull request locally |
 | `create` | Open a PR (`--title` / `--fill`, or interactive on a TTY; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`) |

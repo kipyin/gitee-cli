@@ -60,7 +60,9 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 let url = crate::web::pull_url(&ctx.host, repo, number);
                 return crate::web::open_or_print(&url);
             }
-            let pr = ctx.client.pulls(repo).get(number)?;
+            let mut pr = ctx.client.pulls(repo).get(number)?;
+            let files = ctx.client.pulls(repo).files(number)?;
+            pr.files = Some(files);
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
         }
