@@ -280,12 +280,6 @@ fn color() -> bool {
     std::env::var_os("NO_COLOR").is_none() && std::io::stdout().is_terminal()
 }
 
-/// Whether ANSI color is allowed on the Update notice stream (stderr).
-/// Gates on `NO_COLOR` and stderr being a TTY — not stdout.
-pub fn notice_color_enabled() -> bool {
-    std::env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal()
-}
-
 fn paint(code: &str, s: &str) -> String {
     paint_if(color(), code, s)
 }
@@ -319,16 +313,6 @@ pub fn bold(s: &str) -> String {
 }
 pub fn dim(s: &str) -> String {
     paint("2", s)
-}
-
-/// Yellow gated by an explicit enable flag (e.g. notice-stream coloring).
-pub fn yellow_if(enabled: bool, s: &str) -> String {
-    paint_if(enabled, "33", s)
-}
-
-/// Cyan gated by an explicit enable flag (e.g. notice-stream coloring).
-pub fn cyan_if(enabled: bool, s: &str) -> String {
-    paint_if(enabled, "36", s)
 }
 
 /// Style a PR state. `merged` flags merged-ness even when state == closed.

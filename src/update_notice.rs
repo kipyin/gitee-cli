@@ -1,6 +1,6 @@
 //! Background GitHub Releases check and stderr Update notice tip.
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -50,7 +50,7 @@ impl UpdateNotice {
             current,
             &info.version,
             &info.url,
-            crate::out::notice_color_enabled(),
+            tip_color_enabled(),
         );
         let _ = write!(w, "{tip}");
     }
@@ -105,17 +105,29 @@ pub fn is_strictly_newer(remote_tag: &str, current: &str) -> bool {
     remote > local
 }
 
+/// Whether ANSI color is allowed for the Update notice tip (stderr stream).
+fn tip_color_enabled() -> bool {
+    std::env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal()
+}
+
+fn paint_if(enabled: bool, code: &str, s: &str) -> String {
+    if enabled {
+        format!("\x1b[{code}m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
+}
+
 /// Format the Update notice tip (leading/trailing blank lines).
 /// When `color` is true, label + URL are yellow and version numbers cyan.
 pub fn format_tip(current: &str, latest: &str, url: &str, color: bool) -> String {
-    use crate::out::{cyan_if, yellow_if};
     format!(
         "\n{}{}{}{}\n{}\n\n",
-        yellow_if(color, "A new release of gitee is available: "),
-        cyan_if(color, current),
-        yellow_if(color, " → "),
-        cyan_if(color, latest),
-        yellow_if(color, url),
+        paint_if(color, "33", "A new release of gitee is available: "),
+        paint_if(color, "36", current),
+        paint_if(color, "33", " → "),
+        paint_if(color, "36", latest),
+        paint_if(color, "33", url),
     )
 }
 
