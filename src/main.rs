@@ -30,9 +30,23 @@ fn main() {
 
     let json = cli.json.is_some();
     let debug = cli.debug;
-    if let Err(e) = gitee_cli_rs::cmd::run(cli) {
-        print_error(&e, json, debug);
-        std::process::exit(e.exit_code());
+
+    // Start Update notice check before command work; print only on success.
+    let update_notice = gitee_cli_rs::update_notice::UpdateNotice::spawn(
+        env!("CARGO_PKG_VERSION"),
+        gitee_cli_rs::update_notice::GITHUB_API_BASE,
+    );
+
+    match gitee_cli_rs::cmd::run(cli) {
+        Ok(()) => {
+            let mut stderr = std::io::stderr().lock();
+            update_notice.finish_on_success(&mut stderr);
+        }
+        Err(e) => {
+            drop(update_notice);
+            print_error(&e, json, debug);
+            std::process::exit(e.exit_code());
+        }
     }
 }
 

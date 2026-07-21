@@ -754,7 +754,7 @@ mod tests {
 
     #[test]
     fn parse_build_kind_accepts_known_values() {
-        assert!(matches!(parse_build_kind(None).unwrap(), None));
+        assert!(parse_build_kind(None).unwrap().is_none());
         assert!(matches!(parse_build_kind(Some("cargo")).unwrap(), Some(BuildKind::Cargo)));
         assert!(matches!(parse_build_kind(Some("npm")).unwrap(), Some(BuildKind::Npm)));
         assert!(parse_build_kind(Some("go")).is_err());
