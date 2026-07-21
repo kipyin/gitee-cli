@@ -538,6 +538,12 @@ Gitee OpenAPI v5 does not expose everything GitHub CLI can reach. These are
 
 Also omitted after swagger verification: `repo sync`, `pr update-branch`.
 
+An MCP server is intentionally **not** built into this CLI — Gitee already
+ships an official one ([`mcp-gitee`](https://gitee.com/oschina/mcp-gitee), Go).
+For AI agent runtimes that prefer native MCP integration, use the official
+server. For shell-out / CI patterns, see
+[Scripting gitee-cli for agents](#scripting-gitee-cli-for-agents) below.
+
 ## Gitee-specific (Gitee 特色)
 
 Features beyond GitHub CLI parity:
@@ -550,6 +556,26 @@ Features beyond GitHub CLI parity:
 | `pr` assignees **and** testers | shipped | dual review/test roles on create/edit/status |
 | `repo star` / `watch` | shipped | `star` / `unstar` / `watch` / `unwatch` |
 | `webhook` | shipped | list / create / delete repository hooks |
+
+## Scripting gitee-cli for agents
+
+AI agents and CI scripts can drive this CLI directly — no MCP required.
+
+- **Native MCP integration** (for agent runtimes like Claude Code, Cursor,
+  opencode): use Gitee's official
+  [`mcp-gitee`](https://gitee.com/oschina/mcp-gitee) (Go). We do not ship our
+  own MCP server; the official one is active and covers the read/write surface.
+- **Shell-out patterns** (for agents that exec commands, and for CI): every
+  verb supports `--json` + `--jq` for structured output, stable exit codes
+  (0–6), structured JSON errors on stderr in `--json` mode, idempotent
+  mutating verbs (already-closed / already-merged is exit 0), and `--preview`
+  to dry-run a mutation. See [`docs/scripting.md`](docs/scripting.md) for the
+  PR→issue closure loop, batch operations, CI status gates, and error
+  handling by exit code.
+- **Extensions as agent tools**: a MCP server can also be installed as a
+  `gitee` extension via `gitee extension install <owner/repo> --build cargo`
+  (see [Extensions](#extensions) above) if a Rust implementation you trust
+  ever emerges.
 
 ## License
 
