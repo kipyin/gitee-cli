@@ -161,6 +161,7 @@ impl Client {
                 }
             }
             404 => GiteeError::NotFound(path.to_string()),
+            429 => GiteeError::RateLimited(message),
             _ => GiteeError::Api {
                 status: code,
                 message,
@@ -174,6 +175,16 @@ impl Client {
         }
     }
 
+    /// Map a reqwest error to a typed GiteeError, recognizing connect/timeout
+    /// failures as `Network` so they map to exit code 6 instead of generic 1.
+    fn map_http_err(&self, e: reqwest::Error) -> GiteeError {
+        if e.is_connect() || e.is_timeout() {
+            GiteeError::Network(e.to_string())
+        } else {
+            GiteeError::Http(e)
+        }
+    }
+
     pub fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, &str)]) -> Result<T> {
         self.trace("GET", path);
         let resp = self
@@ -181,7 +192,8 @@ impl Client {
             .get(self.full(path))
             .header("Authorization", self.auth())
             .query(query)
-            .send()?;
+            .send()
+            .map_err(|e| self.map_http_err(e))?;
         self.check(resp, "GET", path)?
             .json()
             .map_err(GiteeError::Http)
@@ -237,7 +249,8 @@ impl Client {
             "PATCH" => self.http.patch(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req.header("Authorization", self.auth()).form(form).send()?;
+        let resp = req.header("Authorization", self.auth()).form(form).send()
+            .map_err(|e| self.map_http_err(e))?;
         self.check(resp, method, path)?
             .json()
             .map_err(GiteeError::Http)
@@ -251,7 +264,8 @@ impl Client {
             .patch(self.full(path))
             .header("Authorization", self.auth())
             .json(body)
-            .send()?;
+            .send()
+            .map_err(|e| self.map_http_err(e))?;
         self.check(resp, "PATCH", path)?
             .json()
             .map_err(GiteeError::Http)
@@ -395,7 +409,8 @@ impl Client {
             "DELETE" => self.http.delete(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req.header("Authorization", self.auth()).form(form).send()?;
+        let resp = req.header("Authorization", self.auth()).form(form).send()
+            .map_err(|e| self.map_http_err(e))?;
         self.check(resp, method, path).map(|_| ())
     }
 

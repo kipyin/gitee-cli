@@ -33,6 +33,9 @@ gitee repo view      # repo info
 
 That's it. Everything below is detail.
 
+> **Scripting gitee-cli?** See [docs/scripting.md](docs/scripting.md) for exit
+> codes, `--preview`, idempotent mutating verbs, and CI/agent patterns.
+
 ## Install
 
 | Method | Command | Notes |
@@ -200,7 +203,7 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `checkout <n>` | Fetch and check out a pull request locally |
 | `create` | Open a PR (`--title` / `--fill`, or interactive on a TTY; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--tester`, `--label`, `--milestone`) |
-| `merge <n>` | Merge (`--squash`, `--rebase`, `--no-close-issue`) |
+| `merge <n>` | Merge (`--squash`, `--rebase`, `--no-close-issue`) — **idempotent**: already-merged exits `0` |
 | `comment <n>` | Add a comment (`-m/--body`) |
 | `approve <n>` | Approve / 审查通过 (`--force`) |
 | `test <n>` | Mark tested / 测试通过 (`--force`) — Gitee-specific |
@@ -219,7 +222,7 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `view <n>` | Show issue details (`--web`; Gitee issue idents are strings, e.g. `I88`) |
 | `create` | Create (`--title` or interactive on a TTY; `--body`, `--assignee`, `--labels`, `--milestone`, `--security-hole`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`, `--state`) |
-| `close <n>` / `reopen <n>` | Change state (`open`/`closed` shortcuts; prefer `edit --state` for `progressing`/`rejected`) |
+| `close <n>` / `reopen <n>` | Change state — **idempotent**: already-closed/open exits `0` (`open`/`closed` shortcuts; prefer `edit --state` for `progressing`/`rejected`) |
 | `link <n> <pr>` | Link an issue to a pull request |
 | `comment <n>` | Add a comment (`-m/--body`) |
 
@@ -259,7 +262,7 @@ sections are omitted — Gitee v5 has no user-level pulls endpoint.
 | `upload <tag> <files…>` | Attach files to an existing release |
 | `download <tag>` | Download assets (`--dir`, `--pattern`) |
 | `edit <tag>` | Edit (`--name`, `--notes`, `--prerelease`) |
-| `delete <tag>` | Delete (`--yes` to skip confirmation) |
+| `delete <tag>` | Delete (`--yes` to skip confirmation) — deleting a missing release exits `4` |
 
 </details>
 
@@ -287,9 +290,9 @@ sections are omitted — Gitee v5 has no user-level pulls endpoint.
 | Subcommand | Description |
 |------------|-------------|
 | `list` | List labels (`--limit`) |
-| `create <name>` | Create (`--color` required, hex without `#`) |
+| `create <name>` | Create (`--color` required, hex without `#`) — **idempotent**: same name + same color exits `0`; same name + different color exits `1` with `gitee label edit <name> --color <c>` hint |
 | `edit <name>` | Edit (`--name`, `--color`) |
-| `delete <name>` | Delete (`--yes` to skip confirmation) |
+| `delete <name>` | Delete (`--yes` to skip confirmation) — deleting a missing label exits `4` |
 
 </details>
 
@@ -451,6 +454,27 @@ Unknown top-level commands also exec `gitee-<name>` from `PATH` (same model as `
 | `--json [fields]` | JSON output; `--json number,title` projects fields |
 | `--jq <expr>` | jq expression on `--json` output (requires `--json`) |
 | `--debug` | Log HTTP requests/responses to stderr |
+| `--preview` | Print what would happen and exit 0 (no HTTP call); mutating verbs only |
+
+## Exit codes
+
+`gitee` exits with a stable, documented code so scripts can switch on `$?`
+instead of parsing stderr. See [docs/scripting.md](docs/scripting.md) for
+the full table and patterns.
+
+| Code | Meaning |
+|------|---------|
+| `0` | success (including idempotent no-ops) |
+| `1` | generic failure |
+| `2` | usage error (missing flag, bad arg, non-TTY prompt attempted) |
+| `3` | auth error (no token / invalid / expired) |
+| `4` | not found (repo / issue / PR / release) |
+| `5` | rate limited (HTTP 429) |
+| `6` | network error (host unreachable) |
+
+When `--json` is set, errors print to stderr as
+`{"code":"not_found","message":"…","exit_code":4}` — see
+[docs/scripting.md](docs/scripting.md).
 
 ## Repository resolution
 

@@ -1,5 +1,6 @@
 use gitee_cli_rs::api::client::Client;
 use gitee_cli_rs::api::pulls::{CreatePr, EditPr, PrFilter};
+use gitee_cli_rs::api::StateChange;
 use gitee_cli_rs::models::{MergeMethod, PrState};
 use gitee_cli_rs::repo::Repo;
 
@@ -291,6 +292,118 @@ fn set_state_patches_form_state_closed() {
 
     mock.assert();
     assert_eq!(pr.number, 12);
+}
+
+/// Idempotent close: GET returns an open PR → PATCH fires → Changed.
+#[test]
+fn set_state_idempotent_open_pr_patches_and_returns_changed() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let patch_path = "/repos/oschina/gitee-cli/pulls/12";
+
+    server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+    let patch = server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded("state".into(), "closed".into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .set_state_idempotent(12, PrState::Closed)
+        .expect("idempotent close should succeed");
+
+    patch.assert();
+    assert!(matches!(change, StateChange::Changed(_)));
+}
+
+/// Idempotent close: GET returns an already-closed PR → no PATCH → Already.
+#[test]
+fn set_state_idempotent_already_closed_skips_patch() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let closed_body = r#"{"number":12,"title":"x","state":"closed","html_url":"https://gitee.com/x","head":{"ref":"f"},"base":{"ref":"master"}}"#;
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(closed_body)
+        .create();
+    let patch = server
+        .mock("PATCH", api_path(get_path).as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .set_state_idempotent(12, PrState::Closed)
+        .expect("idempotent close should succeed");
+
+    get.assert();
+    patch.assert();
+    assert!(matches!(change, StateChange::Already(_)));
+}
+
+/// Idempotent merge: GET returns a merged PR → no PUT → Already.
+#[test]
+fn merge_idempotent_already_merged_skips_put() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let merged_body = r#"{"number":12,"title":"x","state":"merged","html_url":"https://gitee.com/x","head":{"ref":"f"},"base":{"ref":"master"}}"#;
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(merged_body)
+        .create();
+    let put = server
+        .mock("PUT", api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .merge_idempotent(12, MergeMethod::Merge, true)
+        .expect("idempotent merge should succeed");
+
+    get.assert();
+    put.assert();
+    assert!(matches!(change, StateChange::Already(())));
+}
+
+/// Idempotent merge: GET returns an open PR → PUT fires → Changed.
+#[test]
+fn merge_idempotent_open_pr_puts_and_returns_changed() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+
+    server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+    let put = server
+        .mock("PUT", api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str())
+        .with_status(200)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .merge_idempotent(12, MergeMethod::Squash, false)
+        .expect("idempotent merge should succeed");
+
+    put.assert();
+    assert!(matches!(change, StateChange::Changed(())));
 }
 
 #[test]

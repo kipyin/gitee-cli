@@ -1,5 +1,6 @@
 use gitee_cli_rs::api::client::Client;
 use gitee_cli_rs::api::issues::{CreateIssue, EditIssue};
+use gitee_cli_rs::api::StateChange;
 use gitee_cli_rs::error::GiteeError;
 use gitee_cli_rs::models::IssueState;
 use gitee_cli_rs::repo::Repo;
@@ -485,4 +486,73 @@ fn list_sends_creator_filter() {
     mock.assert();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].number, "88");
+}
+
+/// Idempotency: closing an already-closed issue short-circuits (no PATCH).
+#[test]
+fn set_state_idempotent_already_closed_skips_patch() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/issues/88";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"number":"88","title":"Done","state":"closed","html_url":"https://gitee.com/x"}"#,
+        )
+        .create();
+
+    let patch = server
+        .mock("PATCH", api_path("/repos/oschina/issues/88").as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .issues(&test_repo())
+        .set_state_idempotent("88", IssueState::Closed)
+        .expect("idempotent close should succeed");
+
+    get.assert();
+    patch.assert();
+    match change {
+        StateChange::Already(issue) => assert_eq!(issue.state, IssueState::Closed),
+        other => panic!("expected Already, got {other:?}"),
+    }
+}
+
+/// Idempotency: closing an open issue PATCHes and returns Changed.
+#[test]
+fn set_state_idempotent_open_issue_patches_and_returns_changed() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/issues/88";
+    let patch_path = "/repos/oschina/issues/88";
+
+    server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(ISSUE_JSON)
+        .create();
+
+    let patch = server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::Regex(r#""state"\s*:\s*"closed""#.into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"number":"88","title":"Login fails with expired token","state":"closed","html_url":"https://gitee.com/x"}"#,
+        )
+        .create();
+
+    let change = client(&server)
+        .issues(&test_repo())
+        .set_state_idempotent("88", IssueState::Closed)
+        .expect("idempotent close should succeed");
+
+    patch.assert();
+    match change {
+        StateChange::Changed(issue) => assert_eq!(issue.state, IssueState::Closed),
+        other => panic!("expected Changed, got {other:?}"),
+    }
 }

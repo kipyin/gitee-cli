@@ -1,5 +1,6 @@
 use gitee_cli_rs::api::client::Client;
 use gitee_cli_rs::api::labels::{CreateLabel, EditLabel};
+use gitee_cli_rs::api::StateChange;
 use gitee_cli_rs::repo::Repo;
 
 const LABEL_JSON: &str = r#"{"id":12345,"name":"bug","color":"ff0000"}"#;
@@ -153,4 +154,110 @@ fn delete_hits_labels_path() {
         .expect("delete should succeed");
 
     mock.assert();
+}
+
+/// Idempotent create: label doesn't exist → POST → Changed.
+#[test]
+fn create_idempotent_new_label_posts_and_returns_changed() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/labels";
+    let create_path = "/repos/oschina/gitee-cli/labels";
+
+    server
+        .mock("GET", api_path(list_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body("[]")
+        .create();
+    let post = server
+        .mock("POST", api_path(create_path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("name".into(), "bug".into()),
+            mockito::Matcher::UrlEncoded("color".into(), "ff0000".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(LABEL_JSON)
+        .create();
+
+    let change = client(&server)
+        .labels(&test_repo())
+        .create_idempotent(&CreateLabel {
+            name: "bug",
+            color: "ff0000",
+        })
+        .expect("idempotent create should succeed");
+
+    post.assert();
+    match change {
+        StateChange::Changed(label) => {
+            assert_eq!(label.name, "bug");
+        }
+        other => panic!("expected Changed, got {other:?}"),
+    }
+}
+
+/// Idempotent create: same-name same-color → no POST → Already.
+#[test]
+fn create_idempotent_same_name_same_color_skips_post() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/labels";
+
+    let get = server
+        .mock("GET", api_path(list_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(format!("[{LABEL_JSON}]"))
+        .create();
+    let post = server
+        .mock("POST", api_path(list_path).as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .labels(&test_repo())
+        .create_idempotent(&CreateLabel {
+            name: "bug",
+            color: "#FF0000",
+        })
+        .expect("idempotent create should succeed");
+
+    get.assert();
+    post.assert();
+    match change {
+        StateChange::Already(label) => assert_eq!(label.name, "bug"),
+        other => panic!("expected Already, got {other:?}"),
+    }
+}
+
+/// Idempotent create: same-name different color → Usage error with hint.
+#[test]
+fn create_idempotent_same_name_different_color_errors_with_hint() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/labels";
+
+    server
+        .mock("GET", api_path(list_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(format!("[{LABEL_JSON}]"))
+        .create();
+    server
+        .mock("POST", api_path(list_path).as_str())
+        .expect(0)
+        .create();
+
+    let err = client(&server)
+        .labels(&test_repo())
+        .create_idempotent(&CreateLabel {
+            name: "bug",
+            color: "00ff00",
+        })
+        .expect_err("different color should error");
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("gitee label edit bug --color"),
+        "expected edit hint, got: {msg}"
+    );
 }

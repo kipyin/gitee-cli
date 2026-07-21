@@ -25,6 +25,11 @@ pub struct Cli {
     /// Log HTTP requests and responses to stderr.
     #[arg(long, global = true)]
     pub debug: bool,
+    /// Print what would happen, then exit 0. No HTTP call is made. Works on
+    /// mutating verbs (issue/pr create/close/reopen/merge, label create,
+    /// release create/edit/delete, repo delete, gist delete, etc.).
+    #[arg(long, global = true)]
+    pub preview: bool,
     #[command(subcommand)]
     pub cmd: Command,
 }

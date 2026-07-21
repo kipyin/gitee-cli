@@ -13,6 +13,14 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
             let token = match token {
                 Some(t) => t,
                 None => {
+                    // Never hang in non-interactive mode: if stdin is not a TTY,
+                    // the prompt would read nothing (or block on a pipe). Demand
+                    // an explicit `--token` (or `GITEE_TOKEN`) instead.
+                    if !stdin_is_tty() {
+                        return Err(GiteeError::Usage(
+                            "auth login needs --token (or set GITEE_TOKEN) — stdin is not a terminal".into(),
+                        ));
+                    }
                     eprint!("Paste your Gitee personal access token: ");
                     io::stdout().flush().ok();
                     let mut line = String::new();
@@ -84,6 +92,12 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
         }
         AuthCmd::GitCredential(action) => git_credential(host, action),
     }
+}
+
+/// True when stdin is a terminal (so an interactive prompt won't hang).
+fn stdin_is_tty() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal()
 }
 
 fn status(host: &str) -> Result<()> {
@@ -292,6 +306,24 @@ mod tests {
         assert_eq!(
             map.get("path").map(String::as_str),
             Some("oschina/gitee-cli")
+        );
+    }
+
+    /// `auth login` without `--token` and no TTY on stdin must error with a
+    /// message naming `--token`, not hang waiting for input. Cargo's test
+    /// harness pipes stdin from /dev/null, so `stdin_is_tty()` is false here.
+    #[test]
+    fn auth_login_no_token_no_tty_errors_with_hint() {
+        let _env = crate::config::test_config_env_lock();
+        let err = execute(
+            AuthCmd::Login { token: None, force: false },
+            "gitee.test",
+        )
+        .expect_err("non-TTY login without token must error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--token"),
+            "expected --token hint, got: {msg}"
         );
     }
 

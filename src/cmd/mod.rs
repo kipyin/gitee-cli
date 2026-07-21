@@ -37,10 +37,25 @@ pub struct Ctx {
     pub client: Client,
     pub out: Output,
     pub host: String,
+    /// True when `--preview` was passed: mutating verbs print intent and exit 0
+    /// without making the mutating HTTP call.
+    pub preview: bool,
     repo_arg: Option<String>,
     remote_arg: Option<String>,
     repo: OnceCell<Repo>,
     me: OnceCell<UserBasic>,
+}
+
+/// Format a `--preview` intent line consistently. Mutating verbs call this
+/// before doing any work when `ctx.preview` is set, then return `Ok(())`.
+pub fn preview_line(action: &str, details: &[(&str, &str)]) -> String {
+    let mut s = format!("would {action}");
+    if !details.is_empty() {
+        s.push_str(": ");
+        let parts: Vec<String> = details.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        s.push_str(&parts.join(", "));
+    }
+    s
 }
 
 impl Ctx {
@@ -256,6 +271,7 @@ fn build_inner(cli: &Cli, require_auth: bool) -> Result<Ctx> {
             jq: cli.jq.clone(),
         },
         host: cli.host.clone(),
+        preview: cli.preview,
         repo_arg: cli.repo.clone(),
         remote_arg: cli.remote.clone(),
         repo: OnceCell::new(),
@@ -340,6 +356,18 @@ mod flag_tests {
         assert_eq!(super::join_flags(&[]), None);
         assert_eq!(super::join_flags(&["  ".to_string()]), None);
     }
+
+    #[test]
+    fn preview_line_includes_action_and_keyed_details() {
+        let line = super::preview_line("close issue I88", &[("repo", "oschina/gitee-cli")]);
+        assert_eq!(line, "would close issue I88: repo=oschina/gitee-cli");
+    }
+
+    #[test]
+    fn preview_line_omits_details_when_empty() {
+        let line = super::preview_line("delete repo", &[]);
+        assert_eq!(line, "would delete repo");
+    }
 }
 
 
@@ -386,6 +414,106 @@ mod create_title_tests {
         };
         let err = pr::execute(&ctx, cmd).unwrap_err();
         assert!(err.to_string().contains("pr create needs --title"));
+        if let Some(t) = prev_token {
+            std::env::set_var("GITEE_TOKEN", t);
+        } else {
+            std::env::remove_var("GITEE_TOKEN");
+        }
+    }
+
+    /// `--preview` short-circuits issue create before any HTTP call: with
+    /// `--repo` supplied, `ctx.repo()` resolves without git/HTTP, and the
+    /// handler returns Ok after printing intent.
+    #[test]
+    fn issue_create_preview_prints_intent_without_http() {
+        let _env = crate::config::test_config_env_lock();
+        let prev_token = std::env::var_os("GITEE_TOKEN");
+        std::env::set_var("GITEE_TOKEN", "test-token");
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "--repo",
+            "oschina/gitee-cli",
+            "--preview",
+            "issue",
+            "create",
+            "--title",
+            "T",
+        ])
+        .unwrap();
+        assert!(cli.preview);
+        let ctx = build_inner(&cli, true).unwrap();
+        let Command::Issue(cmd) = cli.cmd else {
+            panic!("expected issue command");
+        };
+        let IssueCmd::Create { .. } = cmd else {
+            panic!("expected issue create");
+        };
+        // No HTTP server is running; if --preview failed to short-circuit,
+        // execute would error trying to reach the real gitee.com.
+        issue::execute(&ctx, cmd).expect("preview should short-circuit without HTTP");
+        if let Some(t) = prev_token {
+            std::env::set_var("GITEE_TOKEN", t);
+        } else {
+            std::env::remove_var("GITEE_TOKEN");
+        }
+    }
+
+    #[test]
+    fn issue_close_preview_prints_intent_without_http() {
+        let _env = crate::config::test_config_env_lock();
+        let prev_token = std::env::var_os("GITEE_TOKEN");
+        std::env::set_var("GITEE_TOKEN", "test-token");
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "--repo",
+            "oschina/gitee-cli",
+            "--preview",
+            "issue",
+            "close",
+            "I88",
+        ])
+        .unwrap();
+        let ctx = build_inner(&cli, true).unwrap();
+        let Command::Issue(cmd) = cli.cmd else {
+            panic!("expected issue command");
+        };
+        let IssueCmd::Close { .. } = cmd else {
+            panic!("expected issue close");
+        };
+        issue::execute(&ctx, cmd).expect("preview should short-circuit without HTTP");
+        if let Some(t) = prev_token {
+            std::env::set_var("GITEE_TOKEN", t);
+        } else {
+            std::env::remove_var("GITEE_TOKEN");
+        }
+    }
+
+    #[test]
+    fn pr_create_preview_prints_intent_without_http() {
+        let _env = crate::config::test_config_env_lock();
+        let prev_token = std::env::var_os("GITEE_TOKEN");
+        std::env::set_var("GITEE_TOKEN", "test-token");
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "--repo",
+            "oschina/gitee-cli",
+            "--preview",
+            "pr",
+            "create",
+            "--title",
+            "T",
+            "--head",
+            "y",
+        ])
+        .unwrap();
+        let ctx = build_inner(&cli, true).unwrap();
+        let Command::Pr(cmd) = cli.cmd else {
+            panic!("expected pr command");
+        };
+        let PrCmd::Create { .. } = cmd else {
+            panic!("expected pr create");
+        };
+        pr::execute(&ctx, cmd).expect("preview should short-circuit without HTTP");
         if let Some(t) = prev_token {
             std::env::set_var("GITEE_TOKEN", t);
         } else {

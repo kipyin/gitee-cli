@@ -1,4 +1,5 @@
 use super::client::Client;
+use crate::api::StateChange;
 use crate::error::Result;
 use crate::models::{Comment, FileDiff, MergeMethod, PrState, PullRequest};
 use crate::repo::Repo;
@@ -138,6 +139,22 @@ impl Pulls<'_> {
             .put_ok(&format!("/repos/{o}/{r}/pulls/{number}/merge"), &form)
     }
 
+    /// Idempotent merge: if the PR is already merged, return `Already` without
+    /// calling the merge endpoint. Otherwise merge and return `Changed`.
+    pub fn merge_idempotent(
+        &self,
+        number: i64,
+        method: MergeMethod,
+        close_related_issue: bool,
+    ) -> Result<StateChange<()>> {
+        let cur: PullRequest = self.get(number)?;
+        if cur.state == PrState::Merged {
+            return Ok(StateChange::Already(()));
+        }
+        self.merge(number, method, close_related_issue)?;
+        Ok(StateChange::Changed(()))
+    }
+
     pub fn comment(&self, number: i64, body: &str) -> Result<Comment> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
@@ -181,6 +198,21 @@ impl Pulls<'_> {
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)
+    }
+
+    /// Idempotent state change: GET first; if already in `target`, return
+    /// `Already` without PATCHing. Otherwise PATCH and return `Changed`.
+    pub fn set_state_idempotent(
+        &self,
+        number: i64,
+        target: PrState,
+    ) -> Result<StateChange<PullRequest>> {
+        let cur: PullRequest = self.get(number)?;
+        if cur.state == target {
+            return Ok(StateChange::Already(cur));
+        }
+        let pr = self.set_state(number, target)?;
+        Ok(StateChange::Changed(pr))
     }
 
     /// PATCH metadata. Only `Some` fields become form entries.

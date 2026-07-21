@@ -110,6 +110,29 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             milestone,
             close_issue,
         } => {
+            // `--preview` short-circuits before any git/API work: print intent and exit 0.
+            if ctx.preview {
+                let repo = ctx.repo()?;
+                let head = head.clone().unwrap_or_else(|| "<current-branch>".into());
+                let base = base.clone().unwrap_or_else(|| repo.name.clone() + " default branch");
+                let title = title.clone().unwrap_or_default();
+                let body = body.clone().unwrap_or_default();
+                let repo_str = format!("{}/{}", repo.owner, repo.name);
+                let mut details: Vec<(&str, &str)> = vec![
+                    ("repo", &repo_str),
+                    ("title", &title),
+                    ("head", &head),
+                    ("base", &base),
+                ];
+                if !body.is_empty() {
+                    details.push(("body", &body));
+                }
+                if fill {
+                    details.push(("fill", "true"));
+                }
+                println!("{}", super::preview_line("create pull request", &details));
+                return Ok(());
+            }
             if super::interactive::should_run_interactive_create(title.as_deref(), fill)
                 && !super::interactive::stdin_is_tty()
             {
@@ -196,11 +219,29 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             } else {
                 MergeMethod::Merge
             };
-            ctx.client
+            if ctx.preview {
+                println!("{}", super::preview_line(
+                    &format!("merge pull request !{number} ({})", method.as_str()),
+                    &[
+                        ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                        ("close_related_issue", if no_close_issue { "false" } else { "true" }),
+                    ],
+                ));
+                return Ok(());
+            }
+            let change = ctx
+                .client
                 .pulls(repo)
-                .merge(number, method, !no_close_issue)?;
+                .merge_idempotent(number, method, !no_close_issue)?;
             let mut out = std::io::stdout().lock();
-            writeln!(out, "Merged pull request !{number}")?;
+            match change {
+                crate::api::StateChange::Changed(()) => {
+                    writeln!(out, "Merged pull request !{number}")?;
+                }
+                crate::api::StateChange::Already(()) => {
+                    writeln!(out, "Pull request !{number} already merged")?;
+                }
+            }
         }
         PrCmd::Comment { number, body } => {
             let repo = ctx.repo()?;
@@ -229,15 +270,33 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
         }
         PrCmd::Close { number } => {
             let repo = ctx.repo()?;
-            let pr = ctx.client.pulls(repo).set_state(number, PrState::Closed)?;
-            let mut out = std::io::stdout().lock();
-            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
+            if ctx.preview {
+                println!("{}", super::preview_line(
+                    &format!("close pull request !{number}"),
+                    &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                ));
+                return Ok(());
+            }
+            let change = ctx
+                .client
+                .pulls(repo)
+                .set_state_idempotent(number, PrState::Closed)?;
+            render_idempotent_pr(ctx, change, "closed", number)?;
         }
         PrCmd::Reopen { number } => {
             let repo = ctx.repo()?;
-            let pr = ctx.client.pulls(repo).set_state(number, PrState::Open)?;
-            let mut out = std::io::stdout().lock();
-            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
+            if ctx.preview {
+                println!("{}", super::preview_line(
+                    &format!("reopen pull request !{number}"),
+                    &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                ));
+                return Ok(());
+            }
+            let change = ctx
+                .client
+                .pulls(repo)
+                .set_state_idempotent(number, PrState::Open)?;
+            render_idempotent_pr(ctx, change, "open", number)?;
         }
         PrCmd::Link { number, issue } => {
             let repo = ctx.repo()?;
@@ -382,6 +441,37 @@ fn current_branch() -> Result<String> {
         ));
     }
     Ok(b)
+}
+
+/// Render an idempotent PR close/reopen result. On `Already`, print a human
+/// "already <state>" line (or a structured `--json` envelope). On `Changed`,
+/// render the updated PR through the normal renderer.
+fn render_idempotent_pr(
+    ctx: &Ctx,
+    change: crate::api::StateChange<crate::models::PullRequest>,
+    state_word: &str,
+    number: i64,
+) -> Result<()> {
+    use crate::api::StateChange;
+    let mut out = std::io::stdout().lock();
+    match change {
+        StateChange::Changed(pr) => {
+            ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
+        }
+        StateChange::Already(pr) => {
+            if ctx.out.json.is_some() {
+                let envelope = serde_json::json!({
+                    "number": pr.number,
+                    "state": pr.state.as_str(),
+                    "message": format!("already {state_word}"),
+                });
+                writeln!(out, "{}", serde_json::to_string_pretty(&envelope).unwrap())?;
+            } else {
+                writeln!(out, "Pull request !{number} already {state_word}")?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

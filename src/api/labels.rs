@@ -1,4 +1,5 @@
 use super::client::Client;
+use crate::api::StateChange;
 use crate::error::{GiteeError, Result};
 use crate::models::Label;
 use crate::repo::Repo;
@@ -30,6 +31,15 @@ pub fn normalize_color(s: &str) -> Result<String> {
     Ok(hex.to_ascii_lowercase())
 }
 
+/// Compare two colors, treating missing colors as matching the requested
+/// one (Gitee sometimes omits `color` on existing labels).
+fn colors_match(existing: Option<&str>, requested: &str) -> bool {
+    match existing {
+        Some(c) => c.eq_ignore_ascii_case(requested),
+        None => true,
+    }
+}
+
 impl Labels<'_> {
     pub(crate) fn new<'a>(client: &'a Client, repo: &'a Repo) -> Labels<'a> {
         Labels { client, repo }
@@ -56,6 +66,35 @@ impl Labels<'_> {
         let form = [("name", req.name), ("color", color.as_str())];
         self.client
             .post(&format!("/repos/{o}/{r}/labels"), &form)
+    }
+
+    /// Idempotent create: list existing labels first. If a label with the
+    /// same name already exists with the requested color, return
+    /// `StateChange::Already(label)` and exit 0. If it exists with a
+    /// different color, return a Usage error suggesting `label edit`. If it
+    /// doesn't exist, create it and return `StateChange::Changed(label)`.
+    pub fn create_idempotent(&self, req: &CreateLabel<'_>) -> Result<StateChange<Label>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let requested = normalize_color(req.color)?;
+        let existing: Vec<Label> = self.client.get(&format!("/repos/{o}/{r}/labels"), &[])?;
+        if let Some(found) = existing.iter().find(|l| l.name == req.name) {
+            if colors_match(found.color.as_deref(), &requested) {
+                return Ok(StateChange::Already(found.clone()));
+            }
+            return Err(GiteeError::Usage(format!(
+                "label '{}' already exists with color '{}'. Use `gitee label edit {} --color {}` to change it.",
+                req.name,
+                found.color.as_deref().unwrap_or("(none)"),
+                req.name,
+                requested,
+            )));
+        }
+        let form = [("name", req.name), ("color", requested.as_str())];
+        let label: Label = self
+            .client
+            .post(&format!("/repos/{o}/{r}/labels"), &form)?;
+        Ok(StateChange::Changed(label))
     }
 
     pub fn edit(&self, original_name: &str, req: &EditLabel<'_>) -> Result<Label> {

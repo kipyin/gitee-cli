@@ -1,4 +1,5 @@
 use super::client::Client;
+use crate::api::StateChange;
 use crate::error::{GiteeError, Result};
 use crate::models::{Comment, Issue, IssueState};
 use crate::repo::Repo;
@@ -142,6 +143,34 @@ impl Issues<'_> {
         self.client
             .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
             .map_err(|e| map_issue_state_err(e, true, o, number))
+    }
+
+    /// Idempotent state change: GETs the current issue first; if it is already
+    /// in `target`, returns `StateChange::Already(issue)` without a PATCH.
+    /// Otherwise applies the PATCH and returns `StateChange::Changed(issue)`.
+    pub fn set_state_idempotent(
+        &self,
+        number: &str,
+        target: IssueState,
+    ) -> Result<StateChange<Issue>> {
+        let o = self.repo.owner.as_str();
+        let name = &self.repo.name;
+        let cur: Issue = self
+            .client
+            .get(&format!("/repos/{o}/{name}/issues/{number}"), &[])?;
+        if cur.state == target {
+            return Ok(StateChange::Already(cur));
+        }
+        let body = serde_json::json!({
+            "repo": self.repo.name,
+            "title": cur.title,
+            "state": target.as_str(),
+        });
+        let issue: Issue = self
+            .client
+            .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
+            .map_err(|e| map_issue_state_err(e, true, o, number))?;
+        Ok(StateChange::Changed(issue))
     }
 
     /// PATCH metadata. Same JSON quirk as set_state: `repo` and the current
