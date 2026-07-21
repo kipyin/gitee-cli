@@ -7,4 +7,5 @@ pub mod extension;
 pub mod models;
 pub mod out;
 pub mod repo;
+pub mod update_notice;
 pub mod web;

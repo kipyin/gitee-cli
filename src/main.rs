@@ -1,8 +1,10 @@
 use std::ffi::OsString;
+use std::io::IsTerminal;
 
 use clap::Parser;
 use gitee_cli_rs::config::{self, Config};
 use gitee_cli_rs::error::GiteeError;
+use gitee_cli_rs::update_notice::{self, UpdateCheckGates};
 
 fn main() {
     let settings = Config::load_settings().unwrap_or_else(|_| Default::default());
@@ -30,9 +32,32 @@ fn main() {
 
     let json = cli.json.is_some();
     let debug = cli.debug;
-    if let Err(e) = gitee_cli_rs::cmd::run(cli) {
-        print_error(&e, json, debug);
-        std::process::exit(e.exit_code());
+
+    // Start Update notice check before command work when skip gates allow.
+    let gates = UpdateCheckGates {
+        json,
+        stdout_is_tty: std::io::stdout().is_terminal(),
+        stderr_is_tty: std::io::stderr().is_terminal(),
+    };
+    let update_notice = update_notice::maybe_spawn(
+        env!("CARGO_PKG_VERSION"),
+        update_notice::GITHUB_API_BASE,
+        &gates,
+        &settings,
+    );
+
+    match gitee_cli_rs::cmd::run(cli) {
+        Ok(()) => {
+            if let Some(notice) = update_notice {
+                let mut stderr = std::io::stderr().lock();
+                notice.finish_on_success(&mut stderr);
+            }
+        }
+        Err(e) => {
+            drop(update_notice);
+            print_error(&e, json, debug);
+            std::process::exit(e.exit_code());
+        }
     }
 }
 

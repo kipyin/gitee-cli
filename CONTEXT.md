@@ -27,3 +27,6 @@ Single-context repo. System-wide decisions: `docs/adr/`.
 **Output seam** — Human and JSON rendering in `src/out.rs`. Printers take `&mut impl Write`; `Output::render` picks JSON (`--json`) or a human callback. Production locks stdout; tests use buffers.
 
 **Ctx** — Command runtime bundle in `src/cmd/mod.rs`: `Client` + `Output` + lazy `Repo` resolution (`OnceCell`). Handlers parse args, call operations modules, render via `out`.
+
+**Update notice** — A short, non-blocking tip that an interactive user may see when a newer `gitee` release exists on GitHub. It is guidance only (not a self-upgrade).
+_Avoid_: upgrade command, auto-update, self-update
