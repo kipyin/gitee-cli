@@ -170,7 +170,11 @@ gitee gist view <id> --raw
 # config / aliases / extensions
 gitee config list
 gitee alias list
-gitee extension list                 # gitee-* binaries on PATH
+gitee extension list                 # gitee-* binaries on PATH + managed dir
+gitee extension install owner/my-ext # clone + (optionally) build, into managed dir
+gitee extension create demo         # scaffold a new extension in cwd
+gitee extension remove demo         # delete an installed extension
+gitee extension upgrade [name]      # git pull + rebuild (all if no name)
 # unknown commands also exec `gitee-<name>` from PATH (gh-style)
 
 # raw API escape hatch
@@ -438,9 +442,45 @@ Example: `gitee alias set co pr checkout` → `gitee co 42` expands to `gitee pr
 
 | Subcommand | Description |
 |------------|-------------|
-| `list` | List `gitee-*` executables discovered on `PATH` |
+| `list` | List `gitee-*` executables discovered on `PATH` and in the managed dir |
+| `install <owner/repo> [--build cargo\|npm] [-y]` | Clone the repo into the managed dir and (optionally) build it |
+| `create <name> [--cargo]` | Scaffold a new extension project in the current directory |
+| `remove <name> [-y]` | Delete an installed extension from the managed dir |
+| `upgrade [name]` | `git pull` (and rebuild, if needed) one or all installed extensions |
 
 Unknown top-level commands also exec `gitee-<name>` from `PATH` (same model as `gh`).
+
+### Extensions
+
+Installed extensions live in a managed dir (no shell `PATH` mutation):
+
+- Linux/macOS: `~/.local/share/gitee/extensions/<name>/`
+- Windows: `%LOCALAPPDATA%\gitee\extensions\<name>\`
+
+The CLI's extension resolver scans this managed dir **before** `PATH`, so an
+installed extension shadows a same-named binary elsewhere. The directory layout
+is `<name>/gitee-<name>` — the entry point must be a `gitee-<name>` executable at
+the repo root (no build step) unless `--build cargo` or `--build npm` is given.
+
+**Trust model.** `gitee extension install` downloads and runs arbitrary code.
+Before cloning it prints the repo URL and last commit short SHA and asks for
+confirmation (`--yes` skips). There is no signature verification — install only
+from repos you trust.
+
+**Build systems.**
+
+- `--build cargo`: runs `cargo build --release`, copies the resulting binary
+  (named after the crate, or `gitee-<name>`) to the extension dir root.
+- `--build npm`: runs `npm install` and `npm run build` (if a `build` script
+  exists); the `gitee-<name>` script at the repo root is the entry point.
+- Default (no `--build`): the repo must already contain a `gitee-<name>`
+  executable at the root.
+
+**Environment contract** (forwarded to every extension child process):
+
+- `GITEE_TOKEN` — the active personal access token (or your own `$GITEE_TOKEN`).
+- `GITEE_HOST` — the active Gitee host (e.g. `gitee.com`), unless already exported.
+- All trailing argv, forwarded verbatim.
 
 </details>
 

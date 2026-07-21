@@ -640,10 +640,45 @@ pub enum ConfigCmd {
     },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BuildKind {
+    Cargo,
+    Npm,
+}
+
 #[derive(Subcommand, Clone)]
 pub enum ExtensionCmd {
-    /// List extension commands discovered on PATH.
+    /// List extension commands discovered on PATH and in the managed dir.
     List,
+    /// Clone a Gitee repo into the managed extensions dir and (optionally) build it.
+    Install {
+        /// `owner/repo` (or a full Gitee URL) of the extension to install.
+        repo: String,
+        /// Build system to run after cloning: `cargo` or `npm`.
+        #[arg(long, value_parser = ["cargo", "npm"])]
+        build: Option<String>,
+        /// Skip the trust confirmation prompt.
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+    /// Scaffold a new extension project in the current directory.
+    Create {
+        /// Extension name (without the `gitee-` prefix).
+        name: String,
+        /// Scaffold a Rust extension (Cargo.toml + src/main.rs) instead of a shell script.
+        #[arg(long)]
+        cargo: bool,
+    },
+    /// Remove an installed extension from the managed dir.
+    Remove {
+        name: String,
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+    /// Pull (and rebuild, if needed) installed extensions. With no name: all.
+    Upgrade {
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Clone)]
@@ -1410,6 +1445,76 @@ mod parse_tests {
     fn extension_list_parse() {
         let cli = Cli::try_parse_from(["gitee", "extension", "list"]).unwrap();
         assert!(matches!(cli.cmd, Command::Extension(ExtensionCmd::List)));
+    }
+
+    #[test]
+    fn extension_install_parse() {
+        let cli = Cli::try_parse_from([
+            "gitee", "extension", "install", "owner/my-ext", "--build", "cargo", "--yes",
+        ])
+        .unwrap();
+        let Command::Extension(ExtensionCmd::Install { repo, build, yes }) = cli.cmd else {
+            panic!("expected install");
+        };
+        assert_eq!(repo, "owner/my-ext");
+        assert_eq!(build.as_deref(), Some("cargo"));
+        assert!(yes);
+
+        let cli = Cli::try_parse_from(["gitee", "extension", "install", "owner/ext"]).unwrap();
+        let Command::Extension(ExtensionCmd::Install { build, yes, .. }) = cli.cmd else {
+            panic!("expected install");
+        };
+        assert!(build.is_none());
+        assert!(!yes);
+    }
+
+    #[test]
+    fn extension_install_rejects_bad_build_value() {
+        assert!(Cli::try_parse_from([
+            "gitee", "extension", "install", "owner/ext", "--build", "go"
+        ])
+        .is_err());
+    }
+
+    #[test]
+    fn extension_create_parse() {
+        let cli = Cli::try_parse_from(["gitee", "extension", "create", "demo"]).unwrap();
+        let Command::Extension(ExtensionCmd::Create { name, cargo }) = cli.cmd else {
+            panic!("expected create");
+        };
+        assert_eq!(name, "demo");
+        assert!(!cargo);
+
+        let cli = Cli::try_parse_from(["gitee", "extension", "create", "demo", "--cargo"]).unwrap();
+        let Command::Extension(ExtensionCmd::Create { cargo, .. }) = cli.cmd else {
+            panic!("expected create");
+        };
+        assert!(cargo);
+    }
+
+    #[test]
+    fn extension_remove_parse() {
+        let cli = Cli::try_parse_from(["gitee", "extension", "remove", "demo", "--yes"]).unwrap();
+        let Command::Extension(ExtensionCmd::Remove { name, yes }) = cli.cmd else {
+            panic!("expected remove");
+        };
+        assert_eq!(name, "demo");
+        assert!(yes);
+    }
+
+    #[test]
+    fn extension_upgrade_parse() {
+        let cli = Cli::try_parse_from(["gitee", "extension", "upgrade"]).unwrap();
+        let Command::Extension(ExtensionCmd::Upgrade { name }) = cli.cmd else {
+            panic!("expected upgrade");
+        };
+        assert!(name.is_none());
+
+        let cli = Cli::try_parse_from(["gitee", "extension", "upgrade", "demo"]).unwrap();
+        let Command::Extension(ExtensionCmd::Upgrade { name }) = cli.cmd else {
+            panic!("expected upgrade");
+        };
+        assert_eq!(name.as_deref(), Some("demo"));
     }
 
     #[test]

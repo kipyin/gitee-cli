@@ -14,7 +14,15 @@ struct ExtensionEntry {
 pub fn execute(ctx: &Ctx, cmd: ExtensionCmd) -> Result<()> {
     match cmd {
         ExtensionCmd::List => {
-            let items: Vec<ExtensionEntry> = extension::list_on_path()
+            let mut names = extension::list_on_path();
+            for n in extension::list_installed()? {
+                if !names.contains(&n) {
+                    names.push(n);
+                }
+            }
+            names.sort();
+            names.dedup();
+            let items: Vec<ExtensionEntry> = names
                 .into_iter()
                 .map(|name| ExtensionEntry { name })
                 .collect();
@@ -29,6 +37,18 @@ pub fn execute(ctx: &Ctx, cmd: ExtensionCmd) -> Result<()> {
                 }
                 Ok(())
             })?;
+        }
+        ExtensionCmd::Install { repo, build, yes } => {
+            extension::install(&repo, build.as_deref(), yes, &ctx.host)?;
+        }
+        ExtensionCmd::Create { name, cargo } => {
+            extension::create(&name, cargo)?;
+        }
+        ExtensionCmd::Remove { name, yes } => {
+            extension::remove(&name, yes)?;
+        }
+        ExtensionCmd::Upgrade { name } => {
+            extension::upgrade(name.as_deref())?;
         }
     }
     Ok(())
