@@ -28,8 +28,9 @@ fn fetch_latest_returns_version_and_url_on_200() {
     assert_eq!(
         info,
         ReleaseInfo {
-            version: "0.2.0".into(),
+            version: "v0.2.0".into(),
             url: "https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0".into(),
+            published_at: "2026-01-15T12:00:00Z".into(),
         }
     );
 }

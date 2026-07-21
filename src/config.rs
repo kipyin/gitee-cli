@@ -717,14 +717,14 @@ fn keyring_get(host: &str) -> std::result::Result<String, ()> {
 }
 
 #[cfg(unix)]
-fn restrict_perms(p: &Path) -> Result<()> {
+pub(crate) fn restrict_perms(p: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(p, fs::Permissions::from_mode(0o600))
         .map_err(|e| GiteeError::Config(e.to_string()))
 }
 
 #[cfg(not(unix))]
-fn restrict_perms(_p: &Path) -> Result<()> {
+pub(crate) fn restrict_perms(_p: &Path) -> Result<()> {
     Ok(())
 }
 

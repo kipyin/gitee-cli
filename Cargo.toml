@@ -32,6 +32,7 @@ open = "5"
 inquire = "0.9.4"
 tempfile = "3.27.0"
 semver = "1.0.28"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 
 [dev-dependencies]
 mockito = "1"

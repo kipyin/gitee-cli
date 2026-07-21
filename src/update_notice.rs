@@ -1,59 +1,166 @@
 //! Background GitHub Releases check and stderr Update notice tip.
 
 use std::io::{IsTerminal, Write};
+use std::path::PathBuf;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+
+use serde::{Deserialize, Serialize};
+
+use crate::config::Config;
 
 /// Production GitHub API base URL.
 pub const GITHUB_API_BASE: &str = "https://api.github.com";
 
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2);
+const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const STATE_FILE: &str = "state.json";
+
+/// Cached release entry persisted in `state.json` (`version` keeps leading `v`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CachedRelease {
+    pub version: String,
+    pub url: String,
+    pub published_at: String,
+}
+
+/// On-disk Update notice cache (`{Config::dir()}/state.json`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateState {
+    pub checked_for_update_at: String,
+    pub latest_release: CachedRelease,
+}
+
+/// True when `checked_for_update_at` parses as RFC3339 and falls within the
+/// last 24 hours before `now`. Invalid or future timestamps are not fresh.
+pub fn cache_is_fresh(checked_for_update_at: &str, now: SystemTime) -> bool {
+    let Ok(checked) = chrono::DateTime::parse_from_rfc3339(checked_for_update_at) else {
+        return false;
+    };
+    let checked: SystemTime = checked.with_timezone(&chrono::Utc).into();
+    match now.duration_since(checked) {
+        Ok(age) => age < CACHE_TTL,
+        // Future timestamp (clock skew): not within the past 24h.
+        Err(_) => false,
+    }
+}
+
+fn state_path() -> Option<PathBuf> {
+    Config::dir().ok().map(|d| d.join(STATE_FILE))
+}
+
+/// Load `state.json`. Missing or invalid content ⇒ `None` (check due).
+pub fn load_state() -> Option<UpdateState> {
+    let path = state_path()?;
+    let raw = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&raw).ok()
+}
+
+/// Write `state.json` with the same restricted mode as other config files.
+pub fn save_state(state: &UpdateState) -> Result<(), String> {
+    let path = state_path().ok_or_else(|| "no config directory".to_string())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let body = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
+    std::fs::write(&path, body + "\n").map_err(|e| e.to_string())?;
+    crate::config::restrict_perms(&path).map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 /// Latest release fields used for the Update notice tip.
+/// `version` is the GitHub `tag_name` (keeps a leading `v` when present).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReleaseInfo {
     pub version: String,
     pub url: String,
+    pub published_at: String,
 }
 
 /// Background Update notice check started before command work.
 pub struct UpdateNotice {
     current: String,
+    /// Present when a fresh cache skipped the network fetch.
+    cached: Option<ReleaseInfo>,
     handle: Option<JoinHandle<Option<ReleaseInfo>>>,
+    /// Wall clock used when writing `checked_for_update_at`.
+    now: SystemTime,
 }
 
 impl UpdateNotice {
     /// Spawn a background fetch against `api_base` (e.g. [`GITHUB_API_BASE`]).
     pub fn spawn(current_version: &str, api_base: &str) -> Self {
+        Self::spawn_at(current_version, api_base, SystemTime::now())
+    }
+
+    /// Like [`Self::spawn`], with an injectable `now` for cache TTL tests.
+    pub fn spawn_at(current_version: &str, api_base: &str, now: SystemTime) -> Self {
+        if let Some(state) = load_state() {
+            if cache_is_fresh(&state.checked_for_update_at, now) {
+                return Self {
+                    current: current_version.to_string(),
+                    cached: Some(ReleaseInfo {
+                        version: state.latest_release.version,
+                        url: state.latest_release.url,
+                        published_at: state.latest_release.published_at,
+                    }),
+                    handle: None,
+                    now,
+                };
+            }
+        }
         let api_base = api_base.to_string();
         let handle = std::thread::spawn(move || fetch_latest(&api_base, FETCH_TIMEOUT));
         Self {
             current: current_version.to_string(),
+            cached: None,
             handle: Some(handle),
+            now,
         }
     }
 
     /// On command success: join the check and maybe write the tip.
     /// Network/decode failures are silent; write errors are ignored.
+    /// A successful fetch rewrites `state.json`; failed/None leaves it alone.
     pub fn finish_on_success(mut self, w: &mut impl Write) {
-        let Some(handle) = self.handle.take() else {
-            return;
+        let info = if let Some(handle) = self.handle.take() {
+            match handle.join() {
+                Ok(Some(info)) => {
+                    let state = UpdateState {
+                        checked_for_update_at: format_rfc3339(self.now),
+                        latest_release: CachedRelease {
+                            version: info.version.clone(),
+                            url: info.url.clone(),
+                            published_at: info.published_at.clone(),
+                        },
+                    };
+                    let _ = save_state(&state);
+                    Some(info)
+                }
+                _ => None,
+            }
+        } else {
+            self.cached.take()
         };
-        let Ok(Some(info)) = handle.join() else {
+
+        let Some(info) = info else {
             return;
         };
         if !is_strictly_newer(&info.version, &self.current) {
             return;
         }
-        let current = strip_leading_v(&self.current);
         let tip = format_tip(
-            current,
-            &info.version,
+            strip_leading_v(&self.current),
+            strip_leading_v(&info.version),
             &info.url,
             tip_color_enabled(),
         );
         let _ = write!(w, "{tip}");
     }
+}
+
+fn format_rfc3339(t: SystemTime) -> String {
+    chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 /// Strip one leading `v` or `V` from a release tag (e.g. `v1.2.3` → `1.2.3`).
@@ -68,6 +175,7 @@ pub fn fetch_latest(api_base: &str, timeout: Duration) -> Option<ReleaseInfo> {
     struct LatestRelease {
         tag_name: String,
         html_url: String,
+        published_at: String,
     }
 
     let base = api_base.trim_end_matches('/');
@@ -88,8 +196,10 @@ pub fn fetch_latest(api_base: &str, timeout: Duration) -> Option<ReleaseInfo> {
     }
     let body: LatestRelease = resp.json().ok()?;
     Some(ReleaseInfo {
-        version: strip_leading_v(&body.tag_name).to_string(),
+        // Persist tag_name as-is (leading `v`); tip/compare strip later.
+        version: body.tag_name,
         url: body.html_url,
+        published_at: body.published_at,
     })
 }
 
@@ -134,6 +244,218 @@ pub fn format_tip(current: &str, latest: &str, url: &str, color: bool) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    fn ts(secs: u64) -> SystemTime {
+        UNIX_EPOCH + Duration::from_secs(secs)
+    }
+
+    fn rfc3339(secs: u64) -> String {
+        chrono::DateTime::<chrono::Utc>::from(ts(secs)).to_rfc3339_opts(
+            chrono::SecondsFormat::Secs,
+            true,
+        )
+    }
+
+    #[test]
+    fn cache_is_fresh_within_24h_boundaries() {
+        let checked = rfc3339(1_000_000);
+        // exactly 24h later → not fresh (age must be strictly < 24h)
+        assert!(!cache_is_fresh(
+            &checked,
+            ts(1_000_000 + 24 * 60 * 60)
+        ));
+        // one second under 24h → fresh
+        assert!(cache_is_fresh(
+            &checked,
+            ts(1_000_000 + 24 * 60 * 60 - 1)
+        ));
+        // well inside window → fresh
+        assert!(cache_is_fresh(&checked, ts(1_000_000 + 60)));
+        // past 24h → due
+        assert!(!cache_is_fresh(
+            &checked,
+            ts(1_000_000 + 24 * 60 * 60 + 1)
+        ));
+        // invalid timestamp → due
+        assert!(!cache_is_fresh("not-a-timestamp", ts(1_000_000)));
+        // future timestamp → due (not within the past 24h)
+        assert!(!cache_is_fresh(&rfc3339(1_000_000 + 60), ts(1_000_000)));
+    }
+
+    #[test]
+    fn load_state_missing_or_invalid_means_due() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        crate::config::set_test_dir(Some(dir.path().to_path_buf()));
+
+        assert!(load_state().is_none(), "missing state.json ⇒ due");
+
+        std::fs::write(dir.path().join("state.json"), "{not-json").unwrap();
+        assert!(load_state().is_none(), "invalid state.json ⇒ due");
+
+        std::fs::write(dir.path().join("state.json"), "{}").unwrap();
+        assert!(load_state().is_none(), "incomplete state.json ⇒ due");
+
+        crate::config::set_test_dir(None);
+    }
+
+    #[test]
+    fn save_state_round_trips_locked_json_shape() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        crate::config::set_test_dir(Some(dir.path().to_path_buf()));
+
+        let state = UpdateState {
+            checked_for_update_at: "2026-01-15T12:00:00Z".into(),
+            latest_release: CachedRelease {
+                version: "v0.2.0".into(),
+                url: "https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0".into(),
+                published_at: "2026-01-15T11:00:00Z".into(),
+            },
+        };
+        save_state(&state).expect("save");
+
+        let path = dir.path().join("state.json");
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v["checked_for_update_at"], "2026-01-15T12:00:00Z");
+        assert_eq!(v["latest_release"]["version"], "v0.2.0");
+        assert_eq!(
+            v["latest_release"]["url"],
+            "https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0"
+        );
+        assert_eq!(v["latest_release"]["published_at"], "2026-01-15T11:00:00Z");
+
+        assert_eq!(load_state().as_ref(), Some(&state));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "state.json mode should match other config files");
+        }
+
+        crate::config::set_test_dir(None);
+    }
+
+    fn seed_state(dir: &std::path::Path, checked_at: &str, version: &str) {
+        let state = UpdateState {
+            checked_for_update_at: checked_at.into(),
+            latest_release: CachedRelease {
+                version: version.into(),
+                url: format!("https://github.com/kipyin/gitee-cli/releases/tag/{version}"),
+                published_at: "2026-01-15T11:00:00Z".into(),
+            },
+        };
+        let body = serde_json::to_string_pretty(&state).unwrap();
+        std::fs::write(dir.join("state.json"), body + "\n").unwrap();
+    }
+
+    #[test]
+    fn fresh_cache_skips_network_and_tips_from_cache() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        crate::config::set_test_dir(Some(dir.path().to_path_buf()));
+
+        let now = ts(1_000_000);
+        seed_state(dir.path(), &rfc3339(1_000_000 - 60), "v0.2.0");
+
+        // Any HTTP here would panic: no mockito server is listening on this base.
+        let notice = UpdateNotice::spawn_at("0.1.5", "http://127.0.0.1:1", now);
+        let mut buf = Vec::new();
+        notice.finish_on_success(&mut buf);
+
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains("A new release of gitee is available: 0.1.5 → 0.2.0"),
+            "expected tip from cache, got {out:?}"
+        );
+        // Cache file left unchanged (no rewrite on cache hit).
+        let loaded = load_state().unwrap();
+        assert_eq!(loaded.checked_for_update_at, rfc3339(1_000_000 - 60));
+
+        crate::config::set_test_dir(None);
+    }
+
+    #[test]
+    fn stale_cache_hits_network_and_rewrites_state() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        crate::config::set_test_dir(Some(dir.path().to_path_buf()));
+
+        let now = ts(1_000_000);
+        // Stale: checked 25h ago.
+        seed_state(
+            dir.path(),
+            &rfc3339(1_000_000 - 25 * 60 * 60),
+            "v0.1.9",
+        );
+
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/repos/kipyin/gitee-cli/releases/latest")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                r#"{
+  "tag_name": "v0.2.0",
+  "html_url": "https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0",
+  "published_at": "2026-01-15T12:00:00Z"
+}"#,
+            )
+            .create();
+
+        let notice = UpdateNotice::spawn_at("0.1.5", &server.url(), now);
+        std::thread::sleep(Duration::from_millis(50));
+        let mut buf = Vec::new();
+        notice.finish_on_success(&mut buf);
+
+        mock.assert();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("0.1.5 → 0.2.0"), "got {out:?}");
+
+        let loaded = load_state().unwrap();
+        assert_eq!(loaded.checked_for_update_at, rfc3339(1_000_000));
+        assert_eq!(loaded.latest_release.version, "v0.2.0");
+        assert_eq!(
+            loaded.latest_release.published_at,
+            "2026-01-15T12:00:00Z"
+        );
+
+        crate::config::set_test_dir(None);
+    }
+
+    #[test]
+    fn failed_fetch_leaves_prior_state_unchanged() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        crate::config::set_test_dir(Some(dir.path().to_path_buf()));
+
+        let now = ts(1_000_000);
+        let prior_checked = rfc3339(1_000_000 - 25 * 60 * 60);
+        seed_state(dir.path(), &prior_checked, "v0.2.0");
+        let prior_raw = std::fs::read_to_string(dir.path().join("state.json")).unwrap();
+
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/repos/kipyin/gitee-cli/releases/latest")
+            .with_status(500)
+            .with_body("oops")
+            .create();
+
+        let notice = UpdateNotice::spawn_at("0.1.5", &server.url(), now);
+        std::thread::sleep(Duration::from_millis(50));
+        let mut buf = Vec::new();
+        notice.finish_on_success(&mut buf);
+
+        mock.assert();
+        assert!(buf.is_empty(), "failed fetch must not tip");
+        let after = std::fs::read_to_string(dir.path().join("state.json")).unwrap();
+        assert_eq!(after, prior_raw, "prior good state must not be overwritten");
+
+        crate::config::set_test_dir(None);
+    }
 
     #[test]
     fn strip_leading_v_removes_one_v_or_v() {
