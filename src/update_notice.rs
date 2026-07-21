@@ -7,14 +7,75 @@ use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::Config;
+use crate::config::{Config, Settings};
 
 /// Production GitHub API base URL.
 pub const GITHUB_API_BASE: &str = "https://api.github.com";
 
+/// Session opt-out: any non-empty value skips the Update notice check.
+const ENV_NO_UPDATE_NOTIFIER: &str = "GITEE_NO_UPDATE_NOTIFIER";
+
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2);
 const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 const STATE_FILE: &str = "state.json";
+
+/// Injectable process gates for [`should_run_update_check`] (TTY + `--json`).
+#[derive(Debug, Clone, Copy)]
+pub struct UpdateCheckGates {
+    pub json: bool,
+    pub stdout_is_tty: bool,
+    pub stderr_is_tty: bool,
+}
+
+/// True when `key` is present in the environment with a non-empty value.
+fn env_nonempty(key: &str) -> bool {
+    std::env::var_os(key).is_some_and(|v| !v.is_empty())
+}
+
+/// Whether CI heuristics apply (`CI`, `BUILD_NUMBER`, or `RUN_ID` non-empty).
+fn env_is_ci() -> bool {
+    env_nonempty("CI") || env_nonempty("BUILD_NUMBER") || env_nonempty("RUN_ID")
+}
+
+/// Decide whether this invocation may start an Update notice check.
+///
+/// Gate order: env opt-out → `--json` → non-TTY stdout/stderr → CI →
+/// `CODESPACES` → config `disabled` → run.
+pub fn should_run_update_check(gates: &UpdateCheckGates, settings: &Settings) -> bool {
+    if env_nonempty(ENV_NO_UPDATE_NOTIFIER) {
+        return false;
+    }
+    if gates.json {
+        return false;
+    }
+    if !gates.stdout_is_tty || !gates.stderr_is_tty {
+        return false;
+    }
+    if env_is_ci() {
+        return false;
+    }
+    if env_nonempty("CODESPACES") {
+        return false;
+    }
+    if settings.update_notifier.as_deref() == Some("disabled") {
+        return false;
+    }
+    true
+}
+
+/// Start a background check when skip gates allow; otherwise `None` (no
+/// network, no cache read, no tip).
+pub fn maybe_spawn(
+    current_version: &str,
+    api_base: &str,
+    gates: &UpdateCheckGates,
+    settings: &Settings,
+) -> Option<UpdateNotice> {
+    if !should_run_update_check(gates, settings) {
+        return None;
+    }
+    Some(UpdateNotice::spawn(current_version, api_base))
+}
 
 /// Cached release entry persisted in `state.json` (`version` keeps leading `v`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -508,5 +569,363 @@ mod tests {
             yellow("https://github.com/kipyin/gitee-cli/releases/tag/v0.2.0"),
         );
         assert_eq!(tip, expected);
+    }
+
+    const SKIP_ENV_KEYS: &[&str] = &[
+        "GITEE_NO_UPDATE_NOTIFIER",
+        "CI",
+        "BUILD_NUMBER",
+        "RUN_ID",
+        "CODESPACES",
+    ];
+
+    /// Clear skip-related env vars for the duration of `f`, then restore.
+    fn with_cleared_skip_env<T>(f: impl FnOnce() -> T) -> T {
+        let prev: Vec<_> = SKIP_ENV_KEYS
+            .iter()
+            .map(|k| (*k, std::env::var_os(k)))
+            .collect();
+        for k in SKIP_ENV_KEYS {
+            std::env::remove_var(k);
+        }
+        let out = f();
+        for (k, v) in prev {
+            match v {
+                Some(v) => std::env::set_var(k, v),
+                None => std::env::remove_var(k),
+            }
+        }
+        out
+    }
+
+    fn set_env(key: &str, value: Option<&str>) {
+        match value {
+            Some(v) => std::env::set_var(key, v),
+            None => std::env::remove_var(key),
+        }
+    }
+
+    fn interactive_gates() -> UpdateCheckGates {
+        UpdateCheckGates {
+            json: false,
+            stdout_is_tty: true,
+            stderr_is_tty: true,
+        }
+    }
+
+    #[test]
+    fn should_run_update_check_matrix() {
+        let _env = crate::config::test_config_env_lock();
+
+        #[derive(Clone, Copy)]
+        struct Case {
+            name: &'static str,
+            env_no_update: Option<&'static str>,
+            json: bool,
+            stdout_tty: bool,
+            stderr_tty: bool,
+            ci: Option<&'static str>,
+            build_number: Option<&'static str>,
+            run_id: Option<&'static str>,
+            codespaces: Option<&'static str>,
+            update_notifier: Option<&'static str>,
+            expect: bool,
+        }
+
+        let cases = [
+            Case {
+                name: "default interactive enabled",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: true,
+            },
+            Case {
+                name: "config enabled explicit",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: Some("enabled"),
+                expect: true,
+            },
+            Case {
+                name: "env non-empty skips",
+                env_no_update: Some("1"),
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: Some("enabled"),
+                expect: false,
+            },
+            Case {
+                name: "env empty string does not skip",
+                env_no_update: Some(""),
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: true,
+            },
+            Case {
+                name: "json skips",
+                env_no_update: None,
+                json: true,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: false,
+            },
+            Case {
+                name: "stdout non-tty skips",
+                env_no_update: None,
+                json: false,
+                stdout_tty: false,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: false,
+            },
+            Case {
+                name: "stderr non-tty skips",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: false,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: false,
+            },
+            Case {
+                name: "CI set skips",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: Some("true"),
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: false,
+            },
+            Case {
+                name: "CI empty string does not skip",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: Some(""),
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: true,
+            },
+            Case {
+                name: "BUILD_NUMBER set skips",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: Some("42"),
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: false,
+            },
+            Case {
+                name: "BUILD_NUMBER empty string does not skip",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: Some(""),
+                run_id: None,
+                codespaces: None,
+                update_notifier: None,
+                expect: true,
+            },
+            Case {
+                name: "RUN_ID set skips",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: Some("run-1"),
+                codespaces: None,
+                update_notifier: None,
+                expect: false,
+            },
+            Case {
+                name: "RUN_ID empty string does not skip",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: Some(""),
+                codespaces: None,
+                update_notifier: None,
+                expect: true,
+            },
+            Case {
+                name: "CODESPACES non-empty skips",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: Some("true"),
+                update_notifier: None,
+                expect: false,
+            },
+            Case {
+                name: "CODESPACES empty string does not skip",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: Some(""),
+                update_notifier: None,
+                expect: true,
+            },
+            Case {
+                name: "config disabled skips",
+                env_no_update: None,
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: Some("disabled"),
+                expect: false,
+            },
+            Case {
+                name: "env wins over config enabled",
+                env_no_update: Some("yes"),
+                json: false,
+                stdout_tty: true,
+                stderr_tty: true,
+                ci: None,
+                build_number: None,
+                run_id: None,
+                codespaces: None,
+                update_notifier: Some("enabled"),
+                expect: false,
+            },
+        ];
+
+        for case in cases {
+            with_cleared_skip_env(|| {
+                set_env("GITEE_NO_UPDATE_NOTIFIER", case.env_no_update);
+                set_env("CI", case.ci);
+                set_env("BUILD_NUMBER", case.build_number);
+                set_env("RUN_ID", case.run_id);
+                set_env("CODESPACES", case.codespaces);
+
+                let settings = Settings {
+                    update_notifier: case.update_notifier.map(str::to_string),
+                    ..Settings::default()
+                };
+                let gates = UpdateCheckGates {
+                    json: case.json,
+                    stdout_is_tty: case.stdout_tty,
+                    stderr_is_tty: case.stderr_tty,
+                };
+                let got = should_run_update_check(&gates, &settings);
+                assert_eq!(
+                    got, case.expect,
+                    "case {:?}: expected {}, got {}",
+                    case.name, case.expect, got
+                );
+            });
+        }
+
+        // Clearing env leaves config in charge: disabled still skips; enabled runs.
+        with_cleared_skip_env(|| {
+            set_env("GITEE_NO_UPDATE_NOTIFIER", Some("1"));
+            let settings = Settings {
+                update_notifier: Some("disabled".into()),
+                ..Settings::default()
+            };
+            assert!(!should_run_update_check(&interactive_gates(), &settings));
+            set_env("GITEE_NO_UPDATE_NOTIFIER", None);
+            assert!(!should_run_update_check(&interactive_gates(), &settings));
+
+            let enabled = Settings {
+                update_notifier: Some("enabled".into()),
+                ..Settings::default()
+            };
+            assert!(should_run_update_check(&interactive_gates(), &enabled));
+        });
+    }
+
+    #[test]
+    fn maybe_spawn_skip_does_not_hit_http() {
+        let _env = crate::config::test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        crate::config::set_test_dir(Some(dir.path().to_path_buf()));
+
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/repos/kipyin/gitee-cli/releases/latest")
+            .with_status(200)
+            .with_body(
+                r#"{"tag_name":"v0.2.0","html_url":"https://example.com","published_at":"2026-01-15T12:00:00Z"}"#,
+            )
+            .expect(0)
+            .create();
+
+        with_cleared_skip_env(|| {
+            set_env("GITEE_NO_UPDATE_NOTIFIER", Some("1"));
+            let settings = Settings::default();
+            let gates = interactive_gates();
+            let notice = maybe_spawn("0.1.5", &server.url(), &gates, &settings);
+            assert!(notice.is_none(), "skip must not spawn UpdateNotice");
+        });
+
+        mock.assert();
+        crate::config::set_test_dir(None);
     }
 }

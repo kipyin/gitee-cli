@@ -12,7 +12,7 @@ const ENV_CONFIG_DIR: &str = "GITEE_CONFIG_DIR";
 /// OS keyring service name; the account is the host (e.g. `gitee.com`).
 const KEYRING_SERVICE: &str = "gitee-cli";
 
-const CONFIG_KEYS: &[&str] = &["host", "remote", "editor"];
+const CONFIG_KEYS: &[&str] = &["host", "remote", "editor", "update_notifier"];
 
 #[derive(Debug, Clone, Copy)]
 pub enum TokenSource {
@@ -39,6 +39,9 @@ pub struct Settings {
     pub remote: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editor: Option<String>,
+    /// Update notice preference: `enabled` | `disabled`. Unset means enabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_notifier: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub aliases: BTreeMap<String, String>,
     /// Active username per host (ticket 17).
@@ -132,6 +135,7 @@ impl Config {
             "host" => s.host,
             "remote" => s.remote,
             "editor" => s.editor,
+            "update_notifier" => s.update_notifier,
             _ => None,
         })
     }
@@ -144,6 +148,14 @@ impl Config {
             "host" => s.host = Some(v),
             "remote" => s.remote = Some(v),
             "editor" => s.editor = Some(v),
+            "update_notifier" => {
+                if value != "enabled" && value != "disabled" {
+                    return Err(GiteeError::Usage(
+                        "update_notifier must be 'enabled' or 'disabled'".into(),
+                    ));
+                }
+                s.update_notifier = Some(v);
+            }
             _ => unreachable!(),
         }
         Self::save_settings(&s)
@@ -160,6 +172,9 @@ impl Config {
         }
         if let Some(v) = s.editor {
             out.push(("editor".into(), v));
+        }
+        if let Some(v) = s.update_notifier {
+            out.push(("update_notifier".into(), v));
         }
         Ok(out)
     }
@@ -935,5 +950,45 @@ mod tests {
         assert!(Config::alias_list().unwrap().is_empty());
         set_test_dir(None);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_notifier_set_get_list_and_reject_invalid() {
+        let _env = test_config_env_lock();
+        let dir = tempfile::tempdir().unwrap();
+        set_test_dir(Some(dir.path().to_path_buf()));
+
+        assert_eq!(
+            Config::get_key("update_notifier").unwrap(),
+            None,
+            "unset update_notifier ⇒ None (get still errors at CLI layer)"
+        );
+
+        Config::set_key("update_notifier", "disabled").unwrap();
+        assert_eq!(
+            Config::get_key("update_notifier").unwrap().as_deref(),
+            Some("disabled")
+        );
+        Config::set_key("update_notifier", "enabled").unwrap();
+        assert_eq!(
+            Config::get_key("update_notifier").unwrap().as_deref(),
+            Some("enabled")
+        );
+
+        let listed = Config::list_keys().unwrap();
+        assert!(
+            listed
+                .iter()
+                .any(|(k, v)| k == "update_notifier" && v == "enabled"),
+            "list should include update_notifier={listed:?}"
+        );
+
+        let err = Config::set_key("update_notifier", "maybe").unwrap_err();
+        assert!(
+            err.to_string().contains("enabled") || err.to_string().contains("disabled"),
+            "reject invalid value: {err}"
+        );
+
+        set_test_dir(None);
     }
 }
