@@ -212,6 +212,19 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
         }
         IssueCmd::Comment(crate::cli::IssueCommentCmd::Create { number, body }) => {
             let repo = ctx.repo()?;
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("create comment on issue {number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("body", &body.body),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
             let c = ctx.client.issues(repo).comment(&number, &body.body)?;
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;

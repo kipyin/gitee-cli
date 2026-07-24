@@ -267,6 +267,29 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             commit_id,
         }) => {
             let repo = ctx.repo()?;
+            if ctx.preview {
+                let repo_str = format!("{}/{}", repo.owner, repo.name);
+                let pos_str = position.map(|p| p.to_string());
+                let mut details: Vec<(&str, &str)> =
+                    vec![("repo", &repo_str), ("body", &body.body)];
+                if let Some(ref p) = path {
+                    details.push(("path", p.as_str()));
+                }
+                if let Some(ref p) = pos_str {
+                    details.push(("position", p.as_str()));
+                }
+                if let Some(ref c) = commit_id {
+                    details.push(("commit_id", c.as_str()));
+                }
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("create comment on pull request !{number}"),
+                        &details,
+                    )
+                );
+                return Ok(());
+            }
             let positional = crate::api::pulls::PrCommentPositional {
                 path: path.as_deref(),
                 position,
@@ -277,7 +300,8 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 .pulls(repo)
                 .comment(number, &body.body, &positional)?;
             let mut out = std::io::stdout().lock();
-            ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
+            ctx.out
+                .render(&mut out, &c, |w| out::pr_comment_line(w, &c))?;
         }
         PrCmd::Comment(crate::cli::PrCommentCmd::List {
             number,

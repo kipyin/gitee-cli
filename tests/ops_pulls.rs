@@ -560,6 +560,10 @@ fn comment_posts_positional_form_fields() {
 
     mock.assert();
     assert_eq!(comment.body, "nit");
+    assert_eq!(comment.path.as_deref(), Some("src/main.rs"));
+    assert_eq!(comment.position.as_deref(), Some("7"));
+    assert_eq!(comment.commit_id.as_deref(), Some("deadbeef"));
+    assert_eq!(comment.comment_type.as_deref(), Some("diff_comment"));
 }
 
 #[test]

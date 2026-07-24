@@ -202,16 +202,20 @@ gitee --host git.example.com ...           # self-hosted Gitee
 |------------|-------------|
 | `list` | List PRs (`--state`, `--author`, `--limit`) |
 | `status` | Open PRs relevant to you: created, assigned, awaiting your test (`--limit`) |
-| `view <n>` | Show pull request details (`--web` opens in browser); `--json` includes a `files` array with per-file `path` / `additions` / `deletions` / `changes` |
+| `view <n>` | Show pull request details (`--web` opens in browser; `--merged` exits 0/1 for merge state); `--json` includes a `files` array with per-file `path` / `additions` / `deletions` / `changes` |
 | `diff <n>` | Show pull request diff |
 | `checkout <n>` | Fetch and check out a pull request locally |
+| `commits <n>` | List commits on a pull request |
 | `create` | Open a PR (`--title` / `--fill`, or interactive on a TTY; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--tester`, `--label`, `--milestone`) |
 | `merge <n>` | Merge (`--squash`, `--rebase`, `--no-close-issue`) — **idempotent**: already-merged exits `0` |
-| `comment create <n>` | Add a comment (`-m/--body`) |
+| `comment create <n>` | Add a comment (`-m/--body`; optional `--path` / `--position` / `--commit-id` for diff-line comments; `--position` is Gitee's diff line index) |
 | `comment list <n>` | List comments (`--type diff|general`, `--limit`) |
 | `comment edit <id>` | Edit by id, or latest via `--last` + PR number (`-m/--body` or `$EDITOR`) |
 | `comment delete <id>` | Delete by id, or latest via `--last` + PR number (`--yes` skips confirm; 404 is idempotent) |
+| `label add\|remove\|list <n>` | Non-destructive label membership on a PR |
+| `assignee add\|remove\|list <n>` | Non-destructive reviewer (审查人) membership |
+| `tester add\|remove\|list <n>` | Non-destructive tester (测试人) membership |
 | `approve <n>` | Approve / 审查通过 (`--force`) |
 | `test <n>` | Mark tested / 测试通过 (`--force`) — Gitee-specific |
 | `close <n>` / `reopen <n>` | Change state |
@@ -235,6 +239,7 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `comment list <n>` | List comments (`--limit`) |
 | `comment edit <id>` | Edit by id, or latest via `--last` + issue ident (`-m/--body` or `$EDITOR`) |
 | `comment delete <id>` | Delete by id, or latest via `--last` + issue ident (`--yes` skips confirm; 404 is idempotent) |
+| `label add\|remove\|list <n>` | Non-destructive label membership on an issue |
 
 </details>
 
@@ -544,6 +549,9 @@ Gitee OpenAPI v5 does not expose everything GitHub CLI can reach. These are
 
 Also omitted after swagger verification: `repo sync`, `pr update-branch`.
 
+Shipped `gh`-parity items that used to be gaps: `issue|pr comment`
+list/edit/delete (plus `--last`), `pr commits`, and `pr view --merged`.
+
 An MCP server is intentionally **not** built into this CLI — Gitee already
 ships an official one ([`mcp-gitee`](https://gitee.com/oschina/mcp-gitee), Go).
 For AI agent runtimes that prefer native MCP integration, use the official
@@ -559,7 +567,10 @@ Features beyond GitHub CLI parity:
 | `pr test` | shipped | 测试通过 gate; pairs with `pr approve` (审查通过) |
 | `issue --security-hole` | shipped | mark an issue as a security hole on create/edit |
 | `milestone` | shipped | full list/view/create/edit; Gitee requires `--due-on` on create |
-| `pr` assignees **and** testers | shipped | dual review/test roles on create/edit/status |
+| `pr` assignees **and** testers | shipped | dual review/test roles on create/edit/status; plus non-destructive `assignee`/`tester` `{add,remove,list}` |
+| `issue\|pr label {add,remove,list}` | shipped | non-destructive label membership (distinct from repo-level `gitee label`) |
+| `pr comment create --path/--position/--commit-id` | shipped | positional/diff-line comments; `position` is Gitee's diff line index |
+| `pr commits` / `pr view --merged` | shipped | commit list + scriptable merge check |
 | `repo star` / `watch` | shipped | `star` / `unstar` / `watch` / `unwatch` |
 | `webhook` | shipped | list / create / delete repository hooks |
 

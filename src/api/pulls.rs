@@ -2,8 +2,8 @@ use super::client::Client;
 use crate::api::{resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{
-    Comment, FileDiff, Label, MergeMethod, PrComment, PrCommentKind, PrCommit, PrState,
-    PullRequest, UserAssignee,
+    FileDiff, Label, MergeMethod, PrComment, PrCommentKind, PrCommit, PrState, PullRequest,
+    UserAssignee,
 };
 use crate::repo::Repo;
 use std::collections::HashSet;
@@ -205,7 +205,7 @@ impl Pulls<'_> {
         number: i64,
         body: &str,
         positional: &PrCommentPositional<'_>,
-    ) -> Result<Comment> {
+    ) -> Result<PrComment> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = vec![("body", body.to_string())];

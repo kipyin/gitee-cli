@@ -520,4 +520,74 @@ mod create_title_tests {
             std::env::remove_var("GITEE_TOKEN");
         }
     }
+
+    /// `--preview` short-circuits issue comment create before any HTTP call.
+    #[test]
+    fn issue_comment_create_preview_prints_intent_without_http() {
+        let _env = crate::config::test_config_env_lock();
+        let prev_token = std::env::var_os("GITEE_TOKEN");
+        std::env::set_var("GITEE_TOKEN", "test-token");
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "--repo",
+            "oschina/gitee-cli",
+            "--preview",
+            "issue",
+            "comment",
+            "create",
+            "I88",
+            "-m",
+            "looking into it",
+        ])
+        .unwrap();
+        assert!(cli.preview);
+        let ctx = build_inner(&cli, true).unwrap();
+        let Command::Issue(cmd) = cli.cmd else {
+            panic!("expected issue command");
+        };
+        let IssueCmd::Comment(crate::cli::IssueCommentCmd::Create { .. }) = cmd else {
+            panic!("expected issue comment create");
+        };
+        issue::execute(&ctx, cmd).expect("preview should short-circuit without HTTP");
+        if let Some(t) = prev_token {
+            std::env::set_var("GITEE_TOKEN", t);
+        } else {
+            std::env::remove_var("GITEE_TOKEN");
+        }
+    }
+
+    /// `--preview` short-circuits pr comment create before any HTTP call.
+    #[test]
+    fn pr_comment_create_preview_prints_intent_without_http() {
+        let _env = crate::config::test_config_env_lock();
+        let prev_token = std::env::var_os("GITEE_TOKEN");
+        std::env::set_var("GITEE_TOKEN", "test-token");
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "--repo",
+            "oschina/gitee-cli",
+            "--preview",
+            "pr",
+            "comment",
+            "create",
+            "42",
+            "-m",
+            "LGTM",
+        ])
+        .unwrap();
+        assert!(cli.preview);
+        let ctx = build_inner(&cli, true).unwrap();
+        let Command::Pr(cmd) = cli.cmd else {
+            panic!("expected pr command");
+        };
+        let PrCmd::Comment(crate::cli::PrCommentCmd::Create { .. }) = cmd else {
+            panic!("expected pr comment create");
+        };
+        pr::execute(&ctx, cmd).expect("preview should short-circuit without HTTP");
+        if let Some(t) = prev_token {
+            std::env::set_var("GITEE_TOKEN", t);
+        } else {
+            std::env::remove_var("GITEE_TOKEN");
+        }
+    }
 }
