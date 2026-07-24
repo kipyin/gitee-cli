@@ -101,7 +101,7 @@ gitee pr create --title "Fix" --head my-branch
 gitee pr create                      # interactive title/body on a TTY
 gitee pr create --fill               # title/body from commits
 gitee pr edit 42 --title "Retitle" --label bug
-gitee pr comment 42 -m "LGTM"
+gitee pr comment create 42 -m "LGTM"
 gitee pr approve 42                  # 审查通过
 gitee pr test 42                     # 测试通过 (Gitee-specific)
 gitee pr merge 42 --squash
@@ -115,7 +115,7 @@ gitee issue create --title "Bug" --body "steps…"
 gitee issue create                   # interactive title/body on a TTY
 gitee issue edit I88 --label bug --milestone v1.0
 gitee issue edit I88 --state progressing   # open|progressing|closed|rejected
-gitee issue comment I88 -m "looking into it"
+gitee issue comment create I88 -m "looking into it"
 gitee issue close I88
 
 # cross-repo dashboard / browser
@@ -208,7 +208,7 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `create` | Open a PR (`--title` / `--fill`, or interactive on a TTY; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--tester`, `--label`, `--milestone`) |
 | `merge <n>` | Merge (`--squash`, `--rebase`, `--no-close-issue`) — **idempotent**: already-merged exits `0` |
-| `comment <n>` | Add a comment (`-m/--body`) |
+| `comment create <n>` | Add a comment (`-m/--body`) |
 | `approve <n>` | Approve / 审查通过 (`--force`) |
 | `test <n>` | Mark tested / 测试通过 (`--force`) — Gitee-specific |
 | `close <n>` / `reopen <n>` | Change state |
@@ -228,7 +228,7 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`, `--state`) |
 | `close <n>` / `reopen <n>` | Change state — **idempotent**: already-closed/open exits `0` (`open`/`closed` shortcuts; prefer `edit --state` for `progressing`/`rejected`) |
 | `link <n> <pr>` | Link an issue to a pull request |
-| `comment <n>` | Add a comment (`-m/--body`) |
+| `comment create <n>` | Add a comment (`-m/--body`) |
 
 </details>
 

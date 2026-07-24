@@ -5,7 +5,7 @@
 class Gitee < Formula
   desc "A gh-like command-line client for Gitee"
   homepage "https://github.com/kipyin/gitee-cli"
-  version "0.1.6"
+  version "0.2.0"
   license "MIT"
 
   on_macos do

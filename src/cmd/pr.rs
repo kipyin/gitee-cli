@@ -245,7 +245,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 }
             }
         }
-        PrCmd::Comment { number, body } => {
+        PrCmd::Comment(crate::cli::PrCommentCmd::Create { number, body }) => {
             let repo = ctx.repo()?;
             let c = ctx.client.pulls(repo).comment(number, &body.body)?;
             let mut out = std::io::stdout().lock();

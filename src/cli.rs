@@ -220,11 +220,9 @@ pub enum PrCmd {
         #[arg(long = "no-close-issue")]
         no_close_issue: bool,
     },
-    Comment {
-        number: i64,
-        #[command(flatten)]
-        body: CommentArgs,
-    },
+    /// Comment on a pull request.
+    #[command(subcommand)]
+    Comment(PrCommentCmd),
     Approve {
         number: i64,
         #[arg(long)]
@@ -248,6 +246,16 @@ pub enum PrCmd {
         issue: String,
     },
     // pr update-branch omitted: no such endpoint in the v5 swagger (verified 2026-07-18).
+}
+
+#[derive(Subcommand, Clone)]
+pub enum PrCommentCmd {
+    /// Create a comment on a pull request.
+    Create {
+        number: i64,
+        #[command(flatten)]
+        body: CommentArgs,
+    },
 }
 
 
@@ -377,7 +385,15 @@ pub enum IssueCmd {
         number: String,
         pr: i64,
     },
-    Comment {
+    /// Comment on an issue.
+    #[command(subcommand)]
+    Comment(IssueCommentCmd),
+}
+
+#[derive(Subcommand, Clone)]
+pub enum IssueCommentCmd {
+    /// Create a comment on an issue.
+    Create {
         number: String,
         #[command(flatten)]
         body: CommentArgs,
@@ -801,7 +817,7 @@ pub enum GitCredentialCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, MilestoneCmd, OrgCmd, PrCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
+    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, IssueCommentCmd, MilestoneCmd, OrgCmd, PrCmd, PrCommentCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
     use clap::Parser;
 
     #[test]
@@ -1548,7 +1564,42 @@ mod parse_tests {
         assert!(web);
     }
 
+    #[test]
+    fn issue_comment_create_parses() {
+        let cli = Cli::try_parse_from([
+            "gitee", "issue", "comment", "create", "I88", "-m", "looking into it",
+        ])
+        .expect("issue comment create should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Create { number, body })) = cli.cmd
+        else {
+            panic!("expected issue comment create");
+        };
+        assert_eq!(number, "I88");
+        assert_eq!(body.body, "looking into it");
+    }
 
+    #[test]
+    fn pr_comment_create_parses() {
+        let cli = Cli::try_parse_from([
+            "gitee", "pr", "comment", "create", "42", "-m", "LGTM",
+        ])
+        .expect("pr comment create should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Create { number, body })) = cli.cmd else {
+            panic!("expected pr comment create");
+        };
+        assert_eq!(number, 42);
+        assert_eq!(body.body, "LGTM");
+    }
 
-
+    #[test]
+    fn old_flat_comment_form_is_rejected() {
+        assert!(
+            Cli::try_parse_from(["gitee", "issue", "comment", "I88", "-m", "x"]).is_err(),
+            "old issue comment form must fail"
+        );
+        assert!(
+            Cli::try_parse_from(["gitee", "pr", "comment", "42", "-m", "x"]).is_err(),
+            "old pr comment form must fail"
+        );
+    }
 }

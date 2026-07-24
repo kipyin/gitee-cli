@@ -106,7 +106,7 @@ Create a PR, link it to the issue, close the issue after merge — all from
 ```bash
 set -e
 PR=$(gitee pr create --title "Fix login" --head fix/login --json number | jq -r .number)
-gitee issue comment I88 -m "Opening PR !$PR"
+gitee issue comment create I88 -m "Opening PR !$PR"
 gitee pr merge "$PR" --squash
 gitee issue close I88
 ```

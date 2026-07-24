@@ -210,7 +210,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 writeln!(out, "Issue #{number} already references {tag}")?;
             }
         }
-        IssueCmd::Comment { number, body } => {
+        IssueCmd::Comment(crate::cli::IssueCommentCmd::Create { number, body }) => {
             let repo = ctx.repo()?;
             let c = ctx.client.issues(repo).comment(&number, &body.body)?;
             let mut out = std::io::stdout().lock();
