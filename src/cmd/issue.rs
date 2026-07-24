@@ -216,6 +216,13 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
         }
+        IssueCmd::Comment(crate::cli::IssueCommentCmd::List { number, limit }) => {
+            let repo = ctx.repo()?;
+            let items = ctx.client.issues(repo).list_comments(&number, limit.limit)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::comment_table(w, &items))?;
+        }
     }
     Ok(())
 }

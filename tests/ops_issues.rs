@@ -184,6 +184,208 @@ fn comment_posts_form_body_to_issue_comments() {
 }
 
 #[test]
+fn list_comments_hits_issue_comments_path_and_decodes() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/88/comments";
+    let body = r#"[
+        {
+            "id": 7,
+            "body": "first",
+            "user": {"login": "dev1"},
+            "created_at": "2026-01-01T00:00:00+08:00"
+        },
+        {
+            "id": 9,
+            "body": "second",
+            "user": {"login": "dev2"},
+            "created_at": "2026-01-02T00:00:00+08:00"
+        }
+    ]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let items = client(&server)
+        .issues(&test_repo())
+        .list_comments("88", 30)
+        .expect("list_comments should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].id, 7);
+    assert_eq!(items[0].body, "first");
+    assert_eq!(items[0].user.as_ref().unwrap().login, "dev1");
+    assert_eq!(
+        items[0].created_at.as_deref(),
+        Some("2026-01-01T00:00:00+08:00")
+    );
+    assert_eq!(items[1].id, 9);
+}
+
+#[test]
+fn list_comments_truncates_to_limit() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/88/comments";
+    let body = r#"[
+        {"id":1,"body":"a"},
+        {"id":2,"body":"b"},
+        {"id":3,"body":"c"}
+    ]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let items = client(&server)
+        .issues(&test_repo())
+        .list_comments("88", 2)
+        .expect("list_comments should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].id, 1);
+    assert_eq!(items[1].id, 2);
+}
+
+#[test]
+fn latest_comment_picks_authors_most_recent_by_created_at() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/88/comments";
+    let body = r#"[
+        {
+            "id": 1,
+            "body": "older mine",
+            "user": {"login": "me"},
+            "created_at": "2026-01-01T00:00:00+08:00"
+        },
+        {
+            "id": 2,
+            "body": "theirs",
+            "user": {"login": "other"},
+            "created_at": "2026-01-03T00:00:00+08:00"
+        },
+        {
+            "id": 3,
+            "body": "newer mine",
+            "user": {"login": "me"},
+            "created_at": "2026-01-02T00:00:00+08:00"
+        }
+    ]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let comment = client(&server)
+        .issues(&test_repo())
+        .latest_comment("88", "me")
+        .expect("latest_comment should succeed");
+
+    mock.assert();
+    assert_eq!(comment.id, 3);
+    assert_eq!(comment.body, "newer mine");
+}
+
+#[test]
+fn latest_comment_errors_when_author_has_none() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/88/comments";
+    let body = r#"[{"id":1,"body":"x","user":{"login":"other"},"created_at":"2026-01-01T00:00:00+08:00"}]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let err = client(&server)
+        .issues(&test_repo())
+        .latest_comment("88", "me")
+        .expect_err("no comment by me should error");
+
+    mock.assert();
+    assert!(
+        matches!(err, GiteeError::Usage(_)),
+        "expected Usage error, got {err:?}"
+    );
+}
+
+#[test]
+fn latest_comment_paginates_fully_beyond_list_limit() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/88/comments";
+
+    // Full first page (100 items) with no match; second page carries the user's comment.
+    let page1: Vec<String> = (1..=100)
+        .map(|i| {
+            format!(
+                r#"{{"id":{i},"body":"p1","user":{{"login":"other"}},"created_at":"2026-01-01T00:00:00+08:00"}}"#
+            )
+        })
+        .collect();
+    let page1_body = format!("[{}]", page1.join(","));
+    let page2_body = r#"[{"id":101,"body":"mine on page 2","user":{"login":"me"},"created_at":"2026-01-02T00:00:00+08:00"}]"#;
+
+    let m1 = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(page1_body)
+        .create();
+    let m2 = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "2".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(page2_body)
+        .create();
+
+    let comment = client(&server)
+        .issues(&test_repo())
+        .latest_comment("88", "me")
+        .expect("latest_comment should page through");
+
+    m1.assert();
+    m2.assert();
+    assert_eq!(comment.id, 101);
+    assert_eq!(comment.body, "mine on page 2");
+}
+
+#[test]
 fn create_sends_milestone_and_security_hole() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/issues";

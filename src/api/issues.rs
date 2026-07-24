@@ -1,5 +1,5 @@
 use super::client::Client;
-use crate::api::StateChange;
+use crate::api::{resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{Comment, Issue, IssueState};
 use crate::repo::Repo;
@@ -216,6 +216,31 @@ impl Issues<'_> {
         let form = Client::str_refs(&f);
         self.client
             .post(&format!("/repos/{o}/{r}/issues/{number}/comments"), &form)
+    }
+
+    /// List comments on an issue. `limit` caps how many are returned (paging
+    /// via `get_paged`).
+    pub fn list_comments(&self, number: &str, limit: usize) -> Result<Vec<Comment>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        self.client.get_paged(
+            &format!("/repos/{o}/{r}/issues/{number}/comments"),
+            &[],
+            limit,
+        )
+    }
+
+    /// Resolve `--last`: the comment by `login` with the latest `created_at`.
+    /// Paginates fully (independent of list `--limit`). Nothing found ⇒ Usage.
+    pub fn latest_comment(&self, number: &str, login: &str) -> Result<Comment> {
+        let comments = self.list_comments(number, usize::MAX)?;
+        resolve_latest_comment(&comments, login)
+            .cloned()
+            .ok_or_else(|| {
+                GiteeError::Usage(format!(
+                    "no comment by '{login}' on issue {number}"
+                ))
+            })
     }
 
     /// GET the issue first; if `body` already contains `tag`, returns `Ok(false)` without PATCH.

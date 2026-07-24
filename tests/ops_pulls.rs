@@ -430,6 +430,180 @@ fn comment_posts_form_body() {
 }
 
 #[test]
+fn list_comments_hits_pull_comments_path_and_decodes_pr_comment() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/comments";
+    // position/new_line arrive as strings in Gitee swagger; keep them Option<String>.
+    let body = r#"[
+        {
+            "id": 99,
+            "body": "general note",
+            "user": {"login": "dev1"},
+            "created_at": "2026-01-01T00:00:00+08:00",
+            "updated_at": "2026-01-01T00:00:00+08:00",
+            "comment_type": "pr_comment"
+        },
+        {
+            "id": 100,
+            "body": "line note",
+            "user": {"login": "dev2"},
+            "created_at": "2026-01-02T00:00:00+08:00",
+            "updated_at": "2026-01-02T00:00:00+08:00",
+            "path": "src/main.rs",
+            "position": "42",
+            "new_line": "10",
+            "commit_id": "abc123",
+            "comment_type": "diff_comment"
+        }
+    ]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .list_comments(
+            12,
+            &gitee_cli_rs::api::pulls::PrCommentFilter {
+                limit: 30,
+                ..Default::default()
+            },
+        )
+        .expect("list_comments should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].id, 99);
+    assert_eq!(items[0].body, "general note");
+    assert_eq!(items[0].comment_type.as_deref(), Some("pr_comment"));
+    assert!(items[0].path.is_none());
+    assert_eq!(items[1].id, 100);
+    assert_eq!(items[1].path.as_deref(), Some("src/main.rs"));
+    assert_eq!(items[1].position.as_deref(), Some("42"));
+    assert_eq!(items[1].new_line.as_deref(), Some("10"));
+    assert_eq!(items[1].commit_id.as_deref(), Some("abc123"));
+    assert_eq!(items[1].comment_type.as_deref(), Some("diff_comment"));
+}
+
+#[test]
+fn list_comments_sends_comment_type_filter() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/comments";
+    let body = r#"[{"id":100,"body":"line","comment_type":"diff_comment"}]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+            mockito::Matcher::UrlEncoded("comment_type".into(), "diff_comment".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .list_comments(
+            12,
+            &gitee_cli_rs::api::pulls::PrCommentFilter {
+                kind: Some(gitee_cli_rs::models::PrCommentKind::Diff),
+                limit: 30,
+            },
+        )
+        .expect("list_comments with type should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].id, 100);
+}
+
+#[test]
+fn latest_comment_picks_authors_most_recent_pr_comment() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/comments";
+    let body = r#"[
+        {
+            "id": 10,
+            "body": "older",
+            "user": {"login": "me"},
+            "created_at": "2026-01-01T00:00:00+08:00",
+            "comment_type": "pr_comment"
+        },
+        {
+            "id": 11,
+            "body": "newer",
+            "user": {"login": "me"},
+            "created_at": "2026-01-02T00:00:00+08:00",
+            "path": "a.rs",
+            "position": "3",
+            "comment_type": "diff_comment"
+        }
+    ]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let comment = client(&server)
+        .pulls(&test_repo())
+        .latest_comment(12, "me")
+        .expect("latest_comment should succeed");
+
+    mock.assert();
+    assert_eq!(comment.id, 11);
+    assert_eq!(comment.body, "newer");
+    assert_eq!(comment.path.as_deref(), Some("a.rs"));
+}
+
+#[test]
+fn latest_comment_errors_when_author_has_none_on_pr() {
+    use gitee_cli_rs::error::GiteeError;
+
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/comments";
+    let body = r#"[{"id":1,"body":"x","user":{"login":"other"},"created_at":"2026-01-01T00:00:00+08:00"}]"#;
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create();
+
+    let err = client(&server)
+        .pulls(&test_repo())
+        .latest_comment(12, "me")
+        .expect_err("no comment by me should error");
+
+    mock.assert();
+    assert!(
+        matches!(err, GiteeError::Usage(_)),
+        "expected Usage error, got {err:?}"
+    );
+}
+
+#[test]
 fn approve_force_true_sends_force_field() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/gitee-cli/pulls/12/review";

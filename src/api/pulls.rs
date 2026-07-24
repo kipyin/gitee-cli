@@ -1,7 +1,9 @@
 use super::client::Client;
-use crate::api::StateChange;
-use crate::error::Result;
-use crate::models::{Comment, FileDiff, MergeMethod, PrState, PullRequest};
+use crate::api::{resolve_latest_comment, StateChange};
+use crate::error::{GiteeError, Result};
+use crate::models::{
+    Comment, FileDiff, MergeMethod, PrComment, PrCommentKind, PrState, PullRequest,
+};
 use crate::repo::Repo;
 
 pub struct Pulls<'a> {
@@ -51,6 +53,14 @@ pub struct EditPr<'a> {
     pub assignees: Option<&'a str>,
     pub testers: Option<&'a str>,
     pub milestone_number: Option<i64>,
+}
+
+/// Filters for `Pulls::list_comments`. `kind` is the CLI vocabulary; ops maps
+/// it to Gitee's `comment_type` query (`diff_comment` | `pr_comment`).
+#[derive(Default)]
+pub struct PrCommentFilter {
+    pub kind: Option<PrCommentKind>,
+    pub limit: usize,
 }
 
 impl Pulls<'_> {
@@ -162,6 +172,46 @@ impl Pulls<'_> {
         let form = Client::str_refs(&f);
         self.client
             .post(&format!("/repos/{o}/{r}/pulls/{number}/comments"), &form)
+    }
+
+    /// List comments on a pull request. Optional `kind` maps to Gitee's
+    /// `comment_type` query (`diff_comment` | `pr_comment`).
+    pub fn list_comments(
+        &self,
+        number: i64,
+        filter: &PrCommentFilter,
+    ) -> Result<Vec<PrComment>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let mut q: Vec<(&str, String)> = Vec::new();
+        if let Some(k) = filter.kind {
+            q.push(("comment_type", k.as_api_str().to_string()));
+        }
+        let qref = Client::str_refs(&q);
+        self.client.get_paged(
+            &format!("/repos/{o}/{r}/pulls/{number}/comments"),
+            &qref,
+            filter.limit,
+        )
+    }
+
+    /// Resolve `--last`: the comment by `login` with the latest `created_at`.
+    /// Paginates fully (independent of list `--limit`). Nothing found ⇒ Usage.
+    pub fn latest_comment(&self, number: i64, login: &str) -> Result<PrComment> {
+        let comments = self.list_comments(
+            number,
+            &PrCommentFilter {
+                kind: None,
+                limit: usize::MAX,
+            },
+        )?;
+        resolve_latest_comment(&comments, login)
+            .cloned()
+            .ok_or_else(|| {
+                GiteeError::Usage(format!(
+                    "no comment by '{login}' on pull request {number}"
+                ))
+            })
     }
 
     /// Gitee quirk: POST /review returns an empty body on success; `force` is sent only when true.

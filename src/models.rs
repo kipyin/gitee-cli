@@ -74,6 +74,32 @@ impl MergeMethod {
     }
 }
 
+/// CLI `--type` for `pr comment list`. Ops maps to Gitee `comment_type`
+/// (`diff_comment` | `pr_comment`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PrCommentKind {
+    Diff,
+    General,
+}
+
+impl PrCommentKind {
+    pub fn from_cli(s: &str) -> Option<Self> {
+        match s {
+            "diff" => Some(Self::Diff),
+            "general" => Some(Self::General),
+            _ => None,
+        }
+    }
+
+    /// Gitee `comment_type` query value.
+    pub fn as_api_str(self) -> &'static str {
+        match self {
+            Self::Diff => "diff_comment",
+            Self::General => "pr_comment",
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct UserBasic {
     #[serde(default)]
@@ -428,6 +454,37 @@ pub struct Comment {
     pub created_at: Option<String>,
 }
 
+/// PR comment (`PullRequestComments` in Gitee v5 swagger). Richer than issue
+/// `Comment`/`Note`: carries optional positional fields and `comment_type`
+/// (`diff_comment` | `pr_comment`). `position` / `new_line` are strings in the
+/// swagger response even though create takes an int position.
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct PrComment {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub html_url: Option<String>,
+    #[serde(default)]
+    pub user: Option<UserBasic>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub position: Option<String>,
+    #[serde(default)]
+    pub new_line: Option<String>,
+    #[serde(default)]
+    pub commit_id: Option<String>,
+    /// `diff_comment` or `pr_comment`.
+    #[serde(default)]
+    pub comment_type: Option<String>,
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct RepoDetails {
     #[serde(default)]
@@ -539,7 +596,9 @@ mod webhook_tests {
 
 #[cfg(test)]
 mod state_tests {
-    use super::{Issue, IssueState, MergeMethod, Milestone, PrState, PullRequest};
+    use super::{
+        Issue, IssueState, MergeMethod, Milestone, PrComment, PrCommentKind, PrState, PullRequest,
+    };
     use serde_json;
 
     #[test]
@@ -662,6 +721,41 @@ mod state_tests {
         let ms = pr.milestone.expect("milestone");
         assert_eq!(ms.number, 7);
         assert_eq!(ms.title, "v1.0");
+    }
+
+    #[test]
+    fn pr_comment_kind_maps_cli_to_api_comment_type() {
+        assert_eq!(PrCommentKind::from_cli("diff"), Some(PrCommentKind::Diff));
+        assert_eq!(
+            PrCommentKind::from_cli("general"),
+            Some(PrCommentKind::General)
+        );
+        assert_eq!(PrCommentKind::from_cli("other"), None);
+        assert_eq!(PrCommentKind::Diff.as_api_str(), "diff_comment");
+        assert_eq!(PrCommentKind::General.as_api_str(), "pr_comment");
+    }
+
+    #[test]
+    fn pr_comment_deserializes_string_position_and_type() {
+        let c: PrComment = serde_json::from_str(
+            r#"{
+                "id": 100,
+                "body": "line note",
+                "path": "src/main.rs",
+                "position": "42",
+                "new_line": "10",
+                "commit_id": "abc123",
+                "comment_type": "diff_comment",
+                "user": {"login": "dev2"},
+                "created_at": "2026-01-02T00:00:00+08:00"
+            }"#,
+        )
+        .expect("pr comment json");
+        assert_eq!(c.id, 100);
+        assert_eq!(c.position.as_deref(), Some("42"));
+        assert_eq!(c.new_line.as_deref(), Some("10"));
+        assert_eq!(c.comment_type.as_deref(), Some("diff_comment"));
+        assert_eq!(c.path.as_deref(), Some("src/main.rs"));
     }
 
     #[test]

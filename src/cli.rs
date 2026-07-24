@@ -256,6 +256,16 @@ pub enum PrCommentCmd {
         #[command(flatten)]
         body: CommentArgs,
     },
+    /// List comments on a pull request.
+    List {
+        number: i64,
+        /// Filter by type: `diff` (line/positional) or `general` (maps to Gitee
+        /// `diff_comment` / `pr_comment`).
+        #[arg(long = "type", value_parser = ["diff", "general"])]
+        comment_type: Option<String>,
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
 }
 
 
@@ -397,6 +407,12 @@ pub enum IssueCommentCmd {
         number: String,
         #[command(flatten)]
         body: CommentArgs,
+    },
+    /// List comments on an issue.
+    List {
+        number: String,
+        #[command(flatten)]
+        limit: LimitArgs,
     },
 }
 
@@ -1601,5 +1617,38 @@ mod parse_tests {
             Cli::try_parse_from(["gitee", "pr", "comment", "42", "-m", "x"]).is_err(),
             "old pr comment form must fail"
         );
+    }
+
+    #[test]
+    fn issue_comment_list_parses_limit() {
+        let cli = Cli::try_parse_from([
+            "gitee", "issue", "comment", "list", "I88", "--limit", "5",
+        ])
+        .expect("issue comment list should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::List { number, limit })) = cli.cmd
+        else {
+            panic!("expected issue comment list");
+        };
+        assert_eq!(number, "I88");
+        assert_eq!(limit.limit, 5);
+    }
+
+    #[test]
+    fn pr_comment_list_parses_type_and_limit() {
+        let cli = Cli::try_parse_from([
+            "gitee", "pr", "comment", "list", "42", "--type", "diff", "--limit", "10",
+        ])
+        .expect("pr comment list should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::List {
+            number,
+            comment_type,
+            limit,
+        })) = cli.cmd
+        else {
+            panic!("expected pr comment list");
+        };
+        assert_eq!(number, 42);
+        assert_eq!(comment_type.as_deref(), Some("diff"));
+        assert_eq!(limit.limit, 10);
     }
 }

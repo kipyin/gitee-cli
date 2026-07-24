@@ -624,6 +624,61 @@ pub fn comment_line(w: &mut impl Write, c: &Comment) -> std::io::Result<()> {
         c.html_url.as_deref().unwrap_or("")
     )
 }
+
+#[derive(Tabled)]
+struct CommentRow {
+    id: String,
+    author: String,
+    created: String,
+    body: String,
+}
+
+pub fn comment_table(w: &mut impl Write, items: &[Comment]) -> std::io::Result<()> {
+    let rows: Vec<CommentRow> = items
+        .iter()
+        .map(|c| CommentRow {
+            id: c.id.to_string(),
+            author: c
+                .user
+                .as_ref()
+                .map(|u| u.login.clone())
+                .unwrap_or_default(),
+            created: c.created_at.clone().unwrap_or_default(),
+            body: c.body.clone(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+#[derive(Tabled)]
+struct PrCommentRow {
+    id: String,
+    author: String,
+    created: String,
+    path: String,
+    position: String,
+    body: String,
+}
+
+pub fn pr_comment_table(w: &mut impl Write, items: &[PrComment]) -> std::io::Result<()> {
+    let rows: Vec<PrCommentRow> = items
+        .iter()
+        .map(|c| PrCommentRow {
+            id: c.id.to_string(),
+            author: c
+                .user
+                .as_ref()
+                .map(|u| u.login.clone())
+                .unwrap_or_default(),
+            created: c.created_at.clone().unwrap_or_default(),
+            path: c.path.clone().unwrap_or_default(),
+            position: c.position.clone().unwrap_or_default(),
+            body: c.body.clone(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
 // --- labels -------------------------------------------------------------
 
 #[derive(Tabled)]
@@ -1099,6 +1154,51 @@ mod printer_tests {
         assert!(out.contains("@dev1 commented:"));
         assert!(out.contains("Looks good to me"));
         assert!(out.contains("https://gitee.com/oschina/gitee-cli/pulls/12#note_1"));
+    }
+
+    #[test]
+    fn comment_table_shows_id_author_created_body() {
+        let items = vec![Comment {
+            id: 7,
+            body: "thanks".into(),
+            user: Some(UserBasic {
+                login: "dev1".into(),
+                ..Default::default()
+            }),
+            created_at: Some("2026-01-01T00:00:00+08:00".into()),
+            ..Default::default()
+        }];
+        let mut buf = Vec::new();
+        comment_table(&mut buf, &items).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("7"));
+        assert!(out.contains("dev1"));
+        assert!(out.contains("2026-01-01T00:00:00+08:00"));
+        assert!(out.contains("thanks"));
+    }
+
+    #[test]
+    fn pr_comment_table_shows_path_and_position_for_diff() {
+        let items = vec![PrComment {
+            id: 100,
+            body: "nit".into(),
+            user: Some(UserBasic {
+                login: "rev".into(),
+                ..Default::default()
+            }),
+            created_at: Some("2026-01-02T00:00:00+08:00".into()),
+            path: Some("src/main.rs".into()),
+            position: Some("42".into()),
+            comment_type: Some("diff_comment".into()),
+            ..Default::default()
+        }];
+        let mut buf = Vec::new();
+        pr_comment_table(&mut buf, &items).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("100"));
+        assert!(out.contains("src/main.rs"));
+        assert!(out.contains("42"));
+        assert!(out.contains("nit"));
     }
 
     #[test]

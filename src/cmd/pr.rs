@@ -1,10 +1,10 @@
 use std::io::Write;
 
 use super::{join_flags, resolve_milestone_opt, Ctx};
-use crate::api::pulls::{CreatePr, EditPr, PrFilter};
+use crate::api::pulls::{CreatePr, EditPr, PrCommentFilter, PrFilter};
 use crate::cli::PrCmd;
 use crate::error::{GiteeError, Result};
-use crate::models::{MergeMethod, PrState};
+use crate::models::{MergeMethod, PrCommentKind, PrState};
 use crate::out;
 
 pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
@@ -250,6 +250,31 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             let c = ctx.client.pulls(repo).comment(number, &body.body)?;
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
+        }
+        PrCmd::Comment(crate::cli::PrCommentCmd::List {
+            number,
+            comment_type,
+            limit,
+        }) => {
+            let repo = ctx.repo()?;
+            let kind = match comment_type.as_deref() {
+                Some(s) => Some(PrCommentKind::from_cli(s).ok_or_else(|| {
+                    GiteeError::Usage(format!(
+                        "unsupported comment type '{s}' (want diff|general)"
+                    ))
+                })?),
+                None => None,
+            };
+            let items = ctx.client.pulls(repo).list_comments(
+                number,
+                &PrCommentFilter {
+                    kind,
+                    limit: limit.limit,
+                },
+            )?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::pr_comment_table(w, &items))?;
         }
         PrCmd::Approve { number, force } => {
             let repo = ctx.repo()?;
