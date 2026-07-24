@@ -409,6 +409,9 @@ pub struct PullRequest {
     pub closed_at: Option<String>,
     #[serde(default)]
     pub mergeable: Option<bool>,
+    /// Set by `pr view` via GET .../pulls/{n}/merge (not from pull payload).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merged: Option<bool>,
     /// Per-file diff list. Not returned by `GET /repos/.../pulls/{n}` —
     /// populated by `pr view` via the separate `/pulls/{n}/files` endpoint.
     #[serde(default)]

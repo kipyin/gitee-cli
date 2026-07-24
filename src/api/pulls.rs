@@ -107,6 +107,19 @@ impl Pulls<'_> {
             .get(&format!("/repos/{o}/{r}/pulls/{number}"), &[])
     }
 
+    /// Whether a pull request has been merged. Maps Gitee's check endpoint:
+    /// 204 ⇒ merged, 404 ⇒ not merged.
+    pub fn is_merged(&self, number: i64) -> Result<bool> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let path = format!("/repos/{o}/{r}/pulls/{number}/merge");
+        match self.client.get_ok(&path) {
+            Ok(()) => Ok(true),
+            Err(GiteeError::NotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
     pub fn files(&self, number: i64) -> Result<Vec<FileDiff>> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();

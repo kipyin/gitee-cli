@@ -1640,3 +1640,35 @@ fn remove_testers_idempotent_absent_skips_delete() {
     del.assert();
     assert!(matches!(change, StateChange::Already(())));
 }
+
+#[test]
+fn is_merged_true_on_204_false_on_404() {
+    let mut server = mockito::Server::new();
+    let ok = server
+        .mock(
+            "GET",
+            api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str(),
+        )
+        .with_status(204)
+        .create();
+    assert!(client(&server)
+        .pulls(&test_repo())
+        .is_merged(12)
+        .unwrap());
+    ok.assert();
+
+    let mut server = mockito::Server::new();
+    let missing = server
+        .mock(
+            "GET",
+            api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str(),
+        )
+        .with_status(404)
+        .with_body("{}")
+        .create();
+    assert!(!client(&server)
+        .pulls(&test_repo())
+        .is_merged(12)
+        .unwrap());
+    missing.assert();
+}

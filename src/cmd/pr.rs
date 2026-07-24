@@ -54,15 +54,22 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &status, |w| out::pr_status(w, &status))?;
         }
-        PrCmd::View { number, web } => {
+        PrCmd::View { number, web, merged } => {
             let repo = ctx.repo()?;
             if web {
                 let url = crate::web::pull_url(&ctx.host, repo, number);
                 return crate::web::open_or_print(&url);
             }
+            if merged {
+                if ctx.client.pulls(repo).is_merged(number)? {
+                    return Ok(());
+                }
+                std::process::exit(1);
+            }
             let mut pr = ctx.client.pulls(repo).get(number)?;
             let files = ctx.client.pulls(repo).files(number)?;
             pr.files = Some(files);
+            pr.merged = ctx.client.pulls(repo).is_merged(number).ok();
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
         }

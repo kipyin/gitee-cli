@@ -362,7 +362,8 @@ pub fn pr_table(w: &mut impl Write, items: &[PullRequest]) -> std::io::Result<()
 }
 
 pub fn one_pr(w: &mut impl Write, p: &PullRequest) -> std::io::Result<()> {
-    let state = pr_state_style(p.state, p.merged_at.is_some());
+    let merged = p.merged.unwrap_or_else(|| p.merged_at.is_some());
+    let state = pr_state_style(p.state, merged);
     writeln!(
         w,
         "{}  {}  [{}]",
@@ -371,6 +372,17 @@ pub fn one_pr(w: &mut impl Write, p: &PullRequest) -> std::io::Result<()> {
         state
     )?;
     writeln!(w, "{} -> {}", dim(&p.head.git_ref), dim(&p.base.git_ref))?;
+    if p.merged.is_some() {
+        writeln!(
+            w,
+            "merged: {}",
+            if p.merged.unwrap_or(false) {
+                "yes"
+            } else {
+                "no"
+            }
+        )?;
+    }
     writeln!(w, "{}", dim(&p.html_url))?;
     if let Some(b) = &p.body {
         let b = b.trim();
@@ -1107,6 +1119,16 @@ mod printer_tests {
             },
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn one_pr_shows_merged_when_set() {
+        let mut pr = pr_fixture();
+        pr.merged = Some(true);
+        let mut buf = Vec::new();
+        one_pr(&mut buf, &pr).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("merged: yes"));
     }
 
     #[test]

@@ -149,6 +149,9 @@ pub enum PrCmd {
         /// Open in a browser instead of printing.
         #[arg(long)]
         web: bool,
+        /// Exit 0 when the pull request is merged, 1 when not (no output).
+        #[arg(long)]
+        merged: bool,
     },
     /// Show the unified diff of a pull request.
     Diff {
@@ -1738,9 +1741,15 @@ mod parse_tests {
         let cli = Cli::try_parse_from(["gitee", "browse"]).unwrap();
         assert!(matches!(cli.cmd, Command::Browse));
         let cli = Cli::try_parse_from(["gitee", "pr", "view", "12", "--web"]).unwrap();
-        let Command::Pr(PrCmd::View { number, web }) = cli.cmd else { panic!("pr view") };
+        let Command::Pr(PrCmd::View { number, web, merged }) = cli.cmd else { panic!("pr view") };
         assert_eq!(number, 12);
         assert!(web);
+        assert!(!merged);
+        let cli = Cli::try_parse_from(["gitee", "pr", "view", "12", "--merged"]).unwrap();
+        let Command::Pr(PrCmd::View { number, merged, web, .. }) = cli.cmd else { panic!("pr view --merged") };
+        assert_eq!(number, 12);
+        assert!(merged);
+        assert!(!web);
         let cli = Cli::try_parse_from(["gitee", "issue", "view", "I1", "--web"]).unwrap();
         let Command::Issue(IssueCmd::View { number, web }) = cli.cmd else { panic!("issue view") };
         assert_eq!(number, "I1");
