@@ -472,6 +472,97 @@ fn update_latest_comment_lists_then_patches_authors_most_recent() {
 }
 
 #[test]
+fn delete_comment_deletes_by_id() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/comments/7";
+
+    let mock = server
+        .mock("DELETE", api_path(path).as_str())
+        .with_status(204)
+        .create();
+
+    let change = client(&server)
+        .issues(&test_repo())
+        .delete_comment(7)
+        .expect("delete_comment should succeed");
+
+    mock.assert();
+    assert!(matches!(change, StateChange::Changed(())));
+}
+
+#[test]
+fn delete_comment_404_is_idempotent_ok() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/comments/7";
+
+    let mock = server
+        .mock("DELETE", api_path(path).as_str())
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message":"Not Found"}"#)
+        .create();
+
+    let change = client(&server)
+        .issues(&test_repo())
+        .delete_comment(7)
+        .expect("already-gone comment should be Ok");
+
+    mock.assert();
+    assert!(matches!(change, StateChange::Already(())));
+}
+
+#[test]
+fn delete_latest_comment_lists_then_deletes_authors_most_recent() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/issues/88/comments";
+    let delete_path = "/repos/oschina/gitee-cli/issues/comments/3";
+    let list_body = r#"[
+        {
+            "id": 1,
+            "body": "older mine",
+            "user": {"login": "me"},
+            "created_at": "2026-01-01T00:00:00+08:00"
+        },
+        {
+            "id": 2,
+            "body": "theirs",
+            "user": {"login": "other"},
+            "created_at": "2026-01-03T00:00:00+08:00"
+        },
+        {
+            "id": 3,
+            "body": "newer mine",
+            "user": {"login": "me"},
+            "created_at": "2026-01-02T00:00:00+08:00"
+        }
+    ]"#;
+
+    let list_mock = server
+        .mock("GET", api_path(list_path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(list_body)
+        .create();
+    let delete_mock = server
+        .mock("DELETE", api_path(delete_path).as_str())
+        .with_status(204)
+        .create();
+
+    let change = client(&server)
+        .issues(&test_repo())
+        .delete_latest_comment("88", "me")
+        .expect("delete_latest_comment should succeed");
+
+    list_mock.assert();
+    delete_mock.assert();
+    assert!(matches!(change, StateChange::Changed(())));
+}
+
+#[test]
 fn create_sends_milestone_and_security_hole() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/issues";

@@ -235,6 +235,31 @@ impl Pulls<'_> {
         self.update_comment(comment.id, body)
     }
 
+    /// DELETE a pull-request comment by integer `id`. Already gone (404) ⇒ `Already`
+    /// (idempotent success, silent at the cmd layer).
+    pub fn delete_comment(&self, id: i64) -> Result<StateChange<()>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        match self
+            .client
+            .delete_ok(&format!("/repos/{o}/{r}/pulls/comments/{id}"))
+        {
+            Ok(()) => Ok(StateChange::Changed(())),
+            Err(GiteeError::NotFound(_)) => Ok(StateChange::Already(())),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `--last` delete: resolve `login`'s most-recent comment on the PR, then DELETE.
+    pub fn delete_latest_comment(
+        &self,
+        number: i64,
+        login: &str,
+    ) -> Result<StateChange<()>> {
+        let comment = self.latest_comment(number, login)?;
+        self.delete_comment(comment.id)
+    }
+
     /// Gitee quirk: POST /review returns an empty body on success; `force` is sent only when true.
     pub fn approve(&self, number: i64, force: bool) -> Result<()> {
         let o = self.repo.owner.as_str();

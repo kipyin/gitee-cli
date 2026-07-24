@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use super::{join_flags, resolve_milestone_opt, Ctx};
+use super::{confirm, join_flags, resolve_milestone_opt, Ctx};
 use crate::api::pulls::{CreatePr, EditPr, PrCommentFilter, PrFilter};
 use crate::cli::PrCmd;
 use crate::error::{GiteeError, Result};
@@ -329,6 +329,50 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             let mut out = std::io::stdout().lock();
             ctx.out
                 .render(&mut out, &c, |w| out::pr_comment_line(w, &c))?;
+        }
+        PrCmd::Comment(crate::cli::PrCommentCmd::Delete {
+            target,
+            last,
+            yes,
+        }) => {
+            let repo = ctx.repo()?;
+            if ctx.preview {
+                let action = if last {
+                    format!("delete latest comment on pull request {target}")
+                } else {
+                    format!("delete comment {target}")
+                };
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &action,
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
+                return Ok(());
+            }
+            let confirm_msg = if last {
+                format!("Delete latest comment on pull request {target}")
+            } else {
+                format!("Delete comment {target}")
+            };
+            confirm(&confirm_msg, yes)?;
+            let ops = ctx.client.pulls(repo);
+            let change = if last {
+                let me = ctx.me()?;
+                ops.delete_latest_comment(target, &me.login)?
+            } else {
+                ops.delete_comment(target)?
+            };
+            // 404 / already-gone is silent (idempotent); only announce real deletes.
+            if change.was_changed() {
+                let mut out = std::io::stdout().lock();
+                if last {
+                    writeln!(out, "Deleted latest comment on pull request {target}")?;
+                } else {
+                    writeln!(out, "Deleted comment {target}")?;
+                }
+            }
         }
         PrCmd::Approve { number, force } => {
             let repo = ctx.repo()?;

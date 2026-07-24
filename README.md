@@ -209,6 +209,9 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--tester`, `--label`, `--milestone`) |
 | `merge <n>` | Merge (`--squash`, `--rebase`, `--no-close-issue`) — **idempotent**: already-merged exits `0` |
 | `comment create <n>` | Add a comment (`-m/--body`) |
+| `comment list <n>` | List comments (`--type diff|general`, `--limit`) |
+| `comment edit <id>` | Edit by id, or latest via `--last` + PR number (`-m/--body` or `$EDITOR`) |
+| `comment delete <id>` | Delete by id, or latest via `--last` + PR number (`--yes` skips confirm; 404 is idempotent) |
 | `approve <n>` | Approve / 审查通过 (`--force`) |
 | `test <n>` | Mark tested / 测试通过 (`--force`) — Gitee-specific |
 | `close <n>` / `reopen <n>` | Change state |
@@ -229,6 +232,9 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `close <n>` / `reopen <n>` | Change state — **idempotent**: already-closed/open exits `0` (`open`/`closed` shortcuts; prefer `edit --state` for `progressing`/`rejected`) |
 | `link <n> <pr>` | Link an issue to a pull request |
 | `comment create <n>` | Add a comment (`-m/--body`) |
+| `comment list <n>` | List comments (`--limit`) |
+| `comment edit <id>` | Edit by id, or latest via `--last` + issue ident (`-m/--body` or `$EDITOR`) |
+| `comment delete <id>` | Delete by id, or latest via `--last` + issue ident (`--yes` skips confirm; 404 is idempotent) |
 
 </details>
 

@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use super::{join_flags, resolve_milestone_opt, Ctx};
+use super::{confirm, join_flags, resolve_milestone_opt, Ctx};
 use crate::api::issues::{CreateIssue, EditIssue, IssueFilter};
 use crate::cli::IssueCmd;
 use crate::error::{GiteeError, Result};
@@ -280,6 +280,55 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             };
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
+        }
+        IssueCmd::Comment(crate::cli::IssueCommentCmd::Delete {
+            target,
+            last,
+            yes,
+        }) => {
+            let repo = ctx.repo()?;
+            if ctx.preview {
+                let action = if last {
+                    format!("delete latest comment on issue {target}")
+                } else {
+                    format!("delete comment {target}")
+                };
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &action,
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
+                return Ok(());
+            }
+            let confirm_msg = if last {
+                format!("Delete latest comment on issue {target}")
+            } else {
+                format!("Delete comment {target}")
+            };
+            confirm(&confirm_msg, yes)?;
+            let ops = ctx.client.issues(repo);
+            let change = if last {
+                let me = ctx.me()?;
+                ops.delete_latest_comment(&target, &me.login)?
+            } else {
+                let id: i64 = target.parse().map_err(|_| {
+                    GiteeError::Usage(format!(
+                        "comment id must be an integer, got '{target}'"
+                    ))
+                })?;
+                ops.delete_comment(id)?
+            };
+            // 404 / already-gone is silent (idempotent); only announce real deletes.
+            if change.was_changed() {
+                let mut out = std::io::stdout().lock();
+                if last {
+                    writeln!(out, "Deleted latest comment on issue {target}")?;
+                } else {
+                    writeln!(out, "Deleted comment {target}")?;
+                }
+            }
         }
     }
     Ok(())

@@ -74,6 +74,7 @@ not an error.
 | `pr reopen <n>`                   | prints "Pull request !<n> already open", exit `0`  |
 | `pr merge <n>`                    | prints "Pull request !<n> already merged", exit `0` |
 | `label create <name> --color <c>` | same name + same color → exit `0` (no-op); same name + different color → exit `1` with `gitee label edit <name> --color <c>` hint |
+| `issue|pr comment delete <id>`    | already gone (HTTP 404) → silent exit `0` (unlike `label delete`, which exits `4`) |
 
 With `--json`, the idempotent no-op returns a structured object on stdout:
 

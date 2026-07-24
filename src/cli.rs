@@ -277,6 +277,18 @@ pub enum PrCommentCmd {
         #[arg(long, short = 'm')]
         body: Option<String>,
     },
+    /// Delete a comment by id, or the current user's latest on a PR via `--last`.
+    Delete {
+        /// Comment id, or PR number when `--last` is set.
+        target: i64,
+        /// Delete the authenticated user's most-recent comment on the PR
+        /// (`target` is the PR number).
+        #[arg(long)]
+        last: bool,
+        /// Skip the confirmation prompt.
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
 }
 
 
@@ -427,14 +439,26 @@ pub enum IssueCommentCmd {
     },
     /// Edit a comment by id, or the current user's latest on an issue via `--last`.
     Edit {
-        /// Comment id, or issue number when `--last` is set.
+        /// Comment id, or issue ident when `--last` is set.
         target: String,
         /// Edit the authenticated user's most-recent comment on the issue
-        /// (`target` is the issue number).
+        /// (`target` is the issue ident).
         #[arg(long)]
         last: bool,
         #[arg(long, short = 'm')]
         body: Option<String>,
+    },
+    /// Delete a comment by id, or the current user's latest on an issue via `--last`.
+    Delete {
+        /// Comment id, or issue ident when `--last` is set.
+        target: String,
+        /// Delete the authenticated user's most-recent comment on the issue
+        /// (`target` is the issue ident).
+        #[arg(long)]
+        last: bool,
+        /// Skip the confirmation prompt.
+        #[arg(long, short = 'y')]
+        yes: bool,
     },
 }
 
@@ -1742,5 +1766,71 @@ mod parse_tests {
         assert_eq!(target, 12);
         assert!(last);
         assert_eq!(body.as_deref(), Some("fixed"));
+    }
+
+    #[test]
+    fn issue_comment_delete_parses_by_id_and_last() {
+        let cli = Cli::try_parse_from(["gitee", "issue", "comment", "delete", "7", "--yes"])
+            .expect("issue comment delete by id should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Delete {
+            target,
+            last,
+            yes,
+        })) = cli.cmd
+        else {
+            panic!("expected issue comment delete");
+        };
+        assert_eq!(target, "7");
+        assert!(!last);
+        assert!(yes);
+
+        let cli = Cli::try_parse_from([
+            "gitee", "issue", "comment", "delete", "I88", "--last", "-y",
+        ])
+        .expect("issue comment delete --last should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Delete {
+            target,
+            last,
+            yes,
+        })) = cli.cmd
+        else {
+            panic!("expected issue comment delete --last");
+        };
+        assert_eq!(target, "I88");
+        assert!(last);
+        assert!(yes);
+    }
+
+    #[test]
+    fn pr_comment_delete_parses_by_id_and_last() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "comment", "delete", "42", "--yes"])
+            .expect("pr comment delete by id should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Delete {
+            target,
+            last,
+            yes,
+        })) = cli.cmd
+        else {
+            panic!("expected pr comment delete");
+        };
+        assert_eq!(target, 42);
+        assert!(!last);
+        assert!(yes);
+
+        let cli = Cli::try_parse_from([
+            "gitee", "pr", "comment", "delete", "12", "--last", "-y",
+        ])
+        .expect("pr comment delete --last should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Delete {
+            target,
+            last,
+            yes,
+        })) = cli.cmd
+        else {
+            panic!("expected pr comment delete --last");
+        };
+        assert_eq!(target, 12);
+        assert!(last);
+        assert!(yes);
     }
 }

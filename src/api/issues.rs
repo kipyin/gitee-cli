@@ -264,6 +264,31 @@ impl Issues<'_> {
         self.update_comment(comment.id, body)
     }
 
+    /// DELETE an issue comment by integer `id`. Already gone (404) ⇒ `Already`
+    /// (idempotent success, silent at the cmd layer).
+    pub fn delete_comment(&self, id: i64) -> Result<StateChange<()>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        match self
+            .client
+            .delete_ok(&format!("/repos/{o}/{r}/issues/comments/{id}"))
+        {
+            Ok(()) => Ok(StateChange::Changed(())),
+            Err(GiteeError::NotFound(_)) => Ok(StateChange::Already(())),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `--last` delete: resolve `login`'s most-recent comment on the issue, then DELETE.
+    pub fn delete_latest_comment(
+        &self,
+        number: &str,
+        login: &str,
+    ) -> Result<StateChange<()>> {
+        let comment = self.latest_comment(number, login)?;
+        self.delete_comment(comment.id)
+    }
+
     /// GET the issue first; if `body` already contains `tag`, returns `Ok(false)` without PATCH.
     /// Otherwise PATCH JSON `{repo, title, body}` with appended `Linked: {tag}` and returns `Ok(true)`.
     pub fn link(&self, number: &str, tag: &str) -> Result<bool> {
