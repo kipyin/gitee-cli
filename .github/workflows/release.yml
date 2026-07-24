@@ -82,3 +82,72 @@ jobs:
         with:
           files: dist/*.tar.xz
           generate_release_notes: true
+
+  # Bumps kipyin/homebrew-tap Formula/gitee.rb to this tag's macOS tarballs.
+  # Requires repo secret HOMEBREW_TAP_TOKEN: a PAT (or fine-grained token) with
+  # contents:write on kipyin/homebrew-tap. Default GITHUB_TOKEN cannot push
+  # to another repository.
+  homebrew:
+    name: Bump Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Hash the same GitHub Release assets Homebrew will fetch (not the
+      # intermediate workflow artifacts from `build`).
+      - name: Download macOS release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          gh release download "${GITHUB_REF_NAME}" \
+            --repo "${{ github.repository }}" \
+            --dir dist \
+            --pattern "gitee-*-apple-darwin-v${VERSION}.tar.xz"
+          test -f "dist/gitee-aarch64-apple-darwin-v${VERSION}.tar.xz"
+          test -f "dist/gitee-x86_64-apple-darwin-v${VERSION}.tar.xz"
+
+      - name: Update Formula/gitee.rb
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN secret is not set (needs contents:write on kipyin/homebrew-tap)"
+            exit 1
+          fi
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARM_TAR="dist/gitee-aarch64-apple-darwin-v${VERSION}.tar.xz"
+          X86_TAR="dist/gitee-x86_64-apple-darwin-v${VERSION}.tar.xz"
+          test -f "$ARM_TAR" && test -f "$X86_TAR"
+          ARM_SHA="$(sha256sum "$ARM_TAR" | awk '{print $1}')"
+          X86_SHA="$(sha256sum "$X86_TAR" | awk '{print $1}')"
+
+          git clone --depth 1 \
+            "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/kipyin/homebrew-tap.git" \
+            tap
+
+          if grep -q "version \"${VERSION}\"" tap/Formula/gitee.rb \
+            && grep -q "sha256 \"${ARM_SHA}\"" tap/Formula/gitee.rb \
+            && grep -q "sha256 \"${X86_SHA}\"" tap/Formula/gitee.rb; then
+            echo "Formula already at ${VERSION}; nothing to do."
+            exit 0
+          fi
+
+          python3 .github/scripts/bump-homebrew-formula.py \
+            tap/Formula/gitee.rb "$VERSION" "$ARM_SHA" "$X86_SHA"
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/gitee.rb
+          git commit -m "bump gitee to ${VERSION}"
+          git push origin HEAD
+          echo "Bumped kipyin/homebrew-tap to gitee ${VERSION}"
