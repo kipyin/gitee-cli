@@ -604,6 +604,90 @@ fn latest_comment_errors_when_author_has_none_on_pr() {
 }
 
 #[test]
+fn update_comment_patches_form_body_by_id() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/comments/42";
+    let response = r#"{"id":42,"body":"fixed review note","comment_type":"pr_comment"}"#;
+
+    let mock = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded(
+            "body".into(),
+            "fixed review note".into(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(response)
+        .create();
+
+    let comment = client(&server)
+        .pulls(&test_repo())
+        .update_comment(42, "fixed review note")
+        .expect("update_comment should succeed");
+
+    mock.assert();
+    assert_eq!(comment.id, 42);
+    assert_eq!(comment.body, "fixed review note");
+}
+
+#[test]
+fn update_latest_comment_lists_then_patches_authors_most_recent() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/pulls/12/comments";
+    let patch_path = "/repos/oschina/gitee-cli/pulls/comments/11";
+    let list_body = r#"[
+        {
+            "id": 10,
+            "body": "older",
+            "user": {"login": "me"},
+            "created_at": "2026-01-01T00:00:00+08:00",
+            "comment_type": "pr_comment"
+        },
+        {
+            "id": 11,
+            "body": "newer",
+            "user": {"login": "me"},
+            "created_at": "2026-01-02T00:00:00+08:00",
+            "path": "a.rs",
+            "position": "3",
+            "comment_type": "diff_comment"
+        }
+    ]"#;
+    let patch_response = r#"{"id":11,"body":"edited latest","path":"a.rs","position":"3","comment_type":"diff_comment"}"#;
+
+    let list_mock = server
+        .mock("GET", api_path(list_path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(list_body)
+        .create();
+    let patch_mock = server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded(
+            "body".into(),
+            "edited latest".into(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(patch_response)
+        .create();
+
+    let comment = client(&server)
+        .pulls(&test_repo())
+        .update_latest_comment(12, "me", "edited latest")
+        .expect("update_latest_comment should succeed");
+
+    list_mock.assert();
+    patch_mock.assert();
+    assert_eq!(comment.id, 11);
+    assert_eq!(comment.body, "edited latest");
+}
+
+#[test]
 fn approve_force_true_sends_force_field() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/gitee-cli/pulls/12/review";

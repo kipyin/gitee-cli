@@ -97,6 +97,26 @@ pub fn stdin_is_tty() -> bool {
     std::io::stdin().is_terminal()
 }
 
+/// Resolve an optional comment/issue body: use `--body`/`-m` when present;
+/// on a TTY open `$EDITOR` (prefilled with `prefill`); non-TTY without body
+/// is a usage error.
+pub fn resolve_optional_body(
+    body: Option<String>,
+    prefill: &str,
+    usage_cmd: &str,
+) -> Result<String> {
+    if let Some(b) = body {
+        return Ok(b);
+    }
+    if !stdin_is_tty() {
+        return Err(GiteeError::Usage(format!("{usage_cmd} needs --body/-m")));
+    }
+    let editor = resolve_editor_from_env_and_config()?;
+    edit_body_in_editor(prefill, &editor)?.ok_or_else(|| {
+        GiteeError::Usage("comment body is empty".into())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

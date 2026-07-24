@@ -266,6 +266,17 @@ pub enum PrCommentCmd {
         #[command(flatten)]
         limit: LimitArgs,
     },
+    /// Edit a comment by id, or the current user's latest on a PR via `--last`.
+    Edit {
+        /// Comment id, or PR number when `--last` is set.
+        target: i64,
+        /// Edit the authenticated user's most-recent comment on the PR
+        /// (`target` is the PR number).
+        #[arg(long)]
+        last: bool,
+        #[arg(long, short = 'm')]
+        body: Option<String>,
+    },
 }
 
 
@@ -413,6 +424,17 @@ pub enum IssueCommentCmd {
         number: String,
         #[command(flatten)]
         limit: LimitArgs,
+    },
+    /// Edit a comment by id, or the current user's latest on an issue via `--last`.
+    Edit {
+        /// Comment id, or issue number when `--last` is set.
+        target: String,
+        /// Edit the authenticated user's most-recent comment on the issue
+        /// (`target` is the issue number).
+        #[arg(long)]
+        last: bool,
+        #[arg(long, short = 'm')]
+        body: Option<String>,
     },
 }
 
@@ -1650,5 +1672,75 @@ mod parse_tests {
         assert_eq!(number, 42);
         assert_eq!(comment_type.as_deref(), Some("diff"));
         assert_eq!(limit.limit, 10);
+    }
+
+    #[test]
+    fn issue_comment_edit_parses_by_id_and_last() {
+        let cli = Cli::try_parse_from([
+            "gitee", "issue", "comment", "edit", "7", "-m", "fixed",
+        ])
+        .expect("issue comment edit by id should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Edit {
+            target,
+            last,
+            body,
+        })) = cli.cmd
+        else {
+            panic!("expected issue comment edit");
+        };
+        assert_eq!(target, "7");
+        assert!(!last);
+        assert_eq!(body.as_deref(), Some("fixed"));
+
+        let cli = Cli::try_parse_from([
+            "gitee", "issue", "comment", "edit", "I88", "--last", "-m", "fixed",
+        ])
+        .expect("issue comment edit --last should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Edit {
+            target,
+            last,
+            body,
+        })) = cli.cmd
+        else {
+            panic!("expected issue comment edit --last");
+        };
+        assert_eq!(target, "I88");
+        assert!(last);
+        assert_eq!(body.as_deref(), Some("fixed"));
+    }
+
+    #[test]
+    fn pr_comment_edit_parses_by_id_and_last() {
+        let cli = Cli::try_parse_from([
+            "gitee", "pr", "comment", "edit", "42", "-m", "fixed",
+        ])
+        .expect("pr comment edit by id should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Edit {
+            target,
+            last,
+            body,
+        })) = cli.cmd
+        else {
+            panic!("expected pr comment edit");
+        };
+        assert_eq!(target, 42);
+        assert!(!last);
+        assert_eq!(body.as_deref(), Some("fixed"));
+
+        let cli = Cli::try_parse_from([
+            "gitee", "pr", "comment", "edit", "12", "--last", "-m", "fixed",
+        ])
+        .expect("pr comment edit --last should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Edit {
+            target,
+            last,
+            body,
+        })) = cli.cmd
+        else {
+            panic!("expected pr comment edit --last");
+        };
+        assert_eq!(target, 12);
+        assert!(last);
+        assert_eq!(body.as_deref(), Some("fixed"));
     }
 }

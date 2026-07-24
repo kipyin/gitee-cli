@@ -615,14 +615,27 @@ pub fn issue_status(w: &mut impl Write, s: &IssueStatus) -> std::io::Result<()> 
 }
 
 
-pub fn comment_line(w: &mut impl Write, c: &Comment) -> std::io::Result<()> {
-    let who = c.user.as_ref().map(|u| u.login.as_str()).unwrap_or("?");
+fn write_comment_line(
+    w: &mut impl Write,
+    who: &str,
+    body: &str,
+    html_url: Option<&str>,
+) -> std::io::Result<()> {
     writeln!(
         w,
-        "@{who} commented:\n{}\n{}",
-        c.body,
-        c.html_url.as_deref().unwrap_or("")
+        "@{who} commented:\n{body}\n{}",
+        html_url.unwrap_or("")
     )
+}
+
+pub fn comment_line(w: &mut impl Write, c: &Comment) -> std::io::Result<()> {
+    let who = c.user.as_ref().map(|u| u.login.as_str()).unwrap_or("?");
+    write_comment_line(w, who, &c.body, c.html_url.as_deref())
+}
+
+pub fn pr_comment_line(w: &mut impl Write, c: &PrComment) -> std::io::Result<()> {
+    let who = c.user.as_ref().map(|u| u.login.as_str()).unwrap_or("?");
+    write_comment_line(w, who, &c.body, c.html_url.as_deref())
 }
 
 #[derive(Tabled)]

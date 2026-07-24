@@ -276,6 +276,60 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &items, |w| out::pr_comment_table(w, &items))?;
         }
+        PrCmd::Comment(crate::cli::PrCommentCmd::Edit {
+            target,
+            last,
+            body,
+        }) => {
+            let repo = ctx.repo()?;
+            if ctx.preview {
+                let action = if last {
+                    format!("edit latest comment on pull request {target}")
+                } else {
+                    format!("edit comment {target}")
+                };
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &action,
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
+                return Ok(());
+            }
+            let ops = ctx.client.pulls(repo);
+            let c = if last {
+                let me = ctx.me()?;
+                match body {
+                    Some(b) => ops.update_latest_comment(target, &me.login, &b)?,
+                    None => {
+                        // Non-TTY without -m: usage error before listing.
+                        if !super::interactive::stdin_is_tty() {
+                            return Err(GiteeError::Usage(
+                                "pr comment edit needs --body/-m".into(),
+                            ));
+                        }
+                        let existing = ops.latest_comment(target, &me.login)?;
+                        let body_text = super::interactive::resolve_optional_body(
+                            None,
+                            &existing.body,
+                            "pr comment edit",
+                        )?;
+                        ops.update_comment(existing.id, &body_text)?
+                    }
+                }
+            } else {
+                let body_text = super::interactive::resolve_optional_body(
+                    body,
+                    "",
+                    "pr comment edit",
+                )?;
+                ops.update_comment(target, &body_text)?
+            };
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &c, |w| out::pr_comment_line(w, &c))?;
+        }
         PrCmd::Approve { number, force } => {
             let repo = ctx.repo()?;
             ctx.client.pulls(repo).approve(number, force)?;

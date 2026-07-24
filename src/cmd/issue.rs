@@ -223,6 +223,64 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &items, |w| out::comment_table(w, &items))?;
         }
+        IssueCmd::Comment(crate::cli::IssueCommentCmd::Edit {
+            target,
+            last,
+            body,
+        }) => {
+            let repo = ctx.repo()?;
+            if ctx.preview {
+                let action = if last {
+                    format!("edit latest comment on issue {target}")
+                } else {
+                    format!("edit comment {target}")
+                };
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &action,
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
+                return Ok(());
+            }
+            let ops = ctx.client.issues(repo);
+            let c = if last {
+                let me = ctx.me()?;
+                match body {
+                    Some(b) => ops.update_latest_comment(&target, &me.login, &b)?,
+                    None => {
+                        // Non-TTY without -m: usage error before listing.
+                        if !super::interactive::stdin_is_tty() {
+                            return Err(GiteeError::Usage(
+                                "issue comment edit needs --body/-m".into(),
+                            ));
+                        }
+                        let existing = ops.latest_comment(&target, &me.login)?;
+                        let body_text = super::interactive::resolve_optional_body(
+                            None,
+                            &existing.body,
+                            "issue comment edit",
+                        )?;
+                        ops.update_comment(existing.id, &body_text)?
+                    }
+                }
+            } else {
+                let id: i64 = target.parse().map_err(|_| {
+                    GiteeError::Usage(format!(
+                        "comment id must be an integer, got '{target}'"
+                    ))
+                })?;
+                let body_text = super::interactive::resolve_optional_body(
+                    body,
+                    "",
+                    "issue comment edit",
+                )?;
+                ops.update_comment(id, &body_text)?
+            };
+            let mut out = std::io::stdout().lock();
+            ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
+        }
     }
     Ok(())
 }

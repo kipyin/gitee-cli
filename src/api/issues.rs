@@ -243,6 +243,27 @@ impl Issues<'_> {
             })
     }
 
+    /// PATCH an issue comment by integer `id`.
+    pub fn update_comment(&self, id: i64, body: &str) -> Result<Comment> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        let form = Client::str_refs(&f);
+        self.client
+            .patch(&format!("/repos/{o}/{r}/issues/comments/{id}"), &form)
+    }
+
+    /// `--last` edit: resolve `login`'s most-recent comment on the issue, then PATCH.
+    pub fn update_latest_comment(
+        &self,
+        number: &str,
+        login: &str,
+        body: &str,
+    ) -> Result<Comment> {
+        let comment = self.latest_comment(number, login)?;
+        self.update_comment(comment.id, body)
+    }
+
     /// GET the issue first; if `body` already contains `tag`, returns `Ok(false)` without PATCH.
     /// Otherwise PATCH JSON `{repo, title, body}` with appended `Linked: {tag}` and returns `Ok(true)`.
     pub fn link(&self, number: &str, tag: &str) -> Result<bool> {

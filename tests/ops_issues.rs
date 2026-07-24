@@ -386,6 +386,92 @@ fn latest_comment_paginates_fully_beyond_list_limit() {
 }
 
 #[test]
+fn update_comment_patches_form_body_by_id() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/issues/comments/7";
+    let response = r#"{"id":7,"body":"fixed typo","html_url":"https://gitee.com/oschina/gitee-cli/issues/I88#note_7"}"#;
+
+    let mock = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded(
+            "body".into(),
+            "fixed typo".into(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(response)
+        .create();
+
+    let comment = client(&server)
+        .issues(&test_repo())
+        .update_comment(7, "fixed typo")
+        .expect("update_comment should succeed");
+
+    mock.assert();
+    assert_eq!(comment.id, 7);
+    assert_eq!(comment.body, "fixed typo");
+}
+
+#[test]
+fn update_latest_comment_lists_then_patches_authors_most_recent() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/issues/88/comments";
+    let patch_path = "/repos/oschina/gitee-cli/issues/comments/3";
+    let list_body = r#"[
+        {
+            "id": 1,
+            "body": "older mine",
+            "user": {"login": "me"},
+            "created_at": "2026-01-01T00:00:00+08:00"
+        },
+        {
+            "id": 2,
+            "body": "theirs",
+            "user": {"login": "other"},
+            "created_at": "2026-01-03T00:00:00+08:00"
+        },
+        {
+            "id": 3,
+            "body": "newer mine",
+            "user": {"login": "me"},
+            "created_at": "2026-01-02T00:00:00+08:00"
+        }
+    ]"#;
+    let patch_response = r#"{"id":3,"body":"edited latest"}"#;
+
+    let list_mock = server
+        .mock("GET", api_path(list_path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(list_body)
+        .create();
+    let patch_mock = server
+        .mock("PATCH", api_path(patch_path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded(
+            "body".into(),
+            "edited latest".into(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(patch_response)
+        .create();
+
+    let comment = client(&server)
+        .issues(&test_repo())
+        .update_latest_comment("88", "me", "edited latest")
+        .expect("update_latest_comment should succeed");
+
+    list_mock.assert();
+    patch_mock.assert();
+    assert_eq!(comment.id, 3);
+    assert_eq!(comment.body, "edited latest");
+}
+
+#[test]
 fn create_sends_milestone_and_security_hole() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/issues";

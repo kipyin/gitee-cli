@@ -214,6 +214,27 @@ impl Pulls<'_> {
             })
     }
 
+    /// PATCH a pull-request comment by integer `id`.
+    pub fn update_comment(&self, id: i64, body: &str) -> Result<PrComment> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        let form = Client::str_refs(&f);
+        self.client
+            .patch(&format!("/repos/{o}/{r}/pulls/comments/{id}"), &form)
+    }
+
+    /// `--last` edit: resolve `login`'s most-recent comment on the PR, then PATCH.
+    pub fn update_latest_comment(
+        &self,
+        number: i64,
+        login: &str,
+        body: &str,
+    ) -> Result<PrComment> {
+        let comment = self.latest_comment(number, login)?;
+        self.update_comment(comment.id, body)
+    }
+
     /// Gitee quirk: POST /review returns an empty body on success; `force` is sent only when true.
     pub fn approve(&self, number: i64, force: bool) -> Result<()> {
         let o = self.repo.owner.as_str();
