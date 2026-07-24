@@ -55,6 +55,15 @@ pub struct EditPr<'a> {
     pub milestone_number: Option<i64>,
 }
 
+/// Optional form fields for `Pulls::comment` line/diff comments (`commit_id`,
+/// `path`, `position`). Omitted fields are not sent.
+#[derive(Default)]
+pub struct PrCommentPositional<'a> {
+    pub path: Option<&'a str>,
+    pub position: Option<i64>,
+    pub commit_id: Option<&'a str>,
+}
+
 /// Filters for `Pulls::list_comments`. `kind` is the CLI vocabulary; ops maps
 /// it to Gitee's `comment_type` query (`diff_comment` | `pr_comment`).
 #[derive(Default)]
@@ -165,10 +174,24 @@ impl Pulls<'_> {
         Ok(StateChange::Changed(()))
     }
 
-    pub fn comment(&self, number: i64, body: &str) -> Result<Comment> {
+    pub fn comment(
+        &self,
+        number: i64,
+        body: &str,
+        positional: &PrCommentPositional<'_>,
+    ) -> Result<Comment> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        let mut f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        if let Some(p) = positional.path {
+            f.push(("path", p.to_string()));
+        }
+        if let Some(pos) = positional.position {
+            f.push(("position", pos.to_string()));
+        }
+        if let Some(c) = positional.commit_id {
+            f.push(("commit_id", c.to_string()));
+        }
         let form = Client::str_refs(&f);
         self.client
             .post(&format!("/repos/{o}/{r}/pulls/{number}/comments"), &form)

@@ -245,9 +245,23 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 }
             }
         }
-        PrCmd::Comment(crate::cli::PrCommentCmd::Create { number, body }) => {
+        PrCmd::Comment(crate::cli::PrCommentCmd::Create {
+            number,
+            body,
+            path,
+            position,
+            commit_id,
+        }) => {
             let repo = ctx.repo()?;
-            let c = ctx.client.pulls(repo).comment(number, &body.body)?;
+            let positional = crate::api::pulls::PrCommentPositional {
+                path: path.as_deref(),
+                position,
+                commit_id: commit_id.as_deref(),
+            };
+            let c = ctx
+                .client
+                .pulls(repo)
+                .comment(number, &body.body, &positional)?;
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
         }

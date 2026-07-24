@@ -255,6 +255,15 @@ pub enum PrCommentCmd {
         number: i64,
         #[command(flatten)]
         body: CommentArgs,
+        /// File path for a line/diff comment.
+        #[arg(long)]
+        path: Option<String>,
+        /// Gitee diff-line index (not the file line number).
+        #[arg(long)]
+        position: Option<i64>,
+        /// Commit SHA the diff comment applies to.
+        #[arg(long = "commit-id")]
+        commit_id: Option<String>,
     },
     /// List comments on a pull request.
     List {
@@ -1646,11 +1655,79 @@ mod parse_tests {
             "gitee", "pr", "comment", "create", "42", "-m", "LGTM",
         ])
         .expect("pr comment create should parse");
-        let Command::Pr(PrCmd::Comment(PrCommentCmd::Create { number, body })) = cli.cmd else {
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Create {
+            number,
+            body,
+            path,
+            position,
+            commit_id,
+        })) = cli.cmd
+        else {
             panic!("expected pr comment create");
         };
         assert_eq!(number, 42);
         assert_eq!(body.body, "LGTM");
+        assert!(path.is_none());
+        assert!(position.is_none());
+        assert!(commit_id.is_none());
+    }
+
+    #[test]
+    fn pr_comment_create_positional_flags_parse() {
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "pr",
+            "comment",
+            "create",
+            "12",
+            "-m",
+            "nit",
+            "--path",
+            "src/main.rs",
+            "--position",
+            "7",
+            "--commit-id",
+            "deadbeef",
+        ])
+        .expect("pr comment create with positional flags should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Create {
+            number,
+            body,
+            path,
+            position,
+            commit_id,
+        })) = cli.cmd
+        else {
+            panic!("expected pr comment create");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(body.body, "nit");
+        assert_eq!(path.as_deref(), Some("src/main.rs"));
+        assert_eq!(position, Some(7));
+        assert_eq!(commit_id.as_deref(), Some("deadbeef"));
+    }
+
+    #[test]
+    fn pr_comment_create_position_help_documents_diff_line_index() {
+        use clap::CommandFactory;
+
+        let mut cmd = Cli::command();
+        let help = cmd
+            .find_subcommand_mut("pr")
+            .and_then(|c| c.find_subcommand_mut("comment"))
+            .and_then(|c| c.find_subcommand_mut("create"))
+            .expect("pr comment create subcommand")
+            .render_long_help()
+            .ansi()
+            .to_string();
+        assert!(
+            help.contains("diff-line index"),
+            "help should document position is a diff-line index: {help}"
+        );
+        assert!(
+            help.contains("not the file line number"),
+            "help should warn position is not a file line number: {help}"
+        );
     }
 
     #[test]

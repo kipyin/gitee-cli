@@ -1,5 +1,5 @@
 use gitee_cli_rs::api::client::Client;
-use gitee_cli_rs::api::pulls::{CreatePr, EditPr, PrFilter};
+use gitee_cli_rs::api::pulls::{CreatePr, EditPr, PrCommentPositional, PrFilter};
 use gitee_cli_rs::api::StateChange;
 use gitee_cli_rs::models::{MergeMethod, PrState};
 use gitee_cli_rs::repo::Repo;
@@ -422,11 +422,44 @@ fn comment_posts_form_body() {
 
     let comment = client(&server)
         .pulls(&test_repo())
-        .comment(12, "LGTM")
+        .comment(12, "LGTM", &PrCommentPositional::default())
         .expect("comment should succeed");
 
     mock.assert();
     assert_eq!(comment.body, "LGTM");
+}
+
+#[test]
+fn comment_posts_positional_form_fields() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/comments";
+    let response = r#"{"id":100,"body":"nit","path":"src/main.rs","position":"7","commit_id":"deadbeef","comment_type":"diff_comment"}"#;
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("body".into(), "nit".into()),
+            mockito::Matcher::UrlEncoded("path".into(), "src/main.rs".into()),
+            mockito::Matcher::UrlEncoded("position".into(), "7".into()),
+            mockito::Matcher::UrlEncoded("commit_id".into(), "deadbeef".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(response)
+        .create();
+
+    let positional = PrCommentPositional {
+        path: Some("src/main.rs"),
+        position: Some(7),
+        commit_id: Some("deadbeef"),
+    };
+    let comment = client(&server)
+        .pulls(&test_repo())
+        .comment(12, "nit", &positional)
+        .expect("positional comment should succeed");
+
+    mock.assert();
+    assert_eq!(comment.body, "nit");
 }
 
 #[test]
