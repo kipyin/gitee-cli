@@ -11,10 +11,10 @@ class Gitee < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/kipyin/gitee-cli/releases/download/v#{version}/gitee-aarch64-apple-darwin-v#{version}.tar.xz"
-      sha256 "40559f63259a5720589d53050b0e2ee6c01ef2195108bef96d72dec835155702"
+      sha256 "829c416bd980c8040c60d97de74ba10b6c29b8dc4db5fdd381f9fff7808fae52"
     else
       url "https://github.com/kipyin/gitee-cli/releases/download/v#{version}/gitee-x86_64-apple-darwin-v#{version}.tar.xz"
-      sha256 "f460c1c596d5950b43987b720c0a82ec306af50464c6a678153843e1c0344595"
+      sha256 "6a71817d7abea98e6052a4e1a692555ef44223ba37dc3111cb937e071189370c"
     end
   end
 
