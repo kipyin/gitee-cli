@@ -271,6 +271,21 @@ impl Client {
             .map_err(GiteeError::Http)
     }
 
+    /// POST with a JSON body (e.g. issue/PR label add: a JSON array of names).
+    pub fn post_json<T: DeserializeOwned>(&self, path: &str, body: &Value) -> Result<T> {
+        self.trace("POST", path);
+        let resp = self
+            .http
+            .post(self.full(path))
+            .header("Authorization", self.auth())
+            .json(body)
+            .send()
+            .map_err(|e| self.map_http_err(e))?;
+        self.check(resp, "POST", path)?
+            .json()
+            .map_err(GiteeError::Http)
+    }
+
     /// For endpoints that return an empty body on success (e.g. PR review/merge).
     pub fn post_ok(&self, path: &str, form: &[(&str, &str)]) -> Result<()> {
         self.send_ok("POST", path, form)

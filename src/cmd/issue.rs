@@ -330,6 +330,67 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 }
             }
         }
+        IssueCmd::Label(crate::cli::IssueLabelCmd::List { number }) => {
+            let repo = ctx.repo()?;
+            let items = ctx.client.issues(repo).list_labels(&number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::label_table(w, &items))?;
+        }
+        IssueCmd::Label(crate::cli::IssueLabelCmd::Add { number, labels }) => {
+            let repo = ctx.repo()?;
+            let joined = labels.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("add labels on issue {number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("labels", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .issues(repo)
+                .add_labels_idempotent(&number, &refs)?;
+            // Already-present is silent (idempotent); render labels after a real add.
+            if let crate::api::StateChange::Changed(items) = change {
+                let mut out = std::io::stdout().lock();
+                ctx.out
+                    .render(&mut out, &items, |w| out::label_table(w, &items))?;
+            }
+        }
+        IssueCmd::Label(crate::cli::IssueLabelCmd::Remove { number, labels }) => {
+            let repo = ctx.repo()?;
+            let joined = labels.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("remove labels on issue {number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("labels", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .issues(repo)
+                .remove_labels_idempotent(&number, &refs)?;
+            if change.was_changed() {
+                let mut out = std::io::stdout().lock();
+                writeln!(out, "Removed labels [{joined}] from issue {number}")?;
+            }
+        }
     }
     Ok(())
 }

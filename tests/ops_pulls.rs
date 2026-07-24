@@ -1070,3 +1070,169 @@ fn list_sends_assignee_and_tester_filters() {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].number, 12);
 }
+
+const PR_LABELS_JSON: &str = r#"[
+    {"id":1,"name":"bug","color":"ff0000"},
+    {"id":2,"name":"ui","color":"00ff00"}
+]"#;
+
+#[test]
+fn list_labels_gets_paged_pr_labels_path() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/labels";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_LABELS_JSON)
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .list_labels(12)
+        .expect("list_labels should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].name, "bug");
+    assert_eq!(items[1].name, "ui");
+}
+
+#[test]
+fn add_labels_idempotent_posts_only_missing_as_json_array() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/labels";
+
+    let get = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[{"id":1,"name":"bug","color":"ff0000"}]"#)
+        .create();
+
+    let post = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::Json(serde_json::json!(["ui"])))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_LABELS_JSON)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .add_labels_idempotent(12, &["bug", "ui"])
+        .expect("add_labels_idempotent should succeed");
+
+    get.assert();
+    post.assert();
+    match change {
+        StateChange::Changed(labels) => {
+            assert_eq!(labels.len(), 2);
+            assert_eq!(labels[1].name, "ui");
+        }
+        other => panic!("expected Changed, got {other:?}"),
+    }
+}
+
+#[test]
+fn add_labels_idempotent_already_present_skips_post() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/labels";
+
+    let get = server
+        .mock("GET", api_path(path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_LABELS_JSON)
+        .create();
+
+    let post = server
+        .mock("POST", api_path(path).as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .add_labels_idempotent(12, &["bug"])
+        .expect("add of present label should succeed");
+
+    get.assert();
+    post.assert();
+    assert!(matches!(change, StateChange::Already(_)));
+}
+
+#[test]
+fn remove_labels_idempotent_deletes_only_present() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/pulls/12/labels";
+    let del_path = "/repos/oschina/gitee-cli/pulls/12/labels/bug";
+
+    let get = server
+        .mock("GET", api_path(list_path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_LABELS_JSON)
+        .create();
+
+    let del = server
+        .mock("DELETE", api_path(del_path).as_str())
+        .with_status(204)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .remove_labels_idempotent(12, &["bug", "missing"])
+        .expect("remove_labels_idempotent should succeed");
+
+    get.assert();
+    del.assert();
+    assert!(matches!(change, StateChange::Changed(())));
+}
+
+#[test]
+fn remove_labels_idempotent_absent_skips_delete() {
+    let mut server = mockito::Server::new();
+    let list_path = "/repos/oschina/gitee-cli/pulls/12/labels";
+
+    let get = server
+        .mock("GET", api_path(list_path).as_str())
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+            mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_LABELS_JSON)
+        .create();
+
+    let del = server
+        .mock("DELETE", mockito::Matcher::Any)
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .remove_labels_idempotent(12, &["missing"])
+        .expect("remove of absent label should succeed");
+
+    get.assert();
+    del.assert();
+    assert!(matches!(change, StateChange::Already(())));
+}

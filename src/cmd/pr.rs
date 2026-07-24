@@ -388,6 +388,66 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 }
             }
         }
+        PrCmd::Label(crate::cli::PrLabelCmd::List { number }) => {
+            let repo = ctx.repo()?;
+            let items = ctx.client.pulls(repo).list_labels(number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::label_table(w, &items))?;
+        }
+        PrCmd::Label(crate::cli::PrLabelCmd::Add { number, labels }) => {
+            let repo = ctx.repo()?;
+            let joined = labels.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("add labels on pull request !{number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("labels", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .pulls(repo)
+                .add_labels_idempotent(number, &refs)?;
+            if let crate::api::StateChange::Changed(items) = change {
+                let mut out = std::io::stdout().lock();
+                ctx.out
+                    .render(&mut out, &items, |w| out::label_table(w, &items))?;
+            }
+        }
+        PrCmd::Label(crate::cli::PrLabelCmd::Remove { number, labels }) => {
+            let repo = ctx.repo()?;
+            let joined = labels.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("remove labels on pull request !{number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("labels", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .pulls(repo)
+                .remove_labels_idempotent(number, &refs)?;
+            if change.was_changed() {
+                let mut out = std::io::stdout().lock();
+                writeln!(out, "Removed labels [{joined}] from pull request !{number}")?;
+            }
+        }
         PrCmd::Approve { number, force } => {
             let repo = ctx.repo()?;
             ctx.client.pulls(repo).approve(number, force)?;

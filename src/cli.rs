@@ -223,6 +223,9 @@ pub enum PrCmd {
     /// Comment on a pull request.
     #[command(subcommand)]
     Comment(PrCommentCmd),
+    /// Labels attached to a pull request (not repo-level label definitions).
+    #[command(subcommand)]
+    Label(PrLabelCmd),
     Approve {
         number: i64,
         #[arg(long)]
@@ -430,6 +433,60 @@ pub enum IssueCmd {
     /// Comment on an issue.
     #[command(subcommand)]
     Comment(IssueCommentCmd),
+    /// Labels attached to an issue (not repo-level label definitions).
+    #[command(subcommand)]
+    Label(IssueLabelCmd),
+}
+
+/// Non-destructive membership for labels on an issue. Distinct from whole-set
+/// `issue edit --label` and from top-level `gitee label` (definitions).
+#[derive(Subcommand, Clone)]
+pub enum IssueLabelCmd {
+    /// Add labels without removing existing ones.
+    Add {
+        /// Issue ident (e.g. I1AB2C).
+        number: String,
+        /// Label names to add.
+        #[arg(required = true, num_args = 1..)]
+        labels: Vec<String>,
+    },
+    /// Remove only the named labels.
+    Remove {
+        /// Issue ident (e.g. I1AB2C).
+        number: String,
+        /// Label names to remove.
+        #[arg(required = true, num_args = 1..)]
+        labels: Vec<String>,
+    },
+    /// List labels currently attached to the issue.
+    List {
+        /// Issue ident (e.g. I1AB2C).
+        number: String,
+    },
+}
+
+/// Non-destructive membership for labels on a PR. Distinct from whole-set
+/// `pr edit --label` and from top-level `gitee label` (definitions).
+#[derive(Subcommand, Clone)]
+pub enum PrLabelCmd {
+    /// Add labels without removing existing ones.
+    Add {
+        number: i64,
+        /// Label names to add.
+        #[arg(required = true, num_args = 1..)]
+        labels: Vec<String>,
+    },
+    /// Remove only the named labels.
+    Remove {
+        number: i64,
+        /// Label names to remove.
+        #[arg(required = true, num_args = 1..)]
+        labels: Vec<String>,
+    },
+    /// List labels currently attached to the pull request.
+    List {
+        number: i64,
+    },
 }
 
 #[derive(Subcommand, Clone)]
@@ -888,7 +945,7 @@ pub enum GitCredentialCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, IssueCommentCmd, MilestoneCmd, OrgCmd, PrCmd, PrCommentCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
+    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, IssueCommentCmd, IssueLabelCmd, MilestoneCmd, OrgCmd, PrCmd, PrCommentCmd, PrLabelCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
     use clap::Parser;
 
     #[test]
@@ -1909,5 +1966,61 @@ mod parse_tests {
         assert_eq!(target, 12);
         assert!(last);
         assert!(yes);
+    }
+
+    #[test]
+    fn issue_label_add_remove_list_parse() {
+        let cli = Cli::try_parse_from([
+            "gitee", "issue", "label", "add", "I88", "bug", "ui",
+        ])
+        .expect("issue label add should parse");
+        let Command::Issue(IssueCmd::Label(IssueLabelCmd::Add { number, labels })) = cli.cmd
+        else {
+            panic!("expected issue label add");
+        };
+        assert_eq!(number, "I88");
+        assert_eq!(labels, vec!["bug".to_string(), "ui".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "issue", "label", "remove", "I88", "bug"])
+            .expect("issue label remove should parse");
+        let Command::Issue(IssueCmd::Label(IssueLabelCmd::Remove { number, labels })) = cli.cmd
+        else {
+            panic!("expected issue label remove");
+        };
+        assert_eq!(number, "I88");
+        assert_eq!(labels, vec!["bug".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "issue", "label", "list", "I88"])
+            .expect("issue label list should parse");
+        let Command::Issue(IssueCmd::Label(IssueLabelCmd::List { number })) = cli.cmd else {
+            panic!("expected issue label list");
+        };
+        assert_eq!(number, "I88");
+    }
+
+    #[test]
+    fn pr_label_add_remove_list_parse() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "label", "add", "12", "bug", "ui"])
+            .expect("pr label add should parse");
+        let Command::Pr(PrCmd::Label(PrLabelCmd::Add { number, labels })) = cli.cmd else {
+            panic!("expected pr label add");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(labels, vec!["bug".to_string(), "ui".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "label", "remove", "12", "bug"])
+            .expect("pr label remove should parse");
+        let Command::Pr(PrCmd::Label(PrLabelCmd::Remove { number, labels })) = cli.cmd else {
+            panic!("expected pr label remove");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(labels, vec!["bug".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "label", "list", "12"])
+            .expect("pr label list should parse");
+        let Command::Pr(PrCmd::Label(PrLabelCmd::List { number })) = cli.cmd else {
+            panic!("expected pr label list");
+        };
+        assert_eq!(number, 12);
     }
 }

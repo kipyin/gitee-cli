@@ -1,8 +1,9 @@
 use super::client::Client;
 use crate::api::{resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
-use crate::models::{Comment, Issue, IssueState};
+use crate::models::{Comment, Issue, IssueState, Label};
 use crate::repo::Repo;
+use std::collections::HashSet;
 
 /// When a state write hits Gitee's opaque enterprise/project 404, surface a
 /// clearer hint than a bare path. Non-state edits keep the original error.
@@ -287,6 +288,84 @@ impl Issues<'_> {
     ) -> Result<StateChange<()>> {
         let comment = self.latest_comment(number, login)?;
         self.delete_comment(comment.id)
+    }
+
+    /// Labels currently attached to an issue. Gitee's issue-labels GET is not
+    /// paginated (unlike PR labels).
+    pub fn list_labels(&self, number: &str) -> Result<Vec<Label>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        self.client
+            .get(&format!("/repos/{o}/{r}/issues/{number}/labels"), &[])
+    }
+
+    /// Add labels without replacing the rest. GETs current membership first;
+    /// POSTs only names that are missing. Already-present ⇒ `Already` (no POST).
+    pub fn add_labels_idempotent(
+        &self,
+        number: &str,
+        names: &[&str],
+    ) -> Result<StateChange<Vec<Label>>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let path = format!("/repos/{o}/{r}/issues/{number}/labels");
+        let current = self.list_labels(number)?;
+        let present: HashSet<String> = current.iter().map(|l| l.name.clone()).collect();
+        let mut seen = HashSet::new();
+        let missing: Vec<&str> = names
+            .iter()
+            .copied()
+            .filter(|n| !present.contains(*n) && seen.insert(*n))
+            .collect();
+        if missing.is_empty() {
+            return Ok(StateChange::Already(current));
+        }
+        let body = serde_json::Value::Array(
+            missing
+                .iter()
+                .map(|n| serde_json::Value::String((*n).to_string()))
+                .collect(),
+        );
+        let labels: Vec<Label> = self.client.post_json(&path, &body)?;
+        Ok(StateChange::Changed(labels))
+    }
+
+    /// Remove only the named labels. GETs current membership first; DELETEs
+    /// only names that are present. Absent names and DELETE 404 ⇒ no-op.
+    pub fn remove_labels_idempotent(
+        &self,
+        number: &str,
+        names: &[&str],
+    ) -> Result<StateChange<()>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let current = self.list_labels(number)?;
+        let present: HashSet<String> = current.iter().map(|l| l.name.clone()).collect();
+        let mut seen = HashSet::new();
+        let to_remove: Vec<&str> = names
+            .iter()
+            .copied()
+            .filter(|n| present.contains(*n) && seen.insert(*n))
+            .collect();
+        if to_remove.is_empty() {
+            return Ok(StateChange::Already(()));
+        }
+        let mut changed = false;
+        for name in to_remove {
+            match self
+                .client
+                .delete_ok(&format!("/repos/{o}/{r}/issues/{number}/labels/{name}"))
+            {
+                Ok(()) => changed = true,
+                Err(GiteeError::NotFound(_)) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        if changed {
+            Ok(StateChange::Changed(()))
+        } else {
+            Ok(StateChange::Already(()))
+        }
     }
 
     /// GET the issue first; if `body` already contains `tag`, returns `Ok(false)` without PATCH.
