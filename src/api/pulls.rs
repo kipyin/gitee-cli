@@ -3,6 +3,7 @@ use crate::api::{resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{
     Comment, FileDiff, Label, MergeMethod, PrComment, PrCommentKind, PrState, PullRequest,
+    UserAssignee,
 };
 use crate::repo::Repo;
 use std::collections::HashSet;
@@ -372,6 +373,124 @@ impl Pulls<'_> {
             &[],
             usize::MAX,
         )
+    }
+
+    /// Reviewers (审查人) on a PR — read from `assignees[]` on GET PR.
+    pub fn list_assignees(&self, number: i64) -> Result<Vec<UserAssignee>> {
+        Ok(self.get(number)?.assignees.unwrap_or_default())
+    }
+
+    /// Testers (测试人) on a PR — read from `testers[]` on GET PR.
+    pub fn list_testers(&self, number: i64) -> Result<Vec<UserAssignee>> {
+        Ok(self.get(number)?.testers.unwrap_or_default())
+    }
+
+    /// Add reviewers without replacing the rest. GETs current membership first;
+    /// POSTs only logins that are missing (form `assignees=comma-separated`).
+    /// Already-present ⇒ `Already` (no POST).
+    pub fn add_assignees_idempotent(
+        &self,
+        number: i64,
+        logins: &[&str],
+    ) -> Result<StateChange<PullRequest>> {
+        self.add_members_idempotent(number, "assignees", logins, |pr| {
+            pr.assignees.as_deref().unwrap_or(&[])
+        })
+    }
+
+    /// Remove only the named reviewers. GETs current membership first; DELETEs
+    /// present logins via query `assignees=…`. Absent names ⇒ no-op.
+    pub fn remove_assignees_idempotent(
+        &self,
+        number: i64,
+        logins: &[&str],
+    ) -> Result<StateChange<()>> {
+        self.remove_members_idempotent(number, "assignees", logins, |pr| {
+            pr.assignees.as_deref().unwrap_or(&[])
+        })
+    }
+
+    /// Add testers without replacing the rest. Mirror of `add_assignees_idempotent`
+    /// on `/testers` with form `testers=comma-separated`.
+    pub fn add_testers_idempotent(
+        &self,
+        number: i64,
+        logins: &[&str],
+    ) -> Result<StateChange<PullRequest>> {
+        self.add_members_idempotent(number, "testers", logins, |pr| {
+            pr.testers.as_deref().unwrap_or(&[])
+        })
+    }
+
+    /// Remove only the named testers via DELETE query `testers=…`.
+    pub fn remove_testers_idempotent(
+        &self,
+        number: i64,
+        logins: &[&str],
+    ) -> Result<StateChange<()>> {
+        self.remove_members_idempotent(number, "testers", logins, |pr| {
+            pr.testers.as_deref().unwrap_or(&[])
+        })
+    }
+
+    fn add_members_idempotent(
+        &self,
+        number: i64,
+        field: &str,
+        logins: &[&str],
+        current_of: impl FnOnce(&PullRequest) -> &[UserAssignee],
+    ) -> Result<StateChange<PullRequest>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let pr = self.get(number)?;
+        let present: HashSet<String> = current_of(&pr).iter().map(|u| u.login.clone()).collect();
+        let mut seen = HashSet::new();
+        let missing: Vec<&str> = logins
+            .iter()
+            .copied()
+            .filter(|n| !present.contains(*n) && seen.insert(*n))
+            .collect();
+        if missing.is_empty() {
+            return Ok(StateChange::Already(pr));
+        }
+        let joined = missing.join(",");
+        let form = [(field, joined.as_str())];
+        let updated: PullRequest = self
+            .client
+            .post(&format!("/repos/{o}/{r}/pulls/{number}/{field}"), &form)?;
+        Ok(StateChange::Changed(updated))
+    }
+
+    fn remove_members_idempotent(
+        &self,
+        number: i64,
+        field: &str,
+        logins: &[&str],
+        current_of: impl FnOnce(&PullRequest) -> &[UserAssignee],
+    ) -> Result<StateChange<()>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let pr = self.get(number)?;
+        let present: HashSet<String> = current_of(&pr).iter().map(|u| u.login.clone()).collect();
+        let mut seen = HashSet::new();
+        let to_remove: Vec<&str> = logins
+            .iter()
+            .copied()
+            .filter(|n| present.contains(*n) && seen.insert(*n))
+            .collect();
+        if to_remove.is_empty() {
+            return Ok(StateChange::Already(()));
+        }
+        let joined = to_remove.join(",");
+        let query = [(field, joined.as_str())];
+        match self
+            .client
+            .delete_ok_query(&format!("/repos/{o}/{r}/pulls/{number}/{field}"), &query)
+        {
+            Ok(()) => Ok(StateChange::Changed(())),
+            Err(GiteeError::NotFound(_)) => Ok(StateChange::Already(())),
+            Err(e) => Err(e),
+        }
     }
 
     /// Add labels without replacing the rest. GETs current membership first;

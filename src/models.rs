@@ -112,6 +112,23 @@ pub struct UserBasic {
     pub html_url: Option<String>,
 }
 
+/// PR reviewer/tester membership (`UserAssignee` in Gitee v5 swagger).
+/// Extends the basic user shape with optional `accept` (审查通过).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct UserAssignee {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub login: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub html_url: Option<String>,
+    /// Whether the reviewer has accepted (审查通过). Absent on plain user payloads.
+    #[serde(default)]
+    pub accept: Option<bool>,
+}
+
 /// Organization from GET /user/orgs (swagger `Group`).
 /// List payload has `login` and `description` only — not `name` or membership `role`.
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -377,9 +394,9 @@ pub struct PullRequest {
     #[serde(default)]
     pub labels: Option<Vec<Label>>,
     #[serde(default)]
-    pub assignees: Option<Vec<UserBasic>>,
+    pub assignees: Option<Vec<UserAssignee>>,
     #[serde(default)]
-    pub testers: Option<Vec<UserBasic>>,
+    pub testers: Option<Vec<UserAssignee>>,
     #[serde(default)]
     pub milestone: Option<Milestone>,
     #[serde(default)]
@@ -710,14 +727,18 @@ mod state_tests {
         let pr: PullRequest = serde_json::from_str(
             r#"{
                 "number": 3,
-                "assignees": [{"login": "dev1"}],
+                "assignees": [{"login": "dev1", "accept": true}],
                 "testers": [{"login": "qa1"}],
                 "milestone": {"number": 7, "title": "v1.0"}
             }"#,
         )
         .expect("pr json");
-        assert_eq!(pr.assignees.expect("assignees")[0].login, "dev1");
-        assert_eq!(pr.testers.expect("testers")[0].login, "qa1");
+        let assignees = pr.assignees.expect("assignees");
+        assert_eq!(assignees[0].login, "dev1");
+        assert_eq!(assignees[0].accept, Some(true));
+        let testers = pr.testers.expect("testers");
+        assert_eq!(testers[0].login, "qa1");
+        assert_eq!(testers[0].accept, None);
         let ms = pr.milestone.expect("milestone");
         assert_eq!(ms.number, 7);
         assert_eq!(ms.title, "v1.0");

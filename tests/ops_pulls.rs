@@ -1236,3 +1236,307 @@ fn remove_labels_idempotent_absent_skips_delete() {
     del.assert();
     assert!(matches!(change, StateChange::Already(())));
 }
+
+const PR_WITH_MEMBERS_JSON: &str = r#"{
+  "number": 12,
+  "title": "Add pagination helpers",
+  "state": "open",
+  "html_url": "https://gitee.com/oschina/gitee-cli/pulls/12",
+  "head": {"ref": "feature/paging"},
+  "base": {"ref": "master"},
+  "assignees": [
+    {"login": "dev1", "accept": true},
+    {"login": "dev2", "accept": false}
+  ],
+  "testers": [
+    {"login": "qa1"}
+  ]
+}"#;
+
+#[test]
+fn list_assignees_reads_from_pull_request() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .list_assignees(12)
+        .expect("list_assignees should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].login, "dev1");
+    assert_eq!(items[0].accept, Some(true));
+    assert_eq!(items[1].login, "dev2");
+    assert_eq!(items[1].accept, Some(false));
+}
+
+#[test]
+fn list_testers_reads_from_pull_request() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .list_testers(12)
+        .expect("list_testers should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].login, "qa1");
+}
+
+#[test]
+fn add_assignees_idempotent_posts_only_missing_as_form() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let post_path = "/repos/oschina/gitee-cli/pulls/12/assignees";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let post = server
+        .mock("POST", api_path(post_path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("assignees".into(), "dev3".into()),
+        ]))
+        .with_status(201)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .add_assignees_idempotent(12, &["dev1", "dev3"])
+        .expect("add_assignees_idempotent should succeed");
+
+    get.assert();
+    post.assert();
+    assert!(matches!(change, StateChange::Changed(_)));
+}
+
+#[test]
+fn add_assignees_idempotent_already_present_skips_post() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let post_path = "/repos/oschina/gitee-cli/pulls/12/assignees";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let post = server
+        .mock("POST", api_path(post_path).as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .add_assignees_idempotent(12, &["dev1"])
+        .expect("add of present assignee should succeed");
+
+    get.assert();
+    post.assert();
+    assert!(matches!(change, StateChange::Already(_)));
+}
+
+#[test]
+fn remove_assignees_idempotent_deletes_present_via_query() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let del_path = "/repos/oschina/gitee-cli/pulls/12/assignees";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let del = server
+        .mock("DELETE", api_path(del_path).as_str())
+        .match_query(mockito::Matcher::UrlEncoded(
+            "assignees".into(),
+            "dev2".into(),
+        ))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .remove_assignees_idempotent(12, &["dev2", "missing"])
+        .expect("remove_assignees_idempotent should succeed");
+
+    get.assert();
+    del.assert();
+    assert!(matches!(change, StateChange::Changed(())));
+}
+
+#[test]
+fn remove_assignees_idempotent_absent_skips_delete() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let del = server
+        .mock("DELETE", mockito::Matcher::Any)
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .remove_assignees_idempotent(12, &["missing"])
+        .expect("remove of absent assignee should succeed");
+
+    get.assert();
+    del.assert();
+    assert!(matches!(change, StateChange::Already(())));
+}
+
+#[test]
+fn add_testers_idempotent_posts_only_missing_as_form() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let post_path = "/repos/oschina/gitee-cli/pulls/12/testers";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let post = server
+        .mock("POST", api_path(post_path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("testers".into(), "qa2".into()),
+        ]))
+        .with_status(201)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .add_testers_idempotent(12, &["qa1", "qa2"])
+        .expect("add_testers_idempotent should succeed");
+
+    get.assert();
+    post.assert();
+    assert!(matches!(change, StateChange::Changed(_)));
+}
+
+#[test]
+fn add_testers_idempotent_already_present_skips_post() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let post_path = "/repos/oschina/gitee-cli/pulls/12/testers";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let post = server
+        .mock("POST", api_path(post_path).as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .add_testers_idempotent(12, &["qa1"])
+        .expect("add of present tester should succeed");
+
+    get.assert();
+    post.assert();
+    assert!(matches!(change, StateChange::Already(_)));
+}
+
+#[test]
+fn remove_testers_idempotent_deletes_present_via_query() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+    let del_path = "/repos/oschina/gitee-cli/pulls/12/testers";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let del = server
+        .mock("DELETE", api_path(del_path).as_str())
+        .match_query(mockito::Matcher::UrlEncoded("testers".into(), "qa1".into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .remove_testers_idempotent(12, &["qa1", "missing"])
+        .expect("remove_testers_idempotent should succeed");
+
+    get.assert();
+    del.assert();
+    assert!(matches!(change, StateChange::Changed(())));
+}
+
+#[test]
+fn remove_testers_idempotent_absent_skips_delete() {
+    let mut server = mockito::Server::new();
+    let get_path = "/repos/oschina/gitee-cli/pulls/12";
+
+    let get = server
+        .mock("GET", api_path(get_path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_WITH_MEMBERS_JSON)
+        .create();
+
+    let del = server
+        .mock("DELETE", mockito::Matcher::Any)
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .remove_testers_idempotent(12, &["missing"])
+        .expect("remove of absent tester should succeed");
+
+    get.assert();
+    del.assert();
+    assert!(matches!(change, StateChange::Already(())));
+}

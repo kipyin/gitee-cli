@@ -300,6 +300,20 @@ impl Client {
         self.send_ok("DELETE", path, &[])
     }
 
+    /// DELETE with query parameters (e.g. PR assignees/testers removal).
+    /// Gitee encodes those memberships as query, not form body.
+    pub fn delete_ok_query(&self, path: &str, query: &[(&str, &str)]) -> Result<()> {
+        self.trace("DELETE", path);
+        let resp = self
+            .http
+            .delete(self.full(path))
+            .header("Authorization", self.auth())
+            .query(query)
+            .send()
+            .map_err(|e| self.map_http_err(e))?;
+        self.check(resp, "DELETE", path).map(|_| ())
+    }
+
     /// GET expecting an empty-body 2xx (204), e.g. star/watch check endpoints.
     pub fn get_ok(&self, path: &str) -> Result<()> {
         self.trace("GET", path);

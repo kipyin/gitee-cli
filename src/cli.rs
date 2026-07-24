@@ -226,6 +226,14 @@ pub enum PrCmd {
     /// Labels attached to a pull request (not repo-level label definitions).
     #[command(subcommand)]
     Label(PrLabelCmd),
+    /// Reviewers (审查人) on a pull request. Non-destructive; coexist with
+    /// whole-set `pr edit --assignee`.
+    #[command(subcommand)]
+    Assignee(PrAssigneeCmd),
+    /// Testers (测试人) on a pull request. Non-destructive; coexist with
+    /// whole-set `pr edit --tester`.
+    #[command(subcommand)]
+    Tester(PrTesterCmd),
     Approve {
         number: i64,
         #[arg(long)]
@@ -484,6 +492,54 @@ pub enum PrLabelCmd {
         labels: Vec<String>,
     },
     /// List labels currently attached to the pull request.
+    List {
+        number: i64,
+    },
+}
+
+/// Non-destructive reviewer (审查人) membership. Distinct from whole-set
+/// `pr edit --assignee`.
+#[derive(Subcommand, Clone)]
+pub enum PrAssigneeCmd {
+    /// Add reviewers without removing existing ones.
+    Add {
+        number: i64,
+        /// User logins to add as reviewers.
+        #[arg(required = true, num_args = 1..)]
+        users: Vec<String>,
+    },
+    /// Remove only the named reviewers.
+    Remove {
+        number: i64,
+        /// User logins to remove.
+        #[arg(required = true, num_args = 1..)]
+        users: Vec<String>,
+    },
+    /// List reviewers and their accept status (审查通过 / pending).
+    List {
+        number: i64,
+    },
+}
+
+/// Non-destructive tester (测试人) membership. Distinct from whole-set
+/// `pr edit --tester`.
+#[derive(Subcommand, Clone)]
+pub enum PrTesterCmd {
+    /// Add testers without removing existing ones.
+    Add {
+        number: i64,
+        /// User logins to add as testers.
+        #[arg(required = true, num_args = 1..)]
+        users: Vec<String>,
+    },
+    /// Remove only the named testers.
+    Remove {
+        number: i64,
+        /// User logins to remove.
+        #[arg(required = true, num_args = 1..)]
+        users: Vec<String>,
+    },
+    /// List testers on the pull request.
     List {
         number: i64,
     },
@@ -945,7 +1001,7 @@ pub enum GitCredentialCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, IssueCommentCmd, IssueLabelCmd, MilestoneCmd, OrgCmd, PrCmd, PrCommentCmd, PrLabelCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
+    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, IssueCommentCmd, IssueLabelCmd, MilestoneCmd, OrgCmd, PrAssigneeCmd, PrCmd, PrCommentCmd, PrLabelCmd, PrTesterCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
     use clap::Parser;
 
     #[test]
@@ -2020,6 +2076,58 @@ mod parse_tests {
             .expect("pr label list should parse");
         let Command::Pr(PrCmd::Label(PrLabelCmd::List { number })) = cli.cmd else {
             panic!("expected pr label list");
+        };
+        assert_eq!(number, 12);
+    }
+
+    #[test]
+    fn pr_assignee_add_remove_list_parse() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "assignee", "add", "12", "dev1", "dev2"])
+            .expect("pr assignee add should parse");
+        let Command::Pr(PrCmd::Assignee(PrAssigneeCmd::Add { number, users })) = cli.cmd else {
+            panic!("expected pr assignee add");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(users, vec!["dev1".to_string(), "dev2".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "assignee", "remove", "12", "dev1"])
+            .expect("pr assignee remove should parse");
+        let Command::Pr(PrCmd::Assignee(PrAssigneeCmd::Remove { number, users })) = cli.cmd else {
+            panic!("expected pr assignee remove");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(users, vec!["dev1".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "assignee", "list", "12"])
+            .expect("pr assignee list should parse");
+        let Command::Pr(PrCmd::Assignee(PrAssigneeCmd::List { number })) = cli.cmd else {
+            panic!("expected pr assignee list");
+        };
+        assert_eq!(number, 12);
+    }
+
+    #[test]
+    fn pr_tester_add_remove_list_parse() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "tester", "add", "12", "qa1", "qa2"])
+            .expect("pr tester add should parse");
+        let Command::Pr(PrCmd::Tester(PrTesterCmd::Add { number, users })) = cli.cmd else {
+            panic!("expected pr tester add");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(users, vec!["qa1".to_string(), "qa2".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "tester", "remove", "12", "qa1"])
+            .expect("pr tester remove should parse");
+        let Command::Pr(PrCmd::Tester(PrTesterCmd::Remove { number, users })) = cli.cmd else {
+            panic!("expected pr tester remove");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(users, vec!["qa1".to_string()]);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "tester", "list", "12"])
+            .expect("pr tester list should parse");
+        let Command::Pr(PrCmd::Tester(PrTesterCmd::List { number })) = cli.cmd else {
+            panic!("expected pr tester list");
         };
         assert_eq!(number, 12);
     }

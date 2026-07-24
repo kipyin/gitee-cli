@@ -926,6 +926,49 @@ pub fn user_table(w: &mut impl Write, items: &[UserBasic]) -> std::io::Result<()
     writeln!(w, "{}", Table::new(rows))
 }
 
+#[derive(Tabled)]
+struct AssigneeRow {
+    login: String,
+    name: String,
+    accept: String,
+}
+
+/// Reviewer list with accept status (审查通过 / pending).
+pub fn assignee_table(w: &mut impl Write, items: &[UserAssignee]) -> std::io::Result<()> {
+    let rows: Vec<AssigneeRow> = items
+        .iter()
+        .map(|u| AssigneeRow {
+            login: u.login.clone(),
+            name: u.name.clone().unwrap_or_default(),
+            accept: match u.accept {
+                Some(true) => "审查通过".into(),
+                _ => "pending".into(),
+            },
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
+#[derive(Tabled)]
+struct TesterRow {
+    login: String,
+    name: String,
+    html_url: String,
+}
+
+/// Tester list (测试人).
+pub fn tester_table(w: &mut impl Write, items: &[UserAssignee]) -> std::io::Result<()> {
+    let rows: Vec<TesterRow> = items
+        .iter()
+        .map(|u| TesterRow {
+            login: u.login.clone(),
+            name: u.name.clone().unwrap_or_default(),
+            html_url: u.html_url.clone().unwrap_or_default(),
+        })
+        .collect();
+    writeln!(w, "{}", Table::new(rows))
+}
+
 // --- org / ssh-key / collaborator / webhook -----------------------------
 
 #[derive(Tabled)]

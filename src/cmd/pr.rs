@@ -448,6 +448,134 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 writeln!(out, "Removed labels [{joined}] from pull request !{number}")?;
             }
         }
+        PrCmd::Assignee(crate::cli::PrAssigneeCmd::List { number }) => {
+            let repo = ctx.repo()?;
+            let items = ctx.client.pulls(repo).list_assignees(number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::assignee_table(w, &items))?;
+        }
+        PrCmd::Assignee(crate::cli::PrAssigneeCmd::Add { number, users }) => {
+            let repo = ctx.repo()?;
+            let joined = users.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("add assignees on pull request !{number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("assignees", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = users.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .pulls(repo)
+                .add_assignees_idempotent(number, &refs)?;
+            if let crate::api::StateChange::Changed(pr) = change {
+                let items = pr.assignees.unwrap_or_default();
+                let mut out = std::io::stdout().lock();
+                ctx.out
+                    .render(&mut out, &items, |w| out::assignee_table(w, &items))?;
+            }
+        }
+        PrCmd::Assignee(crate::cli::PrAssigneeCmd::Remove { number, users }) => {
+            let repo = ctx.repo()?;
+            let joined = users.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("remove assignees on pull request !{number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("assignees", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = users.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .pulls(repo)
+                .remove_assignees_idempotent(number, &refs)?;
+            if change.was_changed() {
+                let mut out = std::io::stdout().lock();
+                writeln!(
+                    out,
+                    "Removed assignees [{joined}] from pull request !{number}"
+                )?;
+            }
+        }
+        PrCmd::Tester(crate::cli::PrTesterCmd::List { number }) => {
+            let repo = ctx.repo()?;
+            let items = ctx.client.pulls(repo).list_testers(number)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::tester_table(w, &items))?;
+        }
+        PrCmd::Tester(crate::cli::PrTesterCmd::Add { number, users }) => {
+            let repo = ctx.repo()?;
+            let joined = users.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("add testers on pull request !{number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("testers", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = users.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .pulls(repo)
+                .add_testers_idempotent(number, &refs)?;
+            if let crate::api::StateChange::Changed(pr) = change {
+                let items = pr.testers.unwrap_or_default();
+                let mut out = std::io::stdout().lock();
+                ctx.out
+                    .render(&mut out, &items, |w| out::tester_table(w, &items))?;
+            }
+        }
+        PrCmd::Tester(crate::cli::PrTesterCmd::Remove { number, users }) => {
+            let repo = ctx.repo()?;
+            let joined = users.join(", ");
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("remove testers on pull request !{number}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("testers", &joined),
+                        ],
+                    )
+                );
+                return Ok(());
+            }
+            let refs: Vec<&str> = users.iter().map(String::as_str).collect();
+            let change = ctx
+                .client
+                .pulls(repo)
+                .remove_testers_idempotent(number, &refs)?;
+            if change.was_changed() {
+                let mut out = std::io::stdout().lock();
+                writeln!(
+                    out,
+                    "Removed testers [{joined}] from pull request !{number}"
+                )?;
+            }
+        }
         PrCmd::Approve { number, force } => {
             let repo = ctx.repo()?;
             ctx.client.pulls(repo).approve(number, force)?;
