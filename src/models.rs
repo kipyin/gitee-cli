@@ -502,6 +502,102 @@ pub struct PrComment {
     pub comment_type: Option<String>,
 }
 
+/// Nested git commit payload on PR commits (`GitCommit` in Gitee v5 swagger).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct GitCommitInfo {
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub author: Option<GitPerson>,
+    #[serde(default)]
+    pub committer: Option<GitPerson>,
+}
+
+/// Author/committer on a git commit (`GitUser` in Gitee v5 swagger).
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct GitPerson {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+}
+
+/// Commit in a pull request (`PullRequestCommits` in Gitee v5 swagger). The
+/// swagger may describe `commit` as a string; live responses use a nested object.
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct PrCommit {
+    #[serde(default)]
+    pub sha: String,
+    #[serde(default)]
+    pub html_url: Option<String>,
+    #[serde(default)]
+    pub commit: Option<GitCommitInfo>,
+    #[serde(default)]
+    pub author: Option<UserBasic>,
+    #[serde(default)]
+    pub committer: Option<UserBasic>,
+}
+
+impl PrCommit {
+    /// Short SHA for human output (git-log style).
+    pub fn short_sha(&self) -> &str {
+        let n = self.sha.len().min(7);
+        &self.sha[..n]
+    }
+
+    /// First line of the commit message.
+    pub fn subject(&self) -> &str {
+        self.commit
+            .as_ref()
+            .and_then(|c| c.message.as_deref())
+            .map(|m| m.lines().next().unwrap_or(""))
+            .unwrap_or("")
+    }
+
+    /// Author login preferred; falls back to git author name.
+    pub fn author_label(&self) -> &str {
+        if let Some(login) = self
+            .author
+            .as_ref()
+            .map(|u| u.login.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            return login;
+        }
+        self.commit
+            .as_ref()
+            .and_then(|c| c.author.as_ref())
+            .and_then(|a| a.name.as_deref())
+            .unwrap_or("?")
+    }
+
+    /// Commit date from nested git author (for `--json` / `--jq`).
+    pub fn date(&self) -> Option<&str> {
+        self.commit
+            .as_ref()
+            .and_then(|c| c.author.as_ref())
+            .and_then(|a| a.date.as_deref())
+    }
+}
+
+impl Serialize for PrCommit {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("PrCommit", 5)?;
+        s.serialize_field("sha", &self.sha)?;
+        s.serialize_field("html_url", &self.html_url)?;
+        s.serialize_field("author", &self.author)?;
+        s.serialize_field("date", &self.date())?;
+        s.serialize_field("commit", &self.commit)?;
+        s.end()
+    }
+}
+
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct RepoDetails {
     #[serde(default)]
@@ -614,7 +710,8 @@ mod webhook_tests {
 #[cfg(test)]
 mod state_tests {
     use super::{
-        Issue, IssueState, MergeMethod, Milestone, PrComment, PrCommentKind, PrState, PullRequest,
+        Issue, IssueState, MergeMethod, Milestone, PrComment, PrCommentKind, PrCommit, PrState,
+        PullRequest,
     };
     use serde_json;
 
@@ -777,6 +874,33 @@ mod state_tests {
         assert_eq!(c.new_line.as_deref(), Some("10"));
         assert_eq!(c.comment_type.as_deref(), Some("diff_comment"));
         assert_eq!(c.path.as_deref(), Some("src/main.rs"));
+    }
+
+    #[test]
+    fn pr_commit_deserializes_nested_commit_object() {
+        let c: PrCommit = serde_json::from_str(
+            r#"{
+                "sha": "abc1234567890deadbeef00000000000000000000",
+                "html_url": "https://gitee.com/x/commit/abc123",
+                "commit": {
+                    "message": "Add feature\n\nDetails.",
+                    "author": {
+                        "name": "Dev One",
+                        "date": "2026-01-01T10:00:00+08:00"
+                    }
+                },
+                "author": {"login": "dev1"}
+            }"#,
+        )
+        .expect("pr commit json");
+        assert_eq!(c.short_sha(), "abc1234");
+        assert_eq!(c.subject(), "Add feature");
+        assert_eq!(c.author_label(), "dev1");
+        assert_eq!(c.date(), Some("2026-01-01T10:00:00+08:00"));
+        let json = serde_json::to_value(&c).expect("serialize pr commit");
+        assert_eq!(json["sha"], "abc1234567890deadbeef00000000000000000000");
+        assert_eq!(json["date"], "2026-01-01T10:00:00+08:00");
+        assert_eq!(json["author"]["login"], "dev1");
     }
 
     #[test]

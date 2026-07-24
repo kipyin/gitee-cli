@@ -154,6 +154,12 @@ pub enum PrCmd {
     Diff {
         number: i64,
     },
+    /// List commits in a pull request (git-log style).
+    Commits {
+        number: i64,
+        #[command(flatten)]
+        limit: LimitArgs,
+    },
     /// Fetch and check out a pull request branch locally.
     Checkout {
         number: i64,
@@ -2078,6 +2084,25 @@ mod parse_tests {
             panic!("expected pr label list");
         };
         assert_eq!(number, 12);
+    }
+
+    #[test]
+    fn pr_commits_parse() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "commits", "12"])
+            .expect("pr commits should parse");
+        let Command::Pr(PrCmd::Commits { number, limit }) = cli.cmd else {
+            panic!("expected pr commits");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(limit.limit, 30);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "commits", "12", "--limit", "5"])
+            .expect("pr commits --limit should parse");
+        let Command::Pr(PrCmd::Commits { number, limit }) = cli.cmd else {
+            panic!("expected pr commits with limit");
+        };
+        assert_eq!(number, 12);
+        assert_eq!(limit.limit, 5);
     }
 
     #[test]

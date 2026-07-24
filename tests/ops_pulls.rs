@@ -79,6 +79,106 @@ fn get_deserializes_pull_request() {
     assert_eq!(pr.base.git_ref, "master");
 }
 
+const PR_COMMITS_JSON: &str = r#"[
+    {
+        "sha": "abc1234567890deadbeef00000000000000000000",
+        "html_url": "https://gitee.com/oschina/gitee-cli/commit/abc1234567890",
+        "commit": {
+            "message": "Add pagination helpers\n\nBody paragraph.",
+            "author": {
+                "name": "Dev One",
+                "email": "dev1@example.com",
+                "date": "2026-01-01T10:00:00+08:00"
+            }
+        },
+        "author": {"login": "dev1"}
+    },
+    {
+        "sha": "def4567890abcdef1234567890abcdef12345678",
+        "html_url": "https://gitee.com/oschina/gitee-cli/commit/def4567890",
+        "commit": {
+            "message": "Fix edge case",
+            "author": {
+                "name": "Dev Two",
+                "email": "dev2@example.com",
+                "date": "2026-01-02T11:00:00+08:00"
+            }
+        },
+        "author": {"login": "dev2"}
+    },
+    {
+        "sha": "fedcba0987654321fedcba0987654321fedcba09",
+        "html_url": "https://gitee.com/oschina/gitee-cli/commit/fedcba09",
+        "commit": {
+            "message": "Third commit",
+            "author": {
+                "name": "Dev Three",
+                "date": "2026-01-03T12:00:00+08:00"
+            }
+        }
+    }
+]"#;
+
+#[test]
+fn commits_hits_pull_commits_path_and_deserializes_nested_commit() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/commits";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_COMMITS_JSON)
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .commits(12, 30)
+        .expect("commits should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 3);
+    assert_eq!(
+        items[0].sha,
+        "abc1234567890deadbeef00000000000000000000"
+    );
+    assert_eq!(items[0].subject(), "Add pagination helpers");
+    assert_eq!(items[0].author_label(), "dev1");
+    assert_eq!(
+        items[0].date(),
+        Some("2026-01-01T10:00:00+08:00")
+    );
+    assert_eq!(
+        items[0].html_url.as_deref(),
+        Some("https://gitee.com/oschina/gitee-cli/commit/abc1234567890")
+    );
+    assert_eq!(items[1].subject(), "Fix edge case");
+    assert_eq!(items[2].author_label(), "Dev Three");
+}
+
+#[test]
+fn commits_respects_limit_client_side() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12/commits";
+
+    let mock = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PR_COMMITS_JSON)
+        .create();
+
+    let items = client(&server)
+        .pulls(&test_repo())
+        .commits(12, 2)
+        .expect("commits with limit should succeed");
+
+    mock.assert();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].subject(), "Add pagination helpers");
+    assert_eq!(items[1].subject(), "Fix edge case");
+}
+
 #[test]
 fn files_deserializes_file_diffs() {
     let mut server = mockito::Server::new();

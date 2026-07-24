@@ -2,8 +2,8 @@ use super::client::Client;
 use crate::api::{resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{
-    Comment, FileDiff, Label, MergeMethod, PrComment, PrCommentKind, PrState, PullRequest,
-    UserAssignee,
+    Comment, FileDiff, Label, MergeMethod, PrComment, PrCommentKind, PrCommit, PrState,
+    PullRequest, UserAssignee,
 };
 use crate::repo::Repo;
 use std::collections::HashSet;
@@ -112,6 +112,17 @@ impl Pulls<'_> {
         let r = self.repo.name.as_str();
         self.client
             .get(&format!("/repos/{o}/{r}/pulls/{number}/files"), &[])
+    }
+
+    /// Commits in a pull request. Not paginated on the server (hard cap 250);
+    /// `--limit` is applied client-side after the GET.
+    pub fn commits(&self, number: i64, limit: usize) -> Result<Vec<PrCommit>> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let all: Vec<PrCommit> = self
+            .client
+            .get(&format!("/repos/{o}/{r}/pulls/{number}/commits"), &[])?;
+        Ok(all.into_iter().take(limit).collect())
     }
 
     pub fn create(&self, req: &CreatePr<'_>) -> Result<PullRequest> {

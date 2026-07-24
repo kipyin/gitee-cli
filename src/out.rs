@@ -713,6 +713,20 @@ pub fn label_table(w: &mut impl Write, items: &[Label]) -> std::io::Result<()> {
     writeln!(w, "{}", Table::new(rows))
 }
 
+/// One line per commit: `<short-sha> <subject> (author)`.
+pub fn pr_commits(w: &mut impl Write, items: &[PrCommit]) -> std::io::Result<()> {
+    for c in items {
+        writeln!(
+            w,
+            "{} {} ({})",
+            c.short_sha(),
+            c.subject(),
+            c.author_label()
+        )?;
+    }
+    Ok(())
+}
+
 
 // --- releases -----------------------------------------------------------
 
@@ -1287,6 +1301,26 @@ mod printer_tests {
         assert!(out.contains("bug"));
         assert!(out.contains("#ff0000"));
         assert!(out.contains("42"));
+    }
+
+    #[test]
+    fn pr_commits_git_log_style_one_line_per_commit() {
+        let items = vec![PrCommit {
+            sha: "abc1234567890deadbeef00000000000000000000".into(),
+            author: Some(UserBasic {
+                login: "dev1".into(),
+                ..Default::default()
+            }),
+            commit: Some(GitCommitInfo {
+                message: Some("Add pagination helpers".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }];
+        let mut buf = Vec::new();
+        pr_commits(&mut buf, &items).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert_eq!(out, "abc1234 Add pagination helpers (dev1)\n");
     }
 
     #[test]

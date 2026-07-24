@@ -73,6 +73,13 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &files, |w| out::pr_diff(w, &files))?;
         }
+        PrCmd::Commits { number, limit } => {
+            let repo = ctx.repo()?;
+            let items = ctx.client.pulls(repo).commits(number, limit.limit)?;
+            let mut out = std::io::stdout().lock();
+            ctx.out
+                .render(&mut out, &items, |w| out::pr_commits(w, &items))?;
+        }
         PrCmd::Checkout { number } => checkout_pr(ctx, number)?,
         PrCmd::Edit {
             number,
