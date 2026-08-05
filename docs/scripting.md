@@ -72,14 +72,25 @@ not an error.
 | `issue reopen <n>`                | prints "issue <n> already open", exit `0`         |
 | `pr close <n>`                    | prints "Pull request !<n> already closed", exit `0` |
 | `pr reopen <n>`                   | prints "Pull request !<n> already open", exit `0`  |
+| `pr ready <n>`                    | prints "Pull request !<n> already ready", exit `0` |
+| `pr ready <n> --undo`             | prints "Pull request !<n> already draft", exit `0` |
 | `pr merge <n>`                    | prints "Pull request !<n> already merged", exit `0` |
 | `label create <name> --color <c>` | same name + same color → exit `0` (no-op); same name + different color → exit `1` with `gitee label edit <name> --color <c>` hint |
 | `issue|pr comment delete <id>`    | already gone (HTTP 404) → silent exit `0` (unlike `label delete`, which exits `4`) |
 
-With `--json`, the idempotent no-op returns a structured object on stdout:
+With `--json`, the idempotent no-op returns a structured object on stdout.
+Issue close/reopen use `state` as the target lifecycle word:
 
 ```json
 {"number":"I88","state":"closed","message":"already closed"}
+```
+
+PR close/reopen/ready also include `draft` (boolean). Ready/undo keep
+`state` as the API lifecycle (`open` / `closed` / `merged`); the draft
+toggle is in `draft` + `message`:
+
+```json
+{"number":12,"state":"open","draft":false,"message":"already ready"}
 ```
 
 ## `--preview` on mutating verbs

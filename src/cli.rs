@@ -197,6 +197,9 @@ pub enum PrCmd {
         /// Link an issue (ident, e.g. I1AB2C) that merging this PR closes.
         #[arg(long = "close-issue")]
         close_issue: Option<String>,
+        /// Create as a draft pull request (gh-style).
+        #[arg(long)]
+        draft: bool,
     },
     /// Edit a pull request's metadata. At least one flag is required.
     #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["title", "body", "assignee", "tester", "label", "milestone"]))]
@@ -260,6 +263,13 @@ pub enum PrCmd {
     /// Reopen a closed pull request.
     Reopen {
         number: i64,
+    },
+    /// Mark a draft pull request as ready for review (gh-style).
+    Ready {
+        number: i64,
+        /// Convert a ready pull request back to draft.
+        #[arg(long)]
+        undo: bool,
     },
     Link {
         number: i64,
@@ -1189,6 +1199,35 @@ mod parse_tests {
         assert_eq!(label, vec!["bug,ui".to_string()]);
         assert_eq!(milestone.as_deref(), Some("v1.0"));
         assert_eq!(close_issue.as_deref(), Some("I1AB2C"));
+    }
+
+    #[test]
+    fn pr_create_parses_draft_flag() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "create", "--title", "T", "--draft"])
+            .expect("pr create --draft should parse");
+        let Command::Pr(PrCmd::Create { draft, .. }) = cli.cmd else {
+            panic!("expected pr create");
+        };
+        assert!(draft);
+    }
+
+    #[test]
+    fn pr_ready_parses_number_and_undo() {
+        let cli = Cli::try_parse_from(["gitee", "pr", "ready", "12"])
+            .expect("pr ready should parse");
+        let Command::Pr(PrCmd::Ready { number, undo }) = cli.cmd else {
+            panic!("expected pr ready");
+        };
+        assert_eq!(number, 12);
+        assert!(!undo);
+
+        let cli = Cli::try_parse_from(["gitee", "pr", "ready", "12", "--undo"])
+            .expect("pr ready --undo should parse");
+        let Command::Pr(PrCmd::Ready { number, undo }) = cli.cmd else {
+            panic!("expected pr ready --undo");
+        };
+        assert_eq!(number, 12);
+        assert!(undo);
     }
 
     #[test]

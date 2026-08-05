@@ -40,6 +40,9 @@ pub struct CreatePr<'a> {
     /// `close_related_issue` is boolean).
     pub issue: Option<&'a str>,
     pub close_related_issue: bool,
+    /// Mark the new PR as a draft (`draft=true` form field). Default false —
+    /// omitted from the form when false (server default).
+    pub draft: bool,
 }
 
 /// Fields for `pr edit`. All optional; only `Some` fields are sent, so unset
@@ -166,6 +169,9 @@ impl Pulls<'_> {
         }
         if req.close_related_issue {
             f.push(("close_related_issue", "true".to_string()));
+        }
+        if req.draft {
+            f.push(("draft", Client::bool_str(true).to_string()));
         }
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/{r}/pulls"), &form)
@@ -357,6 +363,31 @@ impl Pulls<'_> {
             return Ok(StateChange::Already(cur));
         }
         let pr = self.set_state(number, target)?;
+        Ok(StateChange::Changed(pr))
+    }
+
+    /// Set the draft flag via form-encoded PATCH (`draft` boolean).
+    pub fn set_draft(&self, number: i64, draft: bool) -> Result<PullRequest> {
+        let o = self.repo.owner.as_str();
+        let r = self.repo.name.as_str();
+        let f: Vec<(&str, String)> = vec![("draft", Client::bool_str(draft).to_string())];
+        let form = Client::str_refs(&f);
+        self.client
+            .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)
+    }
+
+    /// Idempotent draft toggle: GET first; skip PATCH when already at target.
+    /// Missing `draft` on the current PR is treated as `false`.
+    pub fn set_draft_idempotent(
+        &self,
+        number: i64,
+        draft: bool,
+    ) -> Result<StateChange<PullRequest>> {
+        let cur: PullRequest = self.get(number)?;
+        if cur.draft.unwrap_or(false) == draft {
+            return Ok(StateChange::Already(cur));
+        }
+        let pr = self.set_draft(number, draft)?;
         Ok(StateChange::Changed(pr))
     }
 

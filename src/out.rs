@@ -301,7 +301,6 @@ pub fn red(s: &str) -> String {
 pub fn magenta(s: &str) -> String {
     paint("35", s)
 }
-#[allow(dead_code)]
 pub fn yellow(s: &str) -> String {
     paint("33", s)
 }
@@ -316,9 +315,13 @@ pub fn dim(s: &str) -> String {
 }
 
 /// Style a PR state. `merged` flags merged-ness even when state == closed.
-fn pr_state_style(state: PrState, merged: bool) -> String {
+/// Open drafts show as `draft` (not `open`).
+fn pr_state_style(state: PrState, merged: bool, draft: bool) -> String {
     if merged || state == PrState::Merged {
         return magenta(state.as_str());
+    }
+    if draft && state == PrState::Open {
+        return yellow("draft");
     }
     match state {
         PrState::Open => green(state.as_str()),
@@ -352,7 +355,7 @@ pub fn pr_table(w: &mut impl Write, items: &[PullRequest]) -> std::io::Result<()
         .iter()
         .map(|p| PrRow {
             number: p.number,
-            state: pr_state_style(p.state, p.merged_at.is_some()),
+            state: pr_state_style(p.state, p.merged_at.is_some(), p.draft.unwrap_or(false)),
             title: p.title.clone(),
             branch: format!("{} -> {}", p.head.git_ref, p.base.git_ref),
             author: p.user.as_ref().map(|u| u.login.clone()).unwrap_or_default(),
@@ -363,7 +366,7 @@ pub fn pr_table(w: &mut impl Write, items: &[PullRequest]) -> std::io::Result<()
 
 pub fn one_pr(w: &mut impl Write, p: &PullRequest) -> std::io::Result<()> {
     let merged = p.merged.unwrap_or_else(|| p.merged_at.is_some());
-    let state = pr_state_style(p.state, merged);
+    let state = pr_state_style(p.state, merged, p.draft.unwrap_or(false));
     writeln!(
         w,
         "{}  {}  [{}]",
@@ -1129,6 +1132,17 @@ mod printer_tests {
         one_pr(&mut buf, &pr).unwrap();
         let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("merged: yes"));
+    }
+
+    #[test]
+    fn one_pr_shows_draft_when_draft_true() {
+        let mut pr = pr_fixture();
+        pr.draft = Some(true);
+        let mut buf = Vec::new();
+        one_pr(&mut buf, &pr).unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        assert!(out.contains("[draft]"), "got: {out}");
+        assert!(!out.contains("[open]"), "draft should replace open: {out}");
     }
 
     #[test]

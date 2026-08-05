@@ -370,6 +370,38 @@ fn merge_puts_merge_and_close_related_issue_false() {
 }
 
 #[test]
+fn create_sends_draft_true_when_set() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls";
+
+    let mock = server
+        .mock("POST", api_path(path).as_str())
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("title".into(), "WIP".into()),
+            mockito::Matcher::UrlEncoded("head".into(), "feature/x".into()),
+            mockito::Matcher::UrlEncoded("base".into(), "master".into()),
+            mockito::Matcher::UrlEncoded("draft".into(), "true".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    client(&server)
+        .pulls(&test_repo())
+        .create(&CreatePr {
+            title: "WIP",
+            head: "feature/x",
+            base: "master",
+            draft: true,
+            ..Default::default()
+        })
+        .expect("create draft should succeed");
+
+    mock.assert();
+}
+
+#[test]
 fn set_state_patches_form_state_closed() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/gitee-cli/pulls/12";
@@ -450,6 +482,85 @@ fn set_state_idempotent_already_closed_skips_patch() {
     get.assert();
     patch.assert();
     assert!(matches!(change, StateChange::Already(_)));
+}
+
+#[test]
+fn set_draft_patches_form_draft_false() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12";
+
+    let mock = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded("draft".into(), "false".into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    let pr = client(&server)
+        .pulls(&test_repo())
+        .set_draft(12, false)
+        .expect("set_draft should succeed");
+
+    mock.assert();
+    assert_eq!(pr.number, 12);
+}
+
+#[test]
+fn set_draft_idempotent_already_ready_skips_patch() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12";
+
+    // Fixture has draft: false — already ready.
+    let get = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+    let patch = server
+        .mock("PATCH", api_path(path).as_str())
+        .expect(0)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .set_draft_idempotent(12, false)
+        .expect("idempotent ready should succeed");
+
+    get.assert();
+    patch.assert();
+    assert!(matches!(change, StateChange::Already(_)));
+}
+
+#[test]
+fn set_draft_idempotent_draft_pr_patches_ready() {
+    let mut server = mockito::Server::new();
+    let path = "/repos/oschina/gitee-cli/pulls/12";
+    let draft_body = r#"{"number":12,"title":"WIP","state":"open","draft":true,"html_url":"https://gitee.com/x","head":{"ref":"f"},"base":{"ref":"master"}}"#;
+
+    let get = server
+        .mock("GET", api_path(path).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(draft_body)
+        .create();
+    let patch = server
+        .mock("PATCH", api_path(path).as_str())
+        .match_body(mockito::Matcher::UrlEncoded("draft".into(), "false".into()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(PULL_REQUEST_JSON)
+        .create();
+
+    let change = client(&server)
+        .pulls(&test_repo())
+        .set_draft_idempotent(12, false)
+        .expect("idempotent ready should succeed");
+
+    get.assert();
+    patch.assert();
+    assert!(matches!(change, StateChange::Changed(_)));
 }
 
 /// Idempotent merge: GET returns a merged PR → no PUT → Already.

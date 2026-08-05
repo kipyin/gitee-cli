@@ -125,6 +125,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             label,
             milestone,
             close_issue,
+            draft,
         } => {
             // `--preview` short-circuits before any git/API work: print intent and exit 0.
             if ctx.preview {
@@ -145,6 +146,9 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 }
                 if fill {
                     details.push(("fill", "true"));
+                }
+                if draft {
+                    details.push(("draft", "true"));
                 }
                 println!("{}", super::preview_line("create pull request", &details));
                 return Ok(());
@@ -216,10 +220,36 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 milestone_number,
                 issue: close_issue.as_deref(),
                 close_related_issue: close_issue.is_some(),
+                draft,
             };
             let pr = ctx.client.pulls(repo).create(&req)?;
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &pr, |w| out::one_pr(w, &pr))?;
+        }
+        PrCmd::Ready { number, undo } => {
+            let repo = ctx.repo()?;
+            let target_draft = undo;
+            let action = if undo {
+                format!("convert pull request !{number} to draft")
+            } else {
+                format!("mark pull request !{number} as ready")
+            };
+            if ctx.preview {
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &action,
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
+                return Ok(());
+            }
+            let change = ctx
+                .client
+                .pulls(repo)
+                .set_draft_idempotent(number, target_draft)?;
+            let state_word = if undo { "draft" } else { "ready" };
+            render_idempotent_pr(ctx, change, state_word, number)?;
         }
         PrCmd::Merge {
             number,
@@ -808,9 +838,10 @@ fn current_branch() -> Result<String> {
     Ok(b)
 }
 
-/// Render an idempotent PR close/reopen result. On `Already`, print a human
-/// "already <state>" line (or a structured `--json` envelope). On `Changed`,
-/// render the updated PR through the normal renderer.
+/// Render an idempotent PR result (close / reopen / ready / ready --undo).
+/// On `Already`, print a human "already <word>" line (or a structured `--json`
+/// envelope with `state`, `draft`, and `message`). On `Changed`, render the
+/// updated PR through the normal renderer.
 fn render_idempotent_pr(
     ctx: &Ctx,
     change: crate::api::StateChange<crate::models::PullRequest>,
@@ -828,6 +859,7 @@ fn render_idempotent_pr(
                 let envelope = serde_json::json!({
                     "number": pr.number,
                     "state": pr.state.as_str(),
+                    "draft": pr.draft.unwrap_or(false),
                     "message": format!("already {state_word}"),
                 });
                 writeln!(out, "{}", serde_json::to_string_pretty(&envelope).unwrap())?;

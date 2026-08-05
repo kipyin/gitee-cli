@@ -98,9 +98,12 @@ gitee pr view 42 --web               # open in browser
 gitee pr diff 42
 gitee pr checkout 42                 # fetch into local branch pr-42
 gitee pr create --title "Fix" --head my-branch
+gitee pr create --draft --title "WIP"    # draft PR (mark ready later)
 gitee pr create                      # interactive title/body on a TTY
 gitee pr create --fill               # title/body from commits
 gitee pr edit 42 --title "Retitle" --label bug
+gitee pr ready 42                    # draft → ready for review
+gitee pr ready 42 --undo             # ready → draft again
 gitee pr comment create 42 -m "LGTM"
 gitee pr approve 42                  # 审查通过
 gitee pr test 42                     # 测试通过 (Gitee-specific)
@@ -206,8 +209,9 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `diff <n>` | Show pull request diff |
 | `checkout <n>` | Fetch and check out a pull request locally |
 | `commits <n>` | List commits on a pull request |
-| `create` | Open a PR (`--title` / `--fill`, or interactive on a TTY; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`) |
+| `create` | Open a PR (`--title` / `--fill`, or interactive on a TTY; `--body`, `--head`, `--base`, `--assignee`, `--tester`, `--label`, `--milestone`, `--close-issue`, `--draft`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--tester`, `--label`, `--milestone`) |
+| `ready <n>` | Mark a draft PR ready for review (`--undo` converts back to draft) — **idempotent** |
 | `merge <n>` | Merge (`--squash`, `--rebase`, `--no-close-issue`) — **idempotent**: already-merged exits `0` |
 | `comment create <n>` | Add a comment (`-m/--body`; optional `--path` / `--position` / `--commit-id` for diff-line comments; `--position` is Gitee's diff line index) |
 | `comment list <n>` | List comments (`--type diff|general`, `--limit`) |
