@@ -48,6 +48,10 @@ macro_rules! state_enum {
 }
 
 state_enum!(PrState { Open => "open", Closed => "closed", Merged => "merged" });
+// Issue lifecycle. Writable on Gitee v5 PATCH: open | progressing | closed only.
+// `Rejected` is kept for deserialize/forward-compat if a host ever returns it;
+// writing `rejected` is rejected by the live API (HTTP 400). Closed issues
+// surface Chinese board state 已完成 — not 拒绝; use labels for wontfix intent.
 state_enum!(IssueState {
     Open => "open",
     Progressing => "progressing",

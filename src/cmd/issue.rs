@@ -7,15 +7,23 @@ use crate::error::{GiteeError, Result};
 use crate::models::IssueState;
 use crate::out;
 
-/// Clap already restricts `--state` to known values; map them onto `IssueState`.
+/// Clap already restricts `--state` to API-writable values; map them onto
+/// `IssueState`. `rejected` is intentionally not accepted for writes — Gitee
+/// v5 returns 400 for it (see `issue edit` command docs).
 fn parse_issue_state(raw: &str) -> Result<IssueState> {
     match raw {
         "open" => Ok(IssueState::Open),
         "progressing" => Ok(IssueState::Progressing),
         "closed" => Ok(IssueState::Closed),
-        "rejected" => Ok(IssueState::Rejected),
+        "rejected" => Err(GiteeError::Usage(
+            "issue state 'rejected' is not writable on Gitee v5 (API returns \
+             400). Use --state closed and a repo label such as wontfix for \
+             non-completion intent"
+                .into(),
+        )),
         other => Err(GiteeError::Usage(format!(
-            "unsupported issue state '{other}' (want open|progressing|closed|rejected)"
+            "unsupported issue state '{other}' (want open|progressing|closed; \
+             Gitee v5 has no writable 'rejected')"
         ))),
     }
 }

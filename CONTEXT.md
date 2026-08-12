@@ -18,7 +18,7 @@ Single-context repo. System-wide decisions: `docs/adr/`.
 
 **Release** — Tag-based release with optional notes and **assets** (`ReleaseAsset`). Identified by `tag_name`; operations include create, list, get-by-tag, upload asset. Model: `Release` in `src/models.rs`; operations: `src/api/releases.rs`.
 
-**State** — Lifecycle vocabulary in `src/models.rs`: `PrState` (`open`, `closed`, `merged`) and `IssueState` (`open`, `progressing`, `closed`, `rejected`). Unknown API values deserialize to `Unknown` for forward compatibility; known values serialize as API strings.
+**State** — Lifecycle vocabulary in `src/models.rs`: `PrState` (`open`, `closed`, `merged`) and `IssueState` (`open`, `progressing`, `closed`, plus `rejected` for deserialize/forward-compat only). **Writable** issue states on Gitee v5 are only `open` | `progressing` | `closed`; live API returns 400 for `rejected`, and `closed` always surfaces as 已完成 (no 拒绝 close-reason). Unknown API values deserialize to `Unknown`; known values serialize as API strings.
 
 **Operations module** — Typed API seam in `src/api/{pulls,issues,releases,repos}.rs`. Owns every path template, query key, form field name, JSON-vs-form encoding choice, and Gitee quirk. See ADR-0002.
 

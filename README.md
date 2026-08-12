@@ -117,7 +117,7 @@ gitee issue view I88 --web
 gitee issue create --title "Bug" --body "steps…"
 gitee issue create                   # interactive title/body on a TTY
 gitee issue edit I88 --label bug --milestone v1.0
-gitee issue edit I88 --state progressing   # open|progressing|closed|rejected
+gitee issue edit I88 --state progressing   # open|progressing|closed (API write set)
 gitee issue comment create I88 -m "looking into it"
 gitee issue close I88
 
@@ -236,10 +236,10 @@ gitee --host git.example.com ...           # self-hosted Gitee
 | `status` | Open issues relevant to you: created, assigned (`--limit`) |
 | `view <n>` | Show issue details (`--web`; Gitee issue idents are strings, e.g. `I88`) |
 | `create` | Create (`--title` or interactive on a TTY; `--body`, `--assignee`, `--labels`, `--milestone`, `--security-hole`) |
-| `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`, `--state`) |
-| `close <n>` / `reopen <n>` | Change state — **idempotent**: already-closed/open exits `0` (`open`/`closed` shortcuts; prefer `edit --state` for `progressing`/`rejected`) |
+| `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`, `--state open\|progressing\|closed`) |
+| `close <n>` / `reopen <n>` | Change state — **idempotent**: already-closed/open exits `0` (`open`/`closed` shortcuts; prefer `edit --state progressing` for in-progress) |
 | `link <n> <pr>` | Link an issue to a pull request |
-| `comment create <n>` | Add a comment (`-m/--body`) |
+| `comment create <n>` | Add a comment (`-m/--body`) — **closed issues often reject new comments** on Gitee (reopen → comment → re-close) |
 | `comment list <n>` | List comments (`--limit`) |
 | `comment edit <id>` | Edit by id, or latest via `--last` + issue ident (`-m/--body` or `$EDITOR`) |
 | `comment delete <id>` | Delete by id, or latest via `--last` + issue ident (`--yes` skips confirm; 404 is idempotent) |
@@ -359,6 +359,15 @@ Issue state changes are a common footgun: use
 `/repos/{owner}/{repo}/issues/{number}` path with form `-f state=…` often
 returns `404 {"message":"project or enterprise"}`. Prefer
 `gitee issue edit <n> --state …` when you can.
+
+**Writable issue `state` values (Gitee v5, verified live):** only
+`open`, `progressing`, and `closed`. Sending `rejected` returns
+`400 {"messages":["state does not have a valid value"]}` — that limit is
+on the **official API**, not a CLI mapping bug. `closed` always maps to
+the board label **已完成**; there is no API close-reason for **拒绝** /
+wontfix. Express non-completion with a repo label (e.g. `wontfix`) plus
+a comment. Older CLI builds accepted `--state rejected` and simply
+forwarded the 400.
 
 </details>
 

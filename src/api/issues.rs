@@ -67,7 +67,11 @@ pub struct EditIssue<'a> {
     pub labels: Option<&'a str>,
     pub milestone_number: Option<i64>,
     pub security_hole: Option<bool>,
-    /// Lifecycle state (`open` / `progressing` / `closed` / `rejected`).
+    /// Lifecycle state write: `open` / `progressing` / `closed` only.
+    ///
+    /// Gitee v5 rejects `rejected` with HTTP 400
+    /// (`state does not have a valid value`). `closed` always maps to the
+    /// Chinese board state 已完成 — there is no close-reason field for 拒绝.
     pub state: Option<IssueState>,
 }
 
@@ -130,6 +134,10 @@ impl Issues<'_> {
 
     /// Gitee quirk: state changes are PATCH /repos/{owner}/issues/{number} with a JSON body
     /// `{repo, title, state}`. The current title must be echoed back or Gitee blanks it.
+    ///
+    /// Writable `state` values observed on the live v5 API: `open`,
+    /// `progressing`, `closed`. Sending `rejected` yields 400. Closing always
+    /// becomes issue_state 已完成 (not 拒绝 / wontfix).
     pub fn set_state(&self, number: &str, state: IssueState) -> Result<Issue> {
         let o = self.repo.owner.as_str();
         let name = &self.repo.name;

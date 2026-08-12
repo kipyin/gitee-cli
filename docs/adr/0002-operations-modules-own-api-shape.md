@@ -16,6 +16,7 @@ Gitee v5 is inconsistent. Examples now centralized in operations modules:
 
 - **Asymmetric issue paths** — create/state-change use `/repos/{owner}/issues/…` with `repo` in the body or form, not always `/repos/{owner}/{repo}/issues/…` (`src/api/issues.rs`).
 - **Title echo on issue state change** — PATCH must include the current `title` or Gitee blanks it (`Issues::set_state`).
+- **Issue state write set is narrower than some UI labels** — live v5 only accepts `open` | `progressing` | `closed`; `rejected` yields HTTP 400, and `closed` always maps to 已完成 (no API 拒绝 / wontfix reason). Documented on `issue edit` and in README; CLI write path no longer offers `rejected`.
 - **Mixed encodings** — PR state uses form PATCH; issue updates require JSON (`Client::patch` vs `patch_json`).
 - **Release form quirks** — `prerelease` always sent as `"true"`/`"false"` strings (`src/api/releases.rs`).
 

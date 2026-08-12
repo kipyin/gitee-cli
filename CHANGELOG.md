@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 (0.x: breaking changes may land in minor bumps).
 
+## [0.2.2] — 2026-08-12
+
+### Fixed
+
+- Document and enforce Gitee v5 **issue state write** limits: only
+  `open` | `progressing` | `closed` are accepted by the live API.
+  `--state rejected` is no longer offered (it always returned HTTP 400
+  `state does not have a valid value`). `closed` always maps to board
+  state 已完成 — there is no API close-reason for 拒绝 / wontfix; use a
+  repo label. See `gitee issue edit --help` and README `gitee api` notes.
+
 ## [0.2.1] — 2026-08-05
 
 ### Added

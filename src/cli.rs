@@ -424,6 +424,12 @@ pub enum IssueCmd {
     /// body `{repo, title, state}` (current title must be echoed). Do not use
     /// form fields on `/repos/{owner}/{repo}/issues/{number}` — that path
     /// often returns an opaque `project or enterprise` 404.
+    ///
+    /// **Gitee v5 write limit:** the live issue-update API only accepts
+    /// `open` | `progressing` | `closed`. `rejected` is **not** a valid write
+    /// value (HTTP 400 `state does not have a valid value`). Closing always
+    /// maps to Chinese lifecycle 已完成 — there is no API close-reason for
+    /// 拒绝 / wontfix; use a repo label (e.g. `wontfix`) for that intent.
     #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["title", "body", "assignee", "label", "milestone", "security_hole", "state"]))]
     Edit {
         number: String,
@@ -442,8 +448,11 @@ pub enum IssueCmd {
         /// Mark the issue as a security hole (Gitee-specific).
         #[arg(long)]
         security_hole: bool,
-        /// Lifecycle state: `open`, `progressing`, `closed`, or `rejected`.
-        #[arg(long, value_parser = ["open", "progressing", "closed", "rejected"])]
+        /// Lifecycle state write: `open`, `progressing`, or `closed` only.
+        ///
+        /// Gitee v5 rejects `rejected` (HTTP 400). `closed` always surfaces
+        /// as 已完成, not 拒绝 — see command help for the wontfix workaround.
+        #[arg(long, value_parser = ["open", "progressing", "closed"])]
         state: Option<String>,
     },
     Close {
