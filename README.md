@@ -31,7 +31,8 @@ gitee release list   # releases
 gitee repo view      # repo info
 ```
 
-That's it. Everything below is detail.
+That's it. Everything below is detail. Want to contribute? See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **Scripting gitee-cli?** See [docs/scripting.md](docs/scripting.md) for exit
 > codes, `--preview`, idempotent mutating verbs, and CI/agent patterns.
@@ -607,6 +608,11 @@ AI agents and CI scripts can drive this CLI directly — no MCP required.
   (see [Extensions](#extensions) above) if a Rust implementation you trust
   ever emerges.
 
+## Contributing
+
+Bug reports and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for build, test, and PR expectations.
+
 ## License
 
-MIT — see [Cargo.toml](Cargo.toml).
+MIT. Copyright Kip Yin, 2026. See [LICENSE](LICENSE).
