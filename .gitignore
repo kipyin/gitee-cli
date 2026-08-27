@@ -1,4 +1,7 @@
 /target
 **/*.rs.bk
 
+# Local agent / scratch notes — do not commit
 .scratch/
+.superpowers/
+.out-of-scope/
