@@ -10,6 +10,8 @@ Accepted
 
 ## Context
 
+This ADR is about Gitee's issue identifier format in their HTTP API (`gitee issue` talks to Gitee), not about how kipyin/gitee-cli tracks work. This repository's own issues live on GitHub.
+
 An architecture review (2026-07-18) suggested unifying `Issue.number` with `PullRequest.number` as `i64` for consistency across commands.
 
 Gitee issue numbers are **alphanumeric identifiers** (e.g. `I6D3AV`), not sequential integers. They appear in issue URLs and API path segments such as `/repos/{owner}/{repo}/issues/{number}`. Pull request numbers are ordinary integers (`i64`) in both the API and URLs.

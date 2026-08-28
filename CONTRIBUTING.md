@@ -36,8 +36,11 @@ Always pass `--locked` so `Cargo.lock` stays the source of truth.
 - Do not bump the crate version unless you are cutting a release.
 - Gitee API paths, query keys, and body quirks belong in `src/api/`, not in
   `src/cmd/` — see [ADR-0002](docs/adr/0002-operations-modules-own-api-shape.md).
-- Gitee issue identifiers are strings (e.g. `I88`), not integers — see
-  [ADR-0001](docs/adr/0001-issue-numbers-are-strings.md).
+- For `gitee issue` commands, Gitee REST API identifiers are strings
+  (e.g. `I6D3AV`, `I88`), not integers — see
+  [ADR-0001](docs/adr/0001-issue-numbers-are-strings.md). That is Gitee's
+  product API, not this repository's tracker; bugs and features go to
+  [GitHub Issues](#issues).
 - Domain terms live in [CONTEXT.md](CONTEXT.md).
 
 ## Issues

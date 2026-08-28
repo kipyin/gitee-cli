@@ -235,7 +235,7 @@ gitee --host git.example.com ...           # self-hosted Gitee
 |------------|-------------|
 | `list` | List issues (`--state`, `--assignee`, `--limit`) |
 | `status` | Open issues relevant to you: created, assigned (`--limit`) |
-| `view <n>` | Show issue details (`--web`; Gitee issue idents are strings, e.g. `I88`) |
+| `view <n>` | Show issue details (`--web`; Gitee REST API issue ids are strings, e.g. `I88`) |
 | `create` | Create (`--title` or interactive on a TTY; `--body`, `--assignee`, `--labels`, `--milestone`, `--security-hole`) |
 | `edit <n>` | Edit metadata (`--title`, `--body`, `--assignee`, `--label`, `--milestone`, `--security-hole`, `--state open\|progressing\|closed`) |
 | `close <n>` / `reopen <n>` | Change state — **idempotent**: already-closed/open exits `0` (`open`/`closed` shortcuts; prefer `edit --state progressing` for in-progress) |
