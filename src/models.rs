@@ -433,6 +433,7 @@ pub struct IssueRepoRef {
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Issue {
+    /// Gitee REST API ident (e.g. `I6D3AV`); not this repo's GitHub issue number.
     #[serde(default)]
     pub number: String,
     #[serde(default)]
