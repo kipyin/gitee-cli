@@ -47,8 +47,10 @@ Always pass `--locked` so `Cargo.lock` stays the source of truth.
 
 Use [GitHub Issues](https://github.com/kipyin/gitee-cli/issues). New here? Start
 with [`good first issue`](https://github.com/kipyin/gitee-cli/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+Agent skills create and read issues here too; see
+[docs/agents/issue-tracker.md](docs/agents/issue-tracker.md).
 
-Labels currently in use:
+Topic labels:
 
 | Label | Meaning |
 |-------|---------|
@@ -58,6 +60,16 @@ Labels currently in use:
 | `good first issue` | Small, well-scoped starter |
 | `help wanted` | Extra attention needed |
 | `question` | Clarification |
+
+Triage labels (mapping in
+[docs/agents/triage-labels.md](docs/agents/triage-labels.md)):
+
+| Label | Meaning |
+|-------|---------|
+| `needs-triage` | Maintainer needs to evaluate this issue |
+| `needs-info` | Waiting on reporter for more information |
+| `ready-for-agent` | Fully specified, ready for an AFK agent |
+| `ready-for-human` | Requires human implementation |
 | `wontfix` | Will not be actioned |
 
 Include `gitee --version`, OS, and the command you ran. For API surprises,
