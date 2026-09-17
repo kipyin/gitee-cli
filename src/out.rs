@@ -292,25 +292,25 @@ fn paint_if(enabled: bool, code: &str, s: &str) -> String {
     }
 }
 
-pub fn green(s: &str) -> String {
+pub(crate) fn green(s: &str) -> String {
     paint("32", s)
 }
-pub fn red(s: &str) -> String {
+pub(crate) fn red(s: &str) -> String {
     paint("31", s)
 }
-pub fn magenta(s: &str) -> String {
+pub(crate) fn magenta(s: &str) -> String {
     paint("35", s)
 }
-pub fn yellow(s: &str) -> String {
+pub(crate) fn yellow(s: &str) -> String {
     paint("33", s)
 }
-pub fn cyan(s: &str) -> String {
+pub(crate) fn cyan(s: &str) -> String {
     paint("36", s)
 }
-pub fn bold(s: &str) -> String {
+pub(crate) fn bold(s: &str) -> String {
     paint("1", s)
 }
-pub fn dim(s: &str) -> String {
+pub(crate) fn dim(s: &str) -> String {
     paint("2", s)
 }
 
@@ -397,7 +397,7 @@ pub fn one_pr(w: &mut impl Write, p: &PullRequest) -> std::io::Result<()> {
 }
 
 /// Colorize one line of unified diff output.
-pub fn color_diff_line(line: &str) -> String {
+pub(crate) fn color_diff_line(line: &str) -> String {
     if line.starts_with("@@") {
         cyan(line)
     } else if line.starts_with('+') && !line.starts_with("+++") {

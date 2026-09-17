@@ -59,15 +59,6 @@ impl Labels<'_> {
         Ok(items)
     }
 
-    pub fn create(&self, req: &CreateLabel<'_>) -> Result<Label> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
-        let color = normalize_color(req.color)?;
-        let form = [("name", req.name), ("color", color.as_str())];
-        self.client
-            .post(&format!("/repos/{o}/{r}/labels"), &form)
-    }
-
     /// Idempotent create: list existing labels first. If a label with the
     /// same name already exists with the requested color, return
     /// `StateChange::Already(label)` and exit 0. If it exists with a

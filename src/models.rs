@@ -661,12 +661,6 @@ impl RepoDetails {
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
-pub struct RepoInfo {
-    #[serde(default)]
-    pub default_branch: Option<String>,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct ReleaseAsset {
     #[serde(default)]
     pub name: String,

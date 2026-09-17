@@ -19,7 +19,7 @@ impl Collaborators<'_> {
             .get_paged(&format!("/repos/{o}/{r}/collaborators"), &[], limit)
     }
 
-    /// Permission vocabulary: `pull` | `push` | `admin` (English enums per Gitee v5 docs / ticket 19).
+    /// Permission vocabulary: `pull` | `push` | `admin` (English enums per Gitee v5 docs).
     pub fn add(&self, username: &str, permission: &str) -> Result<()> {
         let (o, r) = (&self.repo.owner, &self.repo.name);
         self.client.put_ok(

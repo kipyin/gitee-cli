@@ -106,10 +106,6 @@ impl Releases<'_> {
             .delete_ok(&format!("/repos/{o}/{r}/releases/{}", release.id))
     }
 
-    // Follow-up (2026-07-18): asset-level DELETE
-    // /repos/{owner}/{repo}/releases/{rid}/attach_files/{aid} exists in swagger
-    // but is out of scope for this ticket.
-
     pub fn upload(&self, tag: &str, file_path: &str) -> Result<ReleaseAsset> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();

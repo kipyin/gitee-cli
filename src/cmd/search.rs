@@ -87,8 +87,8 @@ pub fn execute(ctx: &Ctx, cmd: SearchCmd) -> Result<()> {
     Ok(())
 }
 
-/// Ticket acceptance: empty search results print NOTHING and exit 0 in human
-/// mode; `--json` still prints `[]`.
+/// Empty search results print nothing and exit 0 in human mode; `--json`
+/// still prints `[]`.
 fn skip_if_empty<T>(ctx: &Ctx, items: &[T]) -> bool {
     items.is_empty() && ctx.out.json.is_none()
 }
