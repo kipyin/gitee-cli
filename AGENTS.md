@@ -9,3 +9,17 @@ Single Rust crate (`gitee-cli-rs`, binary `gitee`).
 - Build / lint / test: `cargo build --locked`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked`. Always pass `--locked`.
 - Run: `./target/debug/gitee <cmd>` or `cargo run -- <cmd>`.
 - Live API calls need auth (`$GITEE_TOKEN` → OS keyring → `~/.config/gitee/`). Tests use a mockito HTTP server; `auth` / `config` / `alias` work without a token.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `kipyin/gitee-cli` (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default role labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
