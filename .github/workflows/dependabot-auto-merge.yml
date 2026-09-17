@@ -1,0 +1,64 @@
+# Auto-merge Dependabot PRs after ci.yml is green on the PR head SHA.
+# Human PRs never reach the job (github.actor must be dependabot[bot]).
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  checks: read
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_PAGER: cat
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Wait for CI
+        run: |
+          set -euo pipefail
+          echo "Waiting for ci.yml on $SHA"
+          RUN_ID=""
+          for i in $(seq 1 60); do
+            RUN_ID="$(gh run list \
+              --workflow=ci.yml \
+              --commit="$SHA" \
+              --limit=1 \
+              --json databaseId \
+              --jq '.[0].databaseId // empty' || true)"
+            if [ -n "$RUN_ID" ]; then
+              echo "Found CI run $RUN_ID"
+              break
+            fi
+            echo "CI run not listed yet (attempt $i/60)"
+            sleep 10
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::No ci.yml run found for $SHA"
+            exit 1
+          fi
+          gh run watch "$RUN_ID" --compact --exit-status --interval 15
+
+      - name: Squash-merge
+        run: |
+          set -euo pipefail
+          echo "Merging #$PR at $SHA"
+          if gh pr merge "$PR" --auto --squash --match-head-commit "$SHA"; then
+            echo "Auto-merge enabled"
+          else
+            echo "Auto-merge unavailable; squash-merging immediately"
+            gh pr merge "$PR" --squash --match-head-commit "$SHA"
+          fi

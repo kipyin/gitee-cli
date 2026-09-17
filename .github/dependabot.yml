@@ -1,0 +1,22 @@
+# Weekly bumps only. Cargo and Actions each land as one grouped PR when
+# Dependabot can group them; the PR cap is a fallback if grouping does not.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"

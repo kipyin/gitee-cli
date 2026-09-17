@@ -45,8 +45,10 @@ Always pass `--locked` so `Cargo.lock` stays the source of truth.
 
 ## Issues
 
-Use [GitHub Issues](https://github.com/kipyin/gitee-cli/issues). Labels currently
-in use:
+Use [GitHub Issues](https://github.com/kipyin/gitee-cli/issues). New here? Start
+with [`good first issue`](https://github.com/kipyin/gitee-cli/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+
+Labels currently in use:
 
 | Label | Meaning |
 |-------|---------|
