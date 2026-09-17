@@ -1,5 +1,10 @@
 # gitee
 
+[![CI](https://github.com/kipyin/gitee-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/kipyin/gitee-cli/actions/workflows/ci.yml)
+[![Release](https://github.com/kipyin/gitee-cli/actions/workflows/release.yml/badge.svg)](https://github.com/kipyin/gitee-cli/actions/workflows/release.yml)
+[![crates.io](https://img.shields.io/crates/v/gitee-cli-rs)](https://crates.io/crates/gitee-cli-rs)
+[![Homebrew](https://img.shields.io/badge/brew-kipyin%2Ftap%2Fgitee-blue)](https://github.com/kipyin/homebrew-tap)
+
 A `gh`-like command-line client for [Gitee](https://gitee.com). Manage pull
 requests, issues, releases, gists, and more from your terminal.
 
