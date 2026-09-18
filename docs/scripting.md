@@ -96,7 +96,18 @@ toggle is in `draft` + `message`:
 ## `--preview` on mutating verbs
 
 `--preview` prints what would happen and exits `0` **without calling the
-API**. Use it to verify intent before acting.
+API**, but only on the issue/PR/label arms that check the flag:
+
+- `issue` / `pr`: `create`, `close`, `reopen`
+- `pr merge`, `pr ready`
+- `issue comment` / `pr comment`: `create`, `edit`, `delete`
+- `issue label` / `pr label`: `add`, `remove`
+- `pr assignee` / `pr tester`: `add`, `remove`
+- `label create`
+
+Other mutating verbs (`release`, `repo`, `gist`, `issue edit`, `pr approve`,
+`label delete`, and so on) still hit the network. Use it to verify intent
+before acting on the arms above.
 
 ```bash
 gitee issue close I88 --preview

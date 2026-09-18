@@ -26,8 +26,9 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub debug: bool,
     /// Print what would happen, then exit 0. No HTTP call is made. Works on
-    /// mutating verbs (issue/pr create/close/reopen/merge, label create,
-    /// release create/edit/delete, repo delete, gist delete, etc.).
+    /// issue/pr create/close/reopen, pr merge/ready, issue/pr comment
+    /// create/edit/delete, issue/pr label add/remove, pr assignee/tester
+    /// add/remove, and label create. Other mutating verbs still hit the network.
     #[arg(long, global = true)]
     pub preview: bool,
     #[command(subcommand)]
@@ -1904,6 +1905,33 @@ mod parse_tests {
             help.contains("not the file line number"),
             "help should warn position is not a file line number: {help}"
         );
+    }
+
+    #[test]
+    fn preview_help_lists_only_short_circuiting_verbs() {
+        use clap::CommandFactory;
+
+        let help = Cli::command().render_long_help().ansi().to_string();
+        for needle in [
+            "issue/pr create/close/reopen",
+            "pr merge/ready",
+            "issue/pr comment",
+            "issue/pr label add/remove",
+            "pr assignee/tester",
+            "label create",
+            "Other mutating verbs still hit the network",
+        ] {
+            assert!(
+                help.contains(needle),
+                "preview help should list live short-circuit {needle:?}: {help}"
+            );
+        }
+        for overclaim in ["release create", "repo delete", "gist delete"] {
+            assert!(
+                !help.contains(overclaim),
+                "preview help must not claim {overclaim:?}: {help}"
+            );
+        }
     }
 
     #[test]
