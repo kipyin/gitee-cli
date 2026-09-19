@@ -37,8 +37,8 @@ pub struct Ctx {
     pub client: Client,
     pub out: Output,
     pub host: String,
-    /// True when `--preview` was passed: mutating verbs print intent and exit 0
-    /// without making the mutating HTTP call.
+    /// True when `--preview` was passed. Issue/PR/label arms that check this
+    /// flag print intent and exit 0 without making the mutating HTTP call.
     pub preview: bool,
     repo_arg: Option<String>,
     remote_arg: Option<String>,
@@ -46,8 +46,9 @@ pub struct Ctx {
     me: OnceCell<UserBasic>,
 }
 
-/// Format a `--preview` intent line consistently. Mutating verbs call this
-/// before doing any work when `ctx.preview` is set, then return `Ok(())`.
+/// Format a `--preview` intent line consistently. Arms that honor `--preview`
+/// call this before doing any work when `ctx.preview` is set, then return
+/// `Ok(())`.
 pub fn preview_line(action: &str, details: &[(&str, &str)]) -> String {
     let mut s = format!("would {action}");
     if !details.is_empty() {

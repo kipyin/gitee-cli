@@ -524,7 +524,7 @@ from repos you trust.
 | `--json [fields]` | JSON output; `--json number,title` projects fields |
 | `--jq <expr>` | jq expression on `--json` output (requires `--json`) |
 | `--debug` | Log HTTP requests/responses to stderr |
-| `--preview` | Print what would happen and exit 0 (no HTTP call); mutating verbs only |
+| `--preview` | Print intent and exit 0 with no HTTP call. Honored by issue/pr create/close/reopen, pr merge/ready, issue/pr comment create/edit/delete, issue/pr label add/remove, pr assignee/tester add/remove, and label create. Other mutating verbs still call the API. |
 
 ## Exit codes
 
@@ -605,7 +605,8 @@ AI agents and CI scripts can drive this CLI directly — no MCP required.
   verb supports `--json` + `--jq` for structured output, stable exit codes
   (0–6), structured JSON errors on stderr in `--json` mode, idempotent
   mutating verbs (already-closed / already-merged is exit 0), and `--preview`
-  to dry-run a mutation. See [`docs/scripting.md`](docs/scripting.md) for the
+  to dry-run the issue/PR/label mutations listed in
+  [`docs/scripting.md`](docs/scripting.md). That page also covers the
   PR→issue closure loop, batch operations, CI status gates, and error
   handling by exit code.
 - **Extensions as agent tools**: a MCP server can also be installed as a
