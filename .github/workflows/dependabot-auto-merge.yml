@@ -1,5 +1,6 @@
 # Auto-merge Dependabot PRs after ci.yml is green on the PR head SHA.
 # Human PRs never reach the job (github.actor must be dependabot[bot]).
+# GH_REPO + -R keep `gh` targeting this repository without a local checkout.
 name: Dependabot auto-merge
 
 on:
@@ -23,6 +24,7 @@ jobs:
     timeout-minutes: 45
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
       GH_PAGER: cat
       PR: ${{ github.event.pull_request.number }}
       SHA: ${{ github.event.pull_request.head.sha }}
@@ -34,8 +36,9 @@ jobs:
           RUN_ID=""
           for i in $(seq 1 60); do
             RUN_ID="$(gh run list \
-              --workflow=ci.yml \
-              --commit="$SHA" \
+              -R "$GH_REPO" \
+              --workflow ci.yml \
+              --commit "$SHA" \
               --limit=1 \
               --json databaseId \
               --jq '.[0].databaseId // empty' || true)"
@@ -50,15 +53,15 @@ jobs:
             echo "::error::No ci.yml run found for $SHA"
             exit 1
           fi
-          gh run watch "$RUN_ID" --compact --exit-status --interval 15
+          gh run watch -R "$GH_REPO" "$RUN_ID" --compact --exit-status --interval 15
 
       - name: Squash-merge
         run: |
           set -euo pipefail
           echo "Merging #$PR at $SHA"
-          if gh pr merge "$PR" --auto --squash --match-head-commit "$SHA"; then
+          if gh pr merge -R "$GH_REPO" "$PR" --auto --squash --match-head-commit "$SHA"; then
             echo "Auto-merge enabled"
           else
             echo "Auto-merge unavailable; squash-merging immediately"
-            gh pr merge "$PR" --squash --match-head-commit "$SHA"
+            gh pr merge -R "$GH_REPO" "$PR" --squash --match-head-commit "$SHA"
           fi
