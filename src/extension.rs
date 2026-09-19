@@ -23,7 +23,7 @@ pub fn test_managed_env_lock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 /// Split `PATH` into directories (empty when unset).
-pub fn path_dirs() -> Vec<PathBuf> {
+pub(crate) fn path_dirs() -> Vec<PathBuf> {
     std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default()

@@ -21,35 +21,6 @@ fn test_repo() -> Repo {
 }
 
 #[test]
-fn create_posts_form_with_name_and_normalized_color() {
-    let mut server = mockito::Server::new();
-    let path = "/repos/oschina/gitee-cli/labels";
-
-    let mock = server
-        .mock("POST", api_path(path).as_str())
-        .match_body(mockito::Matcher::AllOf(vec![
-            mockito::Matcher::UrlEncoded("name".into(), "bug".into()),
-            mockito::Matcher::UrlEncoded("color".into(), "ff0000".into()),
-        ]))
-        .with_status(200)
-        .with_header("content-type", "application/json")
-        .with_body(LABEL_JSON)
-        .create();
-
-    let label = client(&server)
-        .labels(&test_repo())
-        .create(&CreateLabel {
-            name: "bug",
-            color: "#FF0000",
-        })
-        .expect("create should succeed");
-
-    mock.assert();
-    assert_eq!(label.name, "bug");
-    assert_eq!(label.id, 12345);
-}
-
-#[test]
 fn list_decodes_array_and_truncates_to_limit() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/gitee-cli/labels";
@@ -184,7 +155,7 @@ fn create_idempotent_new_label_posts_and_returns_changed() {
         .labels(&test_repo())
         .create_idempotent(&CreateLabel {
             name: "bug",
-            color: "ff0000",
+            color: "#FF0000",
         })
         .expect("idempotent create should succeed");
 

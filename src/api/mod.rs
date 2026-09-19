@@ -59,12 +59,6 @@ pub fn resolve_latest_comment<'a, T: AuthoredComment>(
 }
 
 impl<T> StateChange<T> {
-    pub fn into_inner(self) -> T {
-        match self {
-            StateChange::Changed(t) | StateChange::Already(t) => t,
-        }
-    }
-
     pub fn was_changed(&self) -> bool {
         matches!(self, StateChange::Changed(_))
     }

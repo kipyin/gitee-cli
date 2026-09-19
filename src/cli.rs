@@ -704,7 +704,7 @@ pub enum ReleaseCmd {
     },
 }
 
-/// Repo subcommands. `repo sync` omitted: no fork-synchronize endpoint in v5 swagger (verified 2026-07-18).
+/// Repo-level label definitions.
 #[derive(Subcommand, Clone)]
 pub enum LabelCmd {
     List {
@@ -715,8 +715,6 @@ pub enum LabelCmd {
         name: String,
         #[arg(long)]
         color: String,
-        // Ticket asked for --description but Gitee v5 POST /repos/{owner}/{repo}/labels
-        // has no description param (swagger 2026-07-18).
     },
     /// Edit a label. At least one flag is required.
     #[command(group = clap::ArgGroup::new("edit_flags").required(true).multiple(true).args(["new_name", "color"]))]
@@ -734,6 +732,7 @@ pub enum LabelCmd {
     },
 }
 
+/// Repo subcommands. `repo sync` omitted: no fork-synchronize endpoint in v5 swagger (verified 2026-07-18).
 #[derive(Subcommand, Clone)]
 pub enum RepoCmd {
     /// Show repository details. Targets the resolved repo unless given owner/name.

@@ -44,7 +44,7 @@ pub struct Settings {
     pub update_notifier: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub aliases: BTreeMap<String, String>,
-    /// Active username per host (ticket 17).
+    /// Active username per host.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub active_users: BTreeMap<String, String>,
     /// Known usernames per host that have stored tokens.
@@ -354,7 +354,7 @@ impl Config {
                 return Ok(t);
             }
         }
-        // Legacy single-token (pre–ticket 17) host-only store.
+        // Legacy single-token host-only store.
         if keyring_enabled() {
             if let Ok(t) = keyring_get(host) {
                 return Ok(t);
@@ -403,29 +403,6 @@ impl Config {
             Ok(s) if !s.trim().is_empty() => Some(TokenSource::File),
             _ => None,
         }
-    }
-
-    /// Store a token. Writes to the OS keyring when available; otherwise falls
-    /// back to a plaintext file (chmod 600) so headless boxes still work.
-    pub fn set_token(host: &str, token: &str) -> Result<()> {
-        if keyring_enabled() {
-            let keyring_ok = keyring::Entry::new(KEYRING_SERVICE, host)
-                .and_then(|e| e.set_password(token))
-                .is_ok()
-                && keyring_get(host).ok().as_deref() == Some(token);
-            if keyring_ok {
-                // Active secret now lives only in the keyring; drop any stale file.
-                let _ = fs::remove_file(Self::token_path(host)?);
-                return Ok(());
-            }
-        }
-        let p = Self::token_path(host)?;
-        if let Some(parent) = p.parent() {
-            fs::create_dir_all(parent).map_err(|e| GiteeError::Config(e.to_string()))?;
-        }
-        fs::write(&p, token).map_err(|e| GiteeError::Config(e.to_string()))?;
-        restrict_perms(&p)?;
-        Ok(())
     }
 
     fn keyring_delete_error(account: &str, err: keyring::Error) -> Option<String> {

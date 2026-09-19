@@ -35,7 +35,7 @@ impl Client {
         let http = Http::builder()
             .gzip(true)
             .timeout(Duration::from_secs(30))
-            .user_agent("gitee-cli/0.1")
+            .user_agent(format!("gitee-cli/{}", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("reqwest client");
         Client {

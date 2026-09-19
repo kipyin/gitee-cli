@@ -19,7 +19,7 @@ pub fn execute(ctx: &Ctx, cmd: RepoCmd) -> Result<()> {
                 return crate::web::open_or_print(&url);
             }
             let mut details = ctx.client.repos().get(&rr.owner, &rr.name)?;
-            // Cheap check endpoints for JSON/human extras (ticket 22). Soft-fail so
+            // Cheap check endpoints for JSON/human extras. Soft-fail so
             // a 401/403 on the check endpoints does not block viewing the repo.
             details.starred = ctx.client.repos().is_starred(&rr.owner, &rr.name).ok();
             details.watching = ctx.client.repos().is_watching(&rr.owner, &rr.name).ok();

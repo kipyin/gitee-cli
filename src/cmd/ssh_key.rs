@@ -61,15 +61,7 @@ fn hostname() -> String {
 }
 
 fn today() -> String {
-    // Avoid extra chrono dep: local YYYY-MM-DD via date(1).
-    std::process::Command::new("date")
-        .arg("+%Y-%m-%d")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "unknown-date".into())
+    chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
 #[cfg(test)]

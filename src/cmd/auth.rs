@@ -188,19 +188,10 @@ fn credential_get(default_host: &str, attrs: &BTreeMap<String, String>) -> Resul
     if protocol != "https" && protocol != "http" {
         return Ok(());
     }
-    let req_host = attrs
+    let host = attrs
         .get("host")
         .map(|s| s.split(':').next().unwrap_or(s))
         .unwrap_or(default_host);
-    // Only answer for the configured host (ignore unrelated credential asks).
-    if req_host != default_host && !default_host.is_empty() {
-        // Still allow when --host matches attr host via CLI host default.
-        // If user runs helper without --host, default_host is gitee.com from clap.
-        if req_host != default_host {
-            // Prefer the host from the credential request when answering.
-        }
-    }
-    let host = req_host;
     let token = match Config::token(host) {
         Ok(t) => t,
         Err(_) => return Ok(()), // git treats empty helper output as "no credentials"
