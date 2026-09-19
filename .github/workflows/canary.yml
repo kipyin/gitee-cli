@@ -34,8 +34,10 @@ jobs:
         run: cargo test --locked
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
 
+      # Soft weekly signal only. `--debug` keeps the from-source install cheap;
+      # continue-on-error so an outdated crate never fails the canary.
       - name: Outdated crates (soft signal)
         continue-on-error: true
         run: |
