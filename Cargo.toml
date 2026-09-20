@@ -2,9 +2,11 @@
 name = "gitee-cli-rs"
 version = "0.2.2"
 edition = "2021"
+rust-version = "1.85"
 description = "A gh-like command-line client for Gitee"
 license = "MIT"
 repository = "https://github.com/kipyin/gitee-cli"
+readme = "README.md"
 
 [[bin]]
 name = "gitee"

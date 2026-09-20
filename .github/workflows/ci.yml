@@ -28,4 +28,4 @@ jobs:
         run: cargo test --locked
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
