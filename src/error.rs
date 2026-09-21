@@ -29,8 +29,6 @@ pub enum GiteeError {
     /// Maps to exit code 6.
     #[error("network error: {0}")]
     Network(String),
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
 }
 
 /// Stable, documented exit codes (see README "Exit codes").
@@ -56,7 +54,7 @@ impl GiteeError {
             Config(_) => 2,
             RepoResolve(_) => 2,
             Usage(_) => 2,
-            Api { .. } | Other(_) => 1,
+            Api { .. } => 1,
         }
     }
 
@@ -74,7 +72,7 @@ impl GiteeError {
             Config(_) => "config",
             RepoResolve(_) => "repo_resolve",
             Usage(_) => "usage",
-            Api { .. } | Other(_) => "error",
+            Api { .. } => "error",
         }
     }
 }
