@@ -414,32 +414,21 @@ mod tests {
     }
 
     fn rfc3339(secs: u64) -> String {
-        chrono::DateTime::<chrono::Utc>::from(ts(secs)).to_rfc3339_opts(
-            chrono::SecondsFormat::Secs,
-            true,
-        )
+        chrono::DateTime::<chrono::Utc>::from(ts(secs))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
     }
 
     #[test]
     fn cache_is_fresh_within_24h_boundaries() {
         let checked = rfc3339(1_000_000);
         // exactly 24h later → not fresh (age must be strictly < 24h)
-        assert!(!cache_is_fresh(
-            &checked,
-            ts(1_000_000 + 24 * 60 * 60)
-        ));
+        assert!(!cache_is_fresh(&checked, ts(1_000_000 + 24 * 60 * 60)));
         // one second under 24h → fresh
-        assert!(cache_is_fresh(
-            &checked,
-            ts(1_000_000 + 24 * 60 * 60 - 1)
-        ));
+        assert!(cache_is_fresh(&checked, ts(1_000_000 + 24 * 60 * 60 - 1)));
         // well inside window → fresh
         assert!(cache_is_fresh(&checked, ts(1_000_000 + 60)));
         // past 24h → due
-        assert!(!cache_is_fresh(
-            &checked,
-            ts(1_000_000 + 24 * 60 * 60 + 1)
-        ));
+        assert!(!cache_is_fresh(&checked, ts(1_000_000 + 24 * 60 * 60 + 1)));
         // invalid timestamp → due
         assert!(!cache_is_fresh("not-a-timestamp", ts(1_000_000)));
         // future timestamp → due (not within the past 24h)
@@ -496,7 +485,10 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-            assert_eq!(mode, 0o600, "state.json mode should match other config files");
+            assert_eq!(
+                mode, 0o600,
+                "state.json mode should match other config files"
+            );
         }
 
         crate::config::set_test_dir(None);
@@ -558,11 +550,7 @@ mod tests {
 
         let now = ts(1_000_000);
         // Stale: checked 25h ago.
-        seed_state(
-            dir.path(),
-            &rfc3339(1_000_000 - 25 * 60 * 60),
-            "v0.1.9",
-        );
+        seed_state(dir.path(), &rfc3339(1_000_000 - 25 * 60 * 60), "v0.1.9");
 
         let mut server = mockito::Server::new();
         let mock = server
@@ -590,10 +578,7 @@ mod tests {
         let loaded = load_state().unwrap();
         assert_eq!(loaded.checked_for_update_at, rfc3339(1_000_000));
         assert_eq!(loaded.latest_release.version, "v0.2.0");
-        assert_eq!(
-            loaded.latest_release.published_at,
-            "2026-01-15T12:00:00Z"
-        );
+        assert_eq!(loaded.latest_release.published_at, "2026-01-15T12:00:00Z");
 
         crate::config::set_test_dir(None);
     }
@@ -716,12 +701,12 @@ mod tests {
             "/opt/homebrew/bin/gitee",
             "/opt/homebrew"
         ));
-        assert!(is_homebrew_install(
-            "/usr/local/bin/gitee",
-            "/usr/local"
-        ));
+        assert!(is_homebrew_install("/usr/local/bin/gitee", "/usr/local"));
         assert!(
-            !is_homebrew_install("/opt/homebrew/Cellar/gitee/0.2.0/bin/gitee", "/opt/homebrew"),
+            !is_homebrew_install(
+                "/opt/homebrew/Cellar/gitee/0.2.0/bin/gitee",
+                "/opt/homebrew"
+            ),
             "Cellar path alone is not Homebrew for tip purposes"
         );
         assert!(!is_homebrew_install(

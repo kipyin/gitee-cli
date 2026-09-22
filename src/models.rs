@@ -203,7 +203,6 @@ pub struct Webhook {
     pub note_events: Option<bool>,
 }
 
-
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Gist {
     #[serde(default)]

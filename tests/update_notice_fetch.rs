@@ -21,8 +21,8 @@ fn fetch_latest_returns_version_and_url_on_200() {
         .with_body(LATEST_JSON)
         .create();
 
-    let info = fetch_latest(&server.url(), Duration::from_secs(2))
-        .expect("200 should yield ReleaseInfo");
+    let info =
+        fetch_latest(&server.url(), Duration::from_secs(2)).expect("200 should yield ReleaseInfo");
 
     mock.assert();
     assert_eq!(

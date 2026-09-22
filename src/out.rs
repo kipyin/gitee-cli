@@ -58,15 +58,20 @@ fn print_json<T: Serialize, W: Write>(
 
 /// Apply a jq expression to the (already projected) value. Each result prints
 /// on its own line: string scalars unquoted, everything else as compact JSON.
-fn print_jq<W: Write>(w: &mut W, value: &serde_json::Value, expr: &str) -> crate::error::Result<()> {
+fn print_jq<W: Write>(
+    w: &mut W,
+    value: &serde_json::Value,
+    expr: &str,
+) -> crate::error::Result<()> {
     for r in run_jq(value, expr)? {
         match r {
             serde_json::Value::String(s) => writeln!(w, "{s}")?,
             other => writeln!(
                 w,
                 "{}",
-                serde_json::to_string(&other)
-                    .map_err(|e| GiteeError::Usage(format!("--jq: cannot serialize result: {e}")))?
+                serde_json::to_string(&other).map_err(|e| GiteeError::Usage(format!(
+                    "--jq: cannot serialize result: {e}"
+                )))?
             )?,
         }
     }
@@ -88,7 +93,13 @@ fn run_jq(value: &serde_json::Value, expr: &str) -> crate::error::Result<Vec<ser
         .chain(jaq_json::defs());
     let loader = Loader::new(defs);
     let modules = loader
-        .load(&arena, File { path: (), code: expr })
+        .load(
+            &arena,
+            File {
+                path: (),
+                code: expr,
+            },
+        )
         .map_err(|errs| invalid_jq(expr, format!("{errs:?}")))?;
     let funs = jaq_core::funs()
         .chain(jaq_std::funs())
@@ -512,7 +523,6 @@ mod milestone_printer_tests {
     }
 }
 
-
 #[cfg(test)]
 mod diff_tests {
     use super::*;
@@ -574,7 +584,6 @@ pub fn one_issue(w: &mut impl Write, i: &Issue) -> std::io::Result<()> {
     Ok(())
 }
 
-
 #[derive(Serialize)]
 pub struct PrStatus {
     pub created: Vec<PullRequest>,
@@ -629,18 +638,13 @@ pub fn issue_status(w: &mut impl Write, s: &IssueStatus) -> std::io::Result<()> 
     Ok(())
 }
 
-
 fn write_comment_line(
     w: &mut impl Write,
     who: &str,
     body: &str,
     html_url: Option<&str>,
 ) -> std::io::Result<()> {
-    writeln!(
-        w,
-        "@{who} commented:\n{body}\n{}",
-        html_url.unwrap_or("")
-    )
+    writeln!(w, "@{who} commented:\n{body}\n{}", html_url.unwrap_or(""))
 }
 
 pub fn comment_line(w: &mut impl Write, c: &Comment) -> std::io::Result<()> {
@@ -666,11 +670,7 @@ pub fn comment_table(w: &mut impl Write, items: &[Comment]) -> std::io::Result<(
         .iter()
         .map(|c| CommentRow {
             id: c.id.to_string(),
-            author: c
-                .user
-                .as_ref()
-                .map(|u| u.login.clone())
-                .unwrap_or_default(),
+            author: c.user.as_ref().map(|u| u.login.clone()).unwrap_or_default(),
             created: c.created_at.clone().unwrap_or_default(),
             body: c.body.clone(),
         })
@@ -693,11 +693,7 @@ pub fn pr_comment_table(w: &mut impl Write, items: &[PrComment]) -> std::io::Res
         .iter()
         .map(|c| PrCommentRow {
             id: c.id.to_string(),
-            author: c
-                .user
-                .as_ref()
-                .map(|u| u.login.clone())
-                .unwrap_or_default(),
+            author: c.user.as_ref().map(|u| u.login.clone()).unwrap_or_default(),
             created: c.created_at.clone().unwrap_or_default(),
             path: c.path.clone().unwrap_or_default(),
             position: c.position.clone().unwrap_or_default(),
@@ -741,7 +737,6 @@ pub fn pr_commits(w: &mut impl Write, items: &[PrCommit]) -> std::io::Result<()>
     }
     Ok(())
 }
-
 
 // --- releases -----------------------------------------------------------
 
@@ -801,7 +796,6 @@ pub fn one_release(w: &mut impl Write, rel: &Release) -> std::io::Result<()> {
     Ok(())
 }
 
-
 // --- gists --------------------------------------------------------------
 
 #[derive(Tabled)]
@@ -826,7 +820,11 @@ pub fn gist_table(w: &mut impl Write, items: &[Gist]) -> std::io::Result<()> {
         .map(|g| GistRow {
             id: g.id.clone(),
             description: g.description.clone().unwrap_or_default(),
-            files: g.files.as_ref().map(|f| f.len().to_string()).unwrap_or_else(|| "0".into()),
+            files: g
+                .files
+                .as_ref()
+                .map(|f| f.len().to_string())
+                .unwrap_or_else(|| "0".into()),
             updated: g.updated_at.clone().unwrap_or_default(),
         })
         .collect();
@@ -845,11 +843,18 @@ pub fn one_gist(w: &mut impl Write, g: &Gist) -> std::io::Result<()> {
         writeln!(w, "updated: {updated}")?;
     }
     let files = g.files.as_ref();
-    writeln!(w, "
-{} file(s)", files.map(|f| f.len()).unwrap_or(0))?;
+    writeln!(
+        w,
+        "
+{} file(s)",
+        files.map(|f| f.len()).unwrap_or(0)
+    )?;
     if let Some(files) = files {
         for (name, file) in files {
-            let size = file.size.map(|s| s.to_string()).unwrap_or_else(|| "?".into());
+            let size = file
+                .size
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "?".into());
             writeln!(w, "  {name} ({size} bytes)")?;
         }
     }
@@ -1101,8 +1106,6 @@ pub fn webhook_table(w: &mut impl Write, items: &[Webhook]) -> std::io::Result<(
         .collect();
     writeln!(w, "{}", Table::new(rows))
 }
-
-
 
 #[cfg(test)]
 mod printer_tests {
@@ -1428,7 +1431,6 @@ mod printer_tests {
         assert!(issue_json.get("assigned").unwrap().is_array());
         assert_eq!(issue_json["assigned"][0]["title"], "Assigned item");
     }
-
 }
 // --- status dashboard ---------------------------------------------------
 
@@ -1539,4 +1541,3 @@ mod dashboard_printer_tests {
         assert_eq!(obj["created"].as_array().unwrap().len(), 1);
     }
 }
-

@@ -7,7 +7,12 @@ use std::collections::HashSet;
 
 /// When a state write hits Gitee's opaque enterprise/project 404, surface a
 /// clearer hint than a bare path. Non-state edits keep the original error.
-fn map_issue_state_err(err: GiteeError, changing_state: bool, owner: &str, number: &str) -> GiteeError {
+fn map_issue_state_err(
+    err: GiteeError,
+    changing_state: bool,
+    owner: &str,
+    number: &str,
+) -> GiteeError {
     if !changing_state {
         return err;
     }
@@ -245,11 +250,7 @@ impl Issues<'_> {
         let comments = self.list_comments(number, usize::MAX)?;
         resolve_latest_comment(&comments, login)
             .cloned()
-            .ok_or_else(|| {
-                GiteeError::Usage(format!(
-                    "no comment by '{login}' on issue {number}"
-                ))
-            })
+            .ok_or_else(|| GiteeError::Usage(format!("no comment by '{login}' on issue {number}")))
     }
 
     /// PATCH an issue comment by integer `id`.
@@ -263,12 +264,7 @@ impl Issues<'_> {
     }
 
     /// `--last` edit: resolve `login`'s most-recent comment on the issue, then PATCH.
-    pub fn update_latest_comment(
-        &self,
-        number: &str,
-        login: &str,
-        body: &str,
-    ) -> Result<Comment> {
+    pub fn update_latest_comment(&self, number: &str, login: &str, body: &str) -> Result<Comment> {
         let comment = self.latest_comment(number, login)?;
         self.update_comment(comment.id, body)
     }
@@ -289,11 +285,7 @@ impl Issues<'_> {
     }
 
     /// `--last` delete: resolve `login`'s most-recent comment on the issue, then DELETE.
-    pub fn delete_latest_comment(
-        &self,
-        number: &str,
-        login: &str,
-    ) -> Result<StateChange<()>> {
+    pub fn delete_latest_comment(&self, number: &str, login: &str) -> Result<StateChange<()>> {
         let comment = self.latest_comment(number, login)?;
         self.delete_comment(comment.id)
     }

@@ -331,7 +331,6 @@ pub enum PrCommentCmd {
     },
 }
 
-
 #[derive(Subcommand, Clone)]
 pub enum SearchCmd {
     /// Search repositories.
@@ -521,9 +520,7 @@ pub enum PrLabelCmd {
         labels: Vec<String>,
     },
     /// List labels currently attached to the pull request.
-    List {
-        number: i64,
-    },
+    List { number: i64 },
 }
 
 /// Non-destructive reviewer (审查人) membership. Distinct from whole-set
@@ -545,9 +542,7 @@ pub enum PrAssigneeCmd {
         users: Vec<String>,
     },
     /// List reviewers and their accept status (审查通过 / pending).
-    List {
-        number: i64,
-    },
+    List { number: i64 },
 }
 
 /// Non-destructive tester (测试人) membership. Distinct from whole-set
@@ -569,9 +564,7 @@ pub enum PrTesterCmd {
         users: Vec<String>,
     },
     /// List testers on the pull request.
-    List {
-        number: i64,
-    },
+    List { number: i64 },
 }
 
 #[derive(Subcommand, Clone)]
@@ -612,7 +605,6 @@ pub enum IssueCommentCmd {
         yes: bool,
     },
 }
-
 
 #[derive(Subcommand, Clone)]
 pub enum GistCmd {
@@ -798,10 +790,8 @@ pub enum RepoCmd {
         default_branch: Option<String>,
     },
     /// Rename a repository's URL slug (`path` on the API).
-    Rename {
-        new_path: String,
-    },
-        /// Star the resolved repository.
+    Rename { new_path: String },
+    /// Star the resolved repository.
     Star,
     /// Unstar the resolved repository.
     Unstar,
@@ -816,7 +806,6 @@ pub enum RepoCmd {
     },
 }
 
-
 #[derive(Subcommand, Clone)]
 pub enum MilestoneCmd {
     List {
@@ -824,9 +813,7 @@ pub enum MilestoneCmd {
         list: ListArgs,
     },
     /// Show details of a milestone.
-    View {
-        number: i64,
-    },
+    View { number: i64 },
     Create {
         #[arg(long)]
         title: String,
@@ -854,18 +841,11 @@ pub enum MilestoneCmd {
     },
 }
 
-
-
 #[derive(Subcommand, Clone)]
 pub enum ConfigCmd {
     List,
-    Get {
-        key: String,
-    },
-    Set {
-        key: String,
-        value: String,
-    },
+    Get { key: String },
+    Set { key: String, value: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -904,9 +884,7 @@ pub enum ExtensionCmd {
         yes: bool,
     },
     /// Pull (and rebuild, if needed) installed extensions. With no name: all.
-    Upgrade {
-        name: Option<String>,
-    },
+    Upgrade { name: Option<String> },
 }
 
 #[derive(Subcommand, Clone)]
@@ -1029,7 +1007,12 @@ pub enum GitCredentialCmd {
 
 #[cfg(test)]
 mod parse_tests {
-    use super::{AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd, GitCredentialCmd, IssueCmd, IssueCommentCmd, IssueLabelCmd, MilestoneCmd, OrgCmd, PrAssigneeCmd, PrCmd, PrCommentCmd, PrLabelCmd, PrTesterCmd, ReleaseCmd, RepoCmd, SshKeyCmd, WebhookCmd};
+    use super::{
+        AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd,
+        GitCredentialCmd, IssueCmd, IssueCommentCmd, IssueLabelCmd, MilestoneCmd, OrgCmd,
+        PrAssigneeCmd, PrCmd, PrCommentCmd, PrLabelCmd, PrTesterCmd, ReleaseCmd, RepoCmd,
+        SshKeyCmd, WebhookCmd,
+    };
     use clap::Parser;
 
     #[test]
@@ -1071,13 +1054,21 @@ mod parse_tests {
     #[test]
     fn search_parses_flags() {
         let cli = Cli::try_parse_from([
-            "gitee", "search", "repos", "gitee",
-            "--owner", "oschina",
-            "--language", "Rust",
+            "gitee",
+            "search",
+            "repos",
+            "gitee",
+            "--owner",
+            "oschina",
+            "--language",
+            "Rust",
             "--fork",
-            "--sort", "stars_count",
-            "--order", "desc",
-            "--limit", "5",
+            "--sort",
+            "stars_count",
+            "--order",
+            "desc",
+            "--limit",
+            "5",
         ])
         .expect("search repos should parse");
         let Command::Search(super::SearchCmd::Repos {
@@ -1101,15 +1092,26 @@ mod parse_tests {
         assert_eq!(limit.limit, 5);
 
         let cli = Cli::try_parse_from([
-            "gitee", "search", "issues", "login",
-            "--state", "open",
-            "--author", "alice",
-            "--assignee", "bob",
-            "--label", "bug",
-            "--language", "Go",
-            "--sort", "updated_at",
-            "--order", "asc",
-            "--limit", "3",
+            "gitee",
+            "search",
+            "issues",
+            "login",
+            "--state",
+            "open",
+            "--author",
+            "alice",
+            "--assignee",
+            "bob",
+            "--label",
+            "bug",
+            "--language",
+            "Go",
+            "--sort",
+            "updated_at",
+            "--order",
+            "asc",
+            "--limit",
+            "3",
         ])
         .expect("search issues should parse");
         let Command::Search(super::SearchCmd::Issues {
@@ -1137,10 +1139,16 @@ mod parse_tests {
         assert_eq!(limit.limit, 3);
 
         let cli = Cli::try_parse_from([
-            "gitee", "search", "users", "kip",
-            "--sort", "followers_count",
-            "--order", "desc",
-            "--limit", "3",
+            "gitee",
+            "search",
+            "users",
+            "kip",
+            "--sort",
+            "followers_count",
+            "--order",
+            "desc",
+            "--limit",
+            "3",
         ])
         .expect("search users should parse");
         let Command::Search(super::SearchCmd::Users {
@@ -1179,17 +1187,24 @@ mod parse_tests {
         assert_eq!(limit.limit, 3);
     }
 
-
     #[test]
     fn pr_create_parses_full_flag_surface() {
         let cli = Cli::try_parse_from([
-            "gitee", "pr", "create",
-            "--title", "T",
-            "--assignee", "me",
-            "--tester", "qa1",
-            "--label", "bug,ui",
-            "--milestone", "v1.0",
-            "--close-issue", "I1AB2C",
+            "gitee",
+            "pr",
+            "create",
+            "--title",
+            "T",
+            "--assignee",
+            "me",
+            "--tester",
+            "qa1",
+            "--label",
+            "bug,ui",
+            "--milestone",
+            "v1.0",
+            "--close-issue",
+            "I1AB2C",
         ])
         .expect("pr create should parse");
         let Command::Pr(PrCmd::Create {
@@ -1222,8 +1237,8 @@ mod parse_tests {
 
     #[test]
     fn pr_ready_parses_number_and_undo() {
-        let cli = Cli::try_parse_from(["gitee", "pr", "ready", "12"])
-            .expect("pr ready should parse");
+        let cli =
+            Cli::try_parse_from(["gitee", "pr", "ready", "12"]).expect("pr ready should parse");
         let Command::Pr(PrCmd::Ready { number, undo }) = cli.cmd else {
             panic!("expected pr ready");
         };
@@ -1292,10 +1307,15 @@ mod parse_tests {
     #[test]
     fn gist_flags_parse() {
         let cli = Cli::try_parse_from([
-            "gitee", "gist", "create", "a.txt",
-            "--desc", "my snippet",
+            "gitee",
+            "gist",
+            "create",
+            "a.txt",
+            "--desc",
+            "my snippet",
             "--public",
-            "--filename", "b.txt",
+            "--filename",
+            "b.txt",
         ])
         .expect("gist create should parse");
         let Command::Gist(GistCmd::Create {
@@ -1322,15 +1342,21 @@ mod parse_tests {
         assert!(yes);
     }
 
-
     #[test]
     fn issue_edit_and_create_parse_new_flags() {
         let cli = Cli::try_parse_from([
-            "gitee", "issue", "edit", "I1AB",
-            "--title", "Retitle",
-            "--label", "bug",
-            "--assignee", "dev1",
-            "--milestone", "v1.0",
+            "gitee",
+            "issue",
+            "edit",
+            "I1AB",
+            "--title",
+            "Retitle",
+            "--label",
+            "bug",
+            "--assignee",
+            "dev1",
+            "--milestone",
+            "v1.0",
             "--security-hole",
         ])
         .expect("issue edit should parse");
@@ -1348,9 +1374,13 @@ mod parse_tests {
         assert!(security_hole);
 
         let cli = Cli::try_parse_from([
-            "gitee", "issue", "create",
-            "--title", "T",
-            "--milestone", "3",
+            "gitee",
+            "issue",
+            "create",
+            "--title",
+            "T",
+            "--milestone",
+            "3",
             "--security-hole",
         ])
         .expect("issue create should parse");
@@ -1427,8 +1457,7 @@ mod parse_tests {
 
     #[test]
     fn pr_test_parses() {
-        let cli = Cli::try_parse_from(["gitee", "pr", "test", "12"])
-            .expect("pr test should parse");
+        let cli = Cli::try_parse_from(["gitee", "pr", "test", "12"]).expect("pr test should parse");
         let Command::Pr(PrCmd::Test { number, force }) = cli.cmd else {
             panic!("expected pr test");
         };
@@ -1459,13 +1488,22 @@ mod parse_tests {
     #[test]
     fn pr_edit_parses_accumulating_flags() {
         let cli = Cli::try_parse_from([
-            "gitee", "pr", "edit", "5",
-            "--title", "New title",
-            "--label", "a,b",
-            "--label", "c",
-            "--assignee", "dev1",
-            "--tester", "qa1",
-            "--milestone", "v1.0",
+            "gitee",
+            "pr",
+            "edit",
+            "5",
+            "--title",
+            "New title",
+            "--label",
+            "a,b",
+            "--label",
+            "c",
+            "--assignee",
+            "dev1",
+            "--tester",
+            "qa1",
+            "--milestone",
+            "v1.0",
         ])
         .expect("pr edit should parse");
         let Command::Pr(PrCmd::Edit {
@@ -1478,7 +1516,10 @@ mod parse_tests {
             ..
         }) = cli.cmd
         else {
-            panic!("expected pr edit, got {:?}", std::mem::discriminant(&cli.cmd));
+            panic!(
+                "expected pr edit, got {:?}",
+                std::mem::discriminant(&cli.cmd)
+            );
         };
         assert_eq!(number, 5);
         assert_eq!(title.as_deref(), Some("New title"));
@@ -1499,7 +1540,13 @@ mod parse_tests {
         assert!(Cli::try_parse_from(["gitee", "milestone", "create"]).is_err());
         assert!(Cli::try_parse_from(["gitee", "milestone", "create", "--title", "T"]).is_err());
         let cli = Cli::try_parse_from([
-            "gitee", "milestone", "create", "--title", "T", "--due-on", "2026-12-31",
+            "gitee",
+            "milestone",
+            "create",
+            "--title",
+            "T",
+            "--due-on",
+            "2026-12-31",
         ])
         .expect("milestone create should parse");
         let Command::Milestone(MilestoneCmd::Create { title, due_on, .. }) = cli.cmd else {
@@ -1514,7 +1561,6 @@ mod parse_tests {
         let r = Cli::try_parse_from(["gitee", "milestone", "edit", "1"]);
         assert!(r.is_err(), "milestone edit with no flags must fail");
     }
-
 
     #[test]
     fn jq_parses_after_bare_json_flag() {
@@ -1574,8 +1620,8 @@ mod parse_tests {
 
     #[test]
     fn issue_status_parses() {
-        let cli = Cli::try_parse_from(["gitee", "issue", "status"])
-            .expect("issue status should parse");
+        let cli =
+            Cli::try_parse_from(["gitee", "issue", "status"]).expect("issue status should parse");
         let Command::Issue(IssueCmd::Status { limit }) = cli.cmd else {
             panic!("expected issue status");
         };
@@ -1592,7 +1638,9 @@ mod parse_tests {
     #[test]
     fn org_list_parses_limit() {
         let cli = Cli::try_parse_from(["gitee", "org", "list", "--limit", "5"]).expect("org list");
-        let Command::Org(OrgCmd::List { limit }) = cli.cmd else { panic!("expected org list") };
+        let Command::Org(OrgCmd::List { limit }) = cli.cmd else {
+            panic!("expected org list")
+        };
         assert_eq!(limit.limit, 5);
     }
 
@@ -1602,14 +1650,25 @@ mod parse_tests {
         assert!(matches!(cli.cmd, Command::SshKey(SshKeyCmd::List { .. })));
 
         let cli = Cli::try_parse_from([
-            "gitee", "ssh-key", "add", "~/.ssh/id_ed25519.pub", "--title", "laptop",
-        ]).expect("ssh-key add");
-        let Command::SshKey(SshKeyCmd::Add { pubkey_file, title }) = cli.cmd else { panic!("add") };
+            "gitee",
+            "ssh-key",
+            "add",
+            "~/.ssh/id_ed25519.pub",
+            "--title",
+            "laptop",
+        ])
+        .expect("ssh-key add");
+        let Command::SshKey(SshKeyCmd::Add { pubkey_file, title }) = cli.cmd else {
+            panic!("add")
+        };
         assert_eq!(pubkey_file, "~/.ssh/id_ed25519.pub");
         assert_eq!(title.as_deref(), Some("laptop"));
 
-        let cli = Cli::try_parse_from(["gitee", "ssh-key", "delete", "99", "--yes"]).expect("delete");
-        let Command::SshKey(SshKeyCmd::Delete { id, yes }) = cli.cmd else { panic!("delete") };
+        let cli =
+            Cli::try_parse_from(["gitee", "ssh-key", "delete", "99", "--yes"]).expect("delete");
+        let Command::SshKey(SshKeyCmd::Delete { id, yes }) = cli.cmd else {
+            panic!("delete")
+        };
         assert_eq!(id, 99);
         assert!(yes);
     }
@@ -1617,14 +1676,29 @@ mod parse_tests {
     #[test]
     fn collaborator_commands_parse() {
         let cli = Cli::try_parse_from([
-            "gitee", "collaborator", "add", "alice", "--permission", "admin",
-        ]).expect("collaborator add");
-        let Command::Collaborator(CollaboratorCmd::Add { username, permission }) = cli.cmd else { panic!("add") };
+            "gitee",
+            "collaborator",
+            "add",
+            "alice",
+            "--permission",
+            "admin",
+        ])
+        .expect("collaborator add");
+        let Command::Collaborator(CollaboratorCmd::Add {
+            username,
+            permission,
+        }) = cli.cmd
+        else {
+            panic!("add")
+        };
         assert_eq!(username, "alice");
         assert_eq!(permission, "admin");
 
-        let cli = Cli::try_parse_from(["gitee", "collaborator", "remove", "alice", "-y"]).expect("remove");
-        let Command::Collaborator(CollaboratorCmd::Remove { username, yes }) = cli.cmd else { panic!("remove") };
+        let cli = Cli::try_parse_from(["gitee", "collaborator", "remove", "alice", "-y"])
+            .expect("remove");
+        let Command::Collaborator(CollaboratorCmd::Remove { username, yes }) = cli.cmd else {
+            panic!("remove")
+        };
         assert_eq!(username, "alice");
         assert!(yes);
     }
@@ -1632,27 +1706,50 @@ mod parse_tests {
     #[test]
     fn webhook_commands_parse() {
         let cli = Cli::try_parse_from([
-            "gitee", "webhook", "create",
-            "--url", "https://example.com/hook",
-            "--events", "push_events,issues_events",
-            "--password", "s3cret",
-        ]).expect("webhook create");
-        let Command::Webhook(WebhookCmd::Create { url, events, password }) = cli.cmd else { panic!("create") };
+            "gitee",
+            "webhook",
+            "create",
+            "--url",
+            "https://example.com/hook",
+            "--events",
+            "push_events,issues_events",
+            "--password",
+            "s3cret",
+        ])
+        .expect("webhook create");
+        let Command::Webhook(WebhookCmd::Create {
+            url,
+            events,
+            password,
+        }) = cli.cmd
+        else {
+            panic!("create")
+        };
         assert_eq!(url, "https://example.com/hook");
         assert_eq!(events, vec!["push_events,issues_events".to_string()]);
         assert_eq!(password.as_deref(), Some("s3cret"));
 
-        let cli = Cli::try_parse_from(["gitee", "webhook", "delete", "55", "--yes"]).expect("delete");
-        let Command::Webhook(WebhookCmd::Delete { id, yes }) = cli.cmd else { panic!("delete") };
+        let cli =
+            Cli::try_parse_from(["gitee", "webhook", "delete", "55", "--yes"]).expect("delete");
+        let Command::Webhook(WebhookCmd::Delete { id, yes }) = cli.cmd else {
+            panic!("delete")
+        };
         assert_eq!(id, 55);
         assert!(yes);
 
         let cli = Cli::try_parse_from([
-            "gitee", "webhook", "create",
-            "--url", "https://example.com/hook",
-            "--events", "pull_requests_events",
-        ]).expect("webhook alias event");
-        let Command::Webhook(WebhookCmd::Create { events, .. }) = cli.cmd else { panic!("create") };
+            "gitee",
+            "webhook",
+            "create",
+            "--url",
+            "https://example.com/hook",
+            "--events",
+            "pull_requests_events",
+        ])
+        .expect("webhook alias event");
+        let Command::Webhook(WebhookCmd::Create { events, .. }) = cli.cmd else {
+            panic!("create")
+        };
         assert_eq!(events, vec!["pull_requests_events".to_string()]);
     }
 
@@ -1671,12 +1768,16 @@ mod parse_tests {
     #[test]
     fn config_and_alias_parse() {
         let cli = Cli::try_parse_from(["gitee", "config", "set", "host", "gitee.com"]).unwrap();
-        let Command::Config(ConfigCmd::Set { key, value }) = cli.cmd else { panic!("config set") };
+        let Command::Config(ConfigCmd::Set { key, value }) = cli.cmd else {
+            panic!("config set")
+        };
         assert_eq!(key, "host");
         assert_eq!(value, "gitee.com");
 
         let cli = Cli::try_parse_from(["gitee", "alias", "set", "co", "pr", "checkout"]).unwrap();
-        let Command::Alias(AliasCmd::Set { name, expansion }) = cli.cmd else { panic!("alias set") };
+        let Command::Alias(AliasCmd::Set { name, expansion }) = cli.cmd else {
+            panic!("alias set")
+        };
         assert_eq!(name, "co");
         assert_eq!(expansion, vec!["pr", "checkout"]);
 
@@ -1689,7 +1790,9 @@ mod parse_tests {
         let cli = Cli::try_parse_from(["gitee", "auth", "setup-git"]).unwrap();
         assert!(matches!(cli.cmd, Command::Auth(AuthCmd::SetupGit)));
         let cli = Cli::try_parse_from(["gitee", "auth", "switch", "--user", "kip"]).unwrap();
-        let Command::Auth(AuthCmd::Switch { user }) = cli.cmd else { panic!("switch") };
+        let Command::Auth(AuthCmd::Switch { user }) = cli.cmd else {
+            panic!("switch")
+        };
         assert_eq!(user, "kip");
         let cli = Cli::try_parse_from(["gitee", "auth", "git-credential", "get"]).unwrap();
         assert!(matches!(
@@ -1707,7 +1810,13 @@ mod parse_tests {
     #[test]
     fn extension_install_parse() {
         let cli = Cli::try_parse_from([
-            "gitee", "extension", "install", "owner/my-ext", "--build", "cargo", "--yes",
+            "gitee",
+            "extension",
+            "install",
+            "owner/my-ext",
+            "--build",
+            "cargo",
+            "--yes",
         ])
         .unwrap();
         let Command::Extension(ExtensionCmd::Install { repo, build, yes }) = cli.cmd else {
@@ -1728,7 +1837,12 @@ mod parse_tests {
     #[test]
     fn extension_install_rejects_bad_build_value() {
         assert!(Cli::try_parse_from([
-            "gitee", "extension", "install", "owner/ext", "--build", "go"
+            "gitee",
+            "extension",
+            "install",
+            "owner/ext",
+            "--build",
+            "go"
         ])
         .is_err());
     }
@@ -1777,7 +1891,9 @@ mod parse_tests {
     #[test]
     fn external_extension_parse() {
         let cli = Cli::try_parse_from(["gitee", "myext", "arg1", "--flag"]).unwrap();
-        let Command::External(args) = cli.cmd else { panic!("external") };
+        let Command::External(args) = cli.cmd else {
+            panic!("external")
+        };
         assert_eq!(args.len(), 3);
         assert_eq!(args[0], "myext");
         assert_eq!(args[1], "arg1");
@@ -1789,32 +1905,59 @@ mod parse_tests {
         let cli = Cli::try_parse_from(["gitee", "browse"]).unwrap();
         assert!(matches!(cli.cmd, Command::Browse));
         let cli = Cli::try_parse_from(["gitee", "pr", "view", "12", "--web"]).unwrap();
-        let Command::Pr(PrCmd::View { number, web, merged }) = cli.cmd else { panic!("pr view") };
+        let Command::Pr(PrCmd::View {
+            number,
+            web,
+            merged,
+        }) = cli.cmd
+        else {
+            panic!("pr view")
+        };
         assert_eq!(number, 12);
         assert!(web);
         assert!(!merged);
         let cli = Cli::try_parse_from(["gitee", "pr", "view", "12", "--merged"]).unwrap();
-        let Command::Pr(PrCmd::View { number, merged, web, .. }) = cli.cmd else { panic!("pr view --merged") };
+        let Command::Pr(PrCmd::View {
+            number,
+            merged,
+            web,
+            ..
+        }) = cli.cmd
+        else {
+            panic!("pr view --merged")
+        };
         assert_eq!(number, 12);
         assert!(merged);
         assert!(!web);
         let cli = Cli::try_parse_from(["gitee", "issue", "view", "I1", "--web"]).unwrap();
-        let Command::Issue(IssueCmd::View { number, web }) = cli.cmd else { panic!("issue view") };
+        let Command::Issue(IssueCmd::View { number, web }) = cli.cmd else {
+            panic!("issue view")
+        };
         assert_eq!(number, "I1");
         assert!(web);
         let cli = Cli::try_parse_from(["gitee", "release", "view", "v1", "--web"]).unwrap();
-        let Command::Release(ReleaseCmd::View { tag, web }) = cli.cmd else { panic!("release view") };
+        let Command::Release(ReleaseCmd::View { tag, web }) = cli.cmd else {
+            panic!("release view")
+        };
         assert_eq!(tag, "v1");
         assert!(web);
         let cli = Cli::try_parse_from(["gitee", "repo", "view", "--web"]).unwrap();
-        let Command::Repo(RepoCmd::View { web, .. }) = cli.cmd else { panic!("repo view") };
+        let Command::Repo(RepoCmd::View { web, .. }) = cli.cmd else {
+            panic!("repo view")
+        };
         assert!(web);
     }
 
     #[test]
     fn issue_comment_create_parses() {
         let cli = Cli::try_parse_from([
-            "gitee", "issue", "comment", "create", "I88", "-m", "looking into it",
+            "gitee",
+            "issue",
+            "comment",
+            "create",
+            "I88",
+            "-m",
+            "looking into it",
         ])
         .expect("issue comment create should parse");
         let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Create { number, body })) = cli.cmd
@@ -1827,10 +1970,8 @@ mod parse_tests {
 
     #[test]
     fn pr_comment_create_parses() {
-        let cli = Cli::try_parse_from([
-            "gitee", "pr", "comment", "create", "42", "-m", "LGTM",
-        ])
-        .expect("pr comment create should parse");
+        let cli = Cli::try_parse_from(["gitee", "pr", "comment", "create", "42", "-m", "LGTM"])
+            .expect("pr comment create should parse");
         let Command::Pr(PrCmd::Comment(PrCommentCmd::Create {
             number,
             body,
@@ -1947,10 +2088,8 @@ mod parse_tests {
 
     #[test]
     fn issue_comment_list_parses_limit() {
-        let cli = Cli::try_parse_from([
-            "gitee", "issue", "comment", "list", "I88", "--limit", "5",
-        ])
-        .expect("issue comment list should parse");
+        let cli = Cli::try_parse_from(["gitee", "issue", "comment", "list", "I88", "--limit", "5"])
+            .expect("issue comment list should parse");
         let Command::Issue(IssueCmd::Comment(IssueCommentCmd::List { number, limit })) = cli.cmd
         else {
             panic!("expected issue comment list");
@@ -1980,15 +2119,10 @@ mod parse_tests {
 
     #[test]
     fn issue_comment_edit_parses_by_id_and_last() {
-        let cli = Cli::try_parse_from([
-            "gitee", "issue", "comment", "edit", "7", "-m", "fixed",
-        ])
-        .expect("issue comment edit by id should parse");
-        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Edit {
-            target,
-            last,
-            body,
-        })) = cli.cmd
+        let cli = Cli::try_parse_from(["gitee", "issue", "comment", "edit", "7", "-m", "fixed"])
+            .expect("issue comment edit by id should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Edit { target, last, body })) =
+            cli.cmd
         else {
             panic!("expected issue comment edit");
         };
@@ -2000,11 +2134,8 @@ mod parse_tests {
             "gitee", "issue", "comment", "edit", "I88", "--last", "-m", "fixed",
         ])
         .expect("issue comment edit --last should parse");
-        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Edit {
-            target,
-            last,
-            body,
-        })) = cli.cmd
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Edit { target, last, body })) =
+            cli.cmd
         else {
             panic!("expected issue comment edit --last");
         };
@@ -2015,16 +2146,9 @@ mod parse_tests {
 
     #[test]
     fn pr_comment_edit_parses_by_id_and_last() {
-        let cli = Cli::try_parse_from([
-            "gitee", "pr", "comment", "edit", "42", "-m", "fixed",
-        ])
-        .expect("pr comment edit by id should parse");
-        let Command::Pr(PrCmd::Comment(PrCommentCmd::Edit {
-            target,
-            last,
-            body,
-        })) = cli.cmd
-        else {
+        let cli = Cli::try_parse_from(["gitee", "pr", "comment", "edit", "42", "-m", "fixed"])
+            .expect("pr comment edit by id should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Edit { target, last, body })) = cli.cmd else {
             panic!("expected pr comment edit");
         };
         assert_eq!(target, 42);
@@ -2035,12 +2159,7 @@ mod parse_tests {
             "gitee", "pr", "comment", "edit", "12", "--last", "-m", "fixed",
         ])
         .expect("pr comment edit --last should parse");
-        let Command::Pr(PrCmd::Comment(PrCommentCmd::Edit {
-            target,
-            last,
-            body,
-        })) = cli.cmd
-        else {
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Edit { target, last, body })) = cli.cmd else {
             panic!("expected pr comment edit --last");
         };
         assert_eq!(target, 12);
@@ -2052,11 +2171,8 @@ mod parse_tests {
     fn issue_comment_delete_parses_by_id_and_last() {
         let cli = Cli::try_parse_from(["gitee", "issue", "comment", "delete", "7", "--yes"])
             .expect("issue comment delete by id should parse");
-        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Delete {
-            target,
-            last,
-            yes,
-        })) = cli.cmd
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Delete { target, last, yes })) =
+            cli.cmd
         else {
             panic!("expected issue comment delete");
         };
@@ -2064,15 +2180,11 @@ mod parse_tests {
         assert!(!last);
         assert!(yes);
 
-        let cli = Cli::try_parse_from([
-            "gitee", "issue", "comment", "delete", "I88", "--last", "-y",
-        ])
-        .expect("issue comment delete --last should parse");
-        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Delete {
-            target,
-            last,
-            yes,
-        })) = cli.cmd
+        let cli =
+            Cli::try_parse_from(["gitee", "issue", "comment", "delete", "I88", "--last", "-y"])
+                .expect("issue comment delete --last should parse");
+        let Command::Issue(IssueCmd::Comment(IssueCommentCmd::Delete { target, last, yes })) =
+            cli.cmd
         else {
             panic!("expected issue comment delete --last");
         };
@@ -2085,11 +2197,7 @@ mod parse_tests {
     fn pr_comment_delete_parses_by_id_and_last() {
         let cli = Cli::try_parse_from(["gitee", "pr", "comment", "delete", "42", "--yes"])
             .expect("pr comment delete by id should parse");
-        let Command::Pr(PrCmd::Comment(PrCommentCmd::Delete {
-            target,
-            last,
-            yes,
-        })) = cli.cmd
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Delete { target, last, yes })) = cli.cmd
         else {
             panic!("expected pr comment delete");
         };
@@ -2097,15 +2205,9 @@ mod parse_tests {
         assert!(!last);
         assert!(yes);
 
-        let cli = Cli::try_parse_from([
-            "gitee", "pr", "comment", "delete", "12", "--last", "-y",
-        ])
-        .expect("pr comment delete --last should parse");
-        let Command::Pr(PrCmd::Comment(PrCommentCmd::Delete {
-            target,
-            last,
-            yes,
-        })) = cli.cmd
+        let cli = Cli::try_parse_from(["gitee", "pr", "comment", "delete", "12", "--last", "-y"])
+            .expect("pr comment delete --last should parse");
+        let Command::Pr(PrCmd::Comment(PrCommentCmd::Delete { target, last, yes })) = cli.cmd
         else {
             panic!("expected pr comment delete --last");
         };
@@ -2116,12 +2218,9 @@ mod parse_tests {
 
     #[test]
     fn issue_label_add_remove_list_parse() {
-        let cli = Cli::try_parse_from([
-            "gitee", "issue", "label", "add", "I88", "bug", "ui",
-        ])
-        .expect("issue label add should parse");
-        let Command::Issue(IssueCmd::Label(IssueLabelCmd::Add { number, labels })) = cli.cmd
-        else {
+        let cli = Cli::try_parse_from(["gitee", "issue", "label", "add", "I88", "bug", "ui"])
+            .expect("issue label add should parse");
+        let Command::Issue(IssueCmd::Label(IssueLabelCmd::Add { number, labels })) = cli.cmd else {
             panic!("expected issue label add");
         };
         assert_eq!(number, "I88");
@@ -2172,8 +2271,8 @@ mod parse_tests {
 
     #[test]
     fn pr_commits_parse() {
-        let cli = Cli::try_parse_from(["gitee", "pr", "commits", "12"])
-            .expect("pr commits should parse");
+        let cli =
+            Cli::try_parse_from(["gitee", "pr", "commits", "12"]).expect("pr commits should parse");
         let Command::Pr(PrCmd::Commits { number, limit }) = cli.cmd else {
             panic!("expected pr commits");
         };

@@ -62,11 +62,7 @@ pub fn execute(ctx: &Ctx, cmd: ReleaseCmd) -> Result<()> {
             let assets = release.assets.unwrap_or_default();
             let matching: Vec<_> = assets
                 .iter()
-                .filter(|a| {
-                    pattern
-                        .as_deref()
-                        .is_none_or(|p| glob_match(p, &a.name))
-                })
+                .filter(|a| pattern.as_deref().is_none_or(|p| glob_match(p, &a.name)))
                 .collect();
             let mut out = std::io::stdout().lock();
             if matching.is_empty() {

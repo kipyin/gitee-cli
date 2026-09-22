@@ -24,6 +24,7 @@ and do not call Gitee.
 CI runs the same commands. Please run them before opening a PR:
 
 ```bash
+cargo fmt --all -- --check
 cargo test --locked
 cargo clippy --all-targets --locked -- -D warnings
 ```

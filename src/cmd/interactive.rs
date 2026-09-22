@@ -56,8 +56,8 @@ pub fn edit_body_in_editor(initial: &str, editor_cmd: &str) -> Result<Option<Str
     file.flush()?;
     let path = file.path().to_owned();
 
-    let mut parts: Vec<String> = split(editor_cmd)
-        .map_err(|e| GiteeError::Usage(format!("invalid editor command: {e}")))?;
+    let mut parts: Vec<String> =
+        split(editor_cmd).map_err(|e| GiteeError::Usage(format!("invalid editor command: {e}")))?;
     if parts.is_empty() {
         return Err(GiteeError::Usage("editor command is empty".into()));
     }
@@ -112,9 +112,8 @@ pub fn resolve_optional_body(
         return Err(GiteeError::Usage(format!("{usage_cmd} needs --body/-m")));
     }
     let editor = resolve_editor_from_env_and_config()?;
-    edit_body_in_editor(prefill, &editor)?.ok_or_else(|| {
-        GiteeError::Usage("comment body is empty".into())
-    })
+    edit_body_in_editor(prefill, &editor)?
+        .ok_or_else(|| GiteeError::Usage("comment body is empty".into()))
 }
 
 #[cfg(test)]

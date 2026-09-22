@@ -18,13 +18,16 @@ pub fn execute(ctx: &Ctx, cmd: LabelCmd) -> Result<()> {
         LabelCmd::Create { name, color } => {
             let repo = ctx.repo()?;
             if ctx.preview {
-                println!("{}", super::preview_line(
-                    &format!("create label {name}"),
-                    &[
-                        ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                        ("color", &color),
-                    ],
-                ));
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("create label {name}"),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("color", &color),
+                        ],
+                    )
+                );
                 return Ok(());
             }
             let change = ctx.client.labels(repo).create_idempotent(&CreateLabel {
@@ -34,7 +37,11 @@ pub fn execute(ctx: &Ctx, cmd: LabelCmd) -> Result<()> {
             let mut out = std::io::stdout().lock();
             match change {
                 crate::api::StateChange::Already(label) => {
-                    writeln!(out, "Label {name} already exists (color {})", label.color.as_deref().unwrap_or("(none)"))?;
+                    writeln!(
+                        out,
+                        "Label {name} already exists (color {})",
+                        label.color.as_deref().unwrap_or("(none)")
+                    )?;
                 }
                 crate::api::StateChange::Changed(label) => {
                     let items = [label];

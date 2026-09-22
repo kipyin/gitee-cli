@@ -138,16 +138,10 @@ fn commits_hits_pull_commits_path_and_deserializes_nested_commit() {
 
     mock.assert();
     assert_eq!(items.len(), 3);
-    assert_eq!(
-        items[0].sha,
-        "abc1234567890deadbeef00000000000000000000"
-    );
+    assert_eq!(items[0].sha, "abc1234567890deadbeef00000000000000000000");
     assert_eq!(items[0].subject(), "Add pagination helpers");
     assert_eq!(items[0].author_label(), "dev1");
-    assert_eq!(
-        items[0].date(),
-        Some("2026-01-01T10:00:00+08:00")
-    );
+    assert_eq!(items[0].date(), Some("2026-01-01T10:00:00+08:00"));
     assert_eq!(
         items[0].html_url.as_deref(),
         Some("https://gitee.com/oschina/gitee-cli/commit/abc1234567890")
@@ -441,7 +435,10 @@ fn set_state_idempotent_open_pr_patches_and_returns_changed() {
         .create();
     let patch = server
         .mock("PATCH", api_path(patch_path).as_str())
-        .match_body(mockito::Matcher::UrlEncoded("state".into(), "closed".into()))
+        .match_body(mockito::Matcher::UrlEncoded(
+            "state".into(),
+            "closed".into(),
+        ))
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(PULL_REQUEST_JSON)
@@ -577,7 +574,10 @@ fn merge_idempotent_already_merged_skips_put() {
         .with_body(merged_body)
         .create();
     let put = server
-        .mock("PUT", api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str())
+        .mock(
+            "PUT",
+            api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str(),
+        )
         .expect(0)
         .create();
 
@@ -604,7 +604,10 @@ fn merge_idempotent_open_pr_puts_and_returns_changed() {
         .with_body(PULL_REQUEST_JSON)
         .create();
     let put = server
-        .mock("PUT", api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str())
+        .mock(
+            "PUT",
+            api_path("/repos/oschina/gitee-cli/pulls/12/merge").as_str(),
+        )
         .with_status(200)
         .create();
 
@@ -1530,9 +1533,10 @@ fn add_assignees_idempotent_posts_only_missing_as_form() {
 
     let post = server
         .mock("POST", api_path(post_path).as_str())
-        .match_body(mockito::Matcher::AllOf(vec![
-            mockito::Matcher::UrlEncoded("assignees".into(), "dev3".into()),
-        ]))
+        .match_body(mockito::Matcher::AllOf(vec![mockito::Matcher::UrlEncoded(
+            "assignees".into(),
+            "dev3".into(),
+        )]))
         .with_status(201)
         .with_header("content-type", "application/json")
         .with_body(PR_WITH_MEMBERS_JSON)
@@ -1652,9 +1656,10 @@ fn add_testers_idempotent_posts_only_missing_as_form() {
 
     let post = server
         .mock("POST", api_path(post_path).as_str())
-        .match_body(mockito::Matcher::AllOf(vec![
-            mockito::Matcher::UrlEncoded("testers".into(), "qa2".into()),
-        ]))
+        .match_body(mockito::Matcher::AllOf(vec![mockito::Matcher::UrlEncoded(
+            "testers".into(),
+            "qa2".into(),
+        )]))
         .with_status(201)
         .with_header("content-type", "application/json")
         .with_body(PR_WITH_MEMBERS_JSON)
@@ -1766,10 +1771,7 @@ fn is_merged_true_on_204_false_on_404() {
         )
         .with_status(204)
         .create();
-    assert!(client(&server)
-        .pulls(&test_repo())
-        .is_merged(12)
-        .unwrap());
+    assert!(client(&server).pulls(&test_repo()).is_merged(12).unwrap());
     ok.assert();
 
     let mut server = mockito::Server::new();
@@ -1781,9 +1783,6 @@ fn is_merged_true_on_204_false_on_404() {
         .with_status(404)
         .with_body("{}")
         .create();
-    assert!(!client(&server)
-        .pulls(&test_repo())
-        .is_merged(12)
-        .unwrap());
+    assert!(!client(&server).pulls(&test_repo()).is_merged(12).unwrap());
     missing.assert();
 }

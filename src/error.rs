@@ -85,7 +85,11 @@ mod exit_code_tests {
     fn api_429_maps_to_exit_5() {
         assert_eq!(GiteeError::RateLimited("slow down".into()).exit_code(), 5);
         assert_eq!(
-            GiteeError::Api { status: 429, message: "x".into() }.exit_code(),
+            GiteeError::Api {
+                status: 429,
+                message: "x".into()
+            }
+            .exit_code(),
             5
         );
     }
@@ -94,7 +98,11 @@ mod exit_code_tests {
     fn unauthorized_maps_to_exit_3() {
         assert_eq!(GiteeError::Unauthorized.exit_code(), 3);
         assert_eq!(
-            GiteeError::Api { status: 401, message: "x".into() }.exit_code(),
+            GiteeError::Api {
+                status: 401,
+                message: "x".into()
+            }
+            .exit_code(),
             3
         );
         assert_eq!(GiteeError::NotLoggedIn.exit_code(), 3);
@@ -104,7 +112,11 @@ mod exit_code_tests {
     fn not_found_maps_to_exit_4() {
         assert_eq!(GiteeError::NotFound("repo".into()).exit_code(), 4);
         assert_eq!(
-            GiteeError::Api { status: 404, message: "x".into() }.exit_code(),
+            GiteeError::Api {
+                status: 404,
+                message: "x".into()
+            }
+            .exit_code(),
             4
         );
     }
@@ -113,16 +125,17 @@ mod exit_code_tests {
     fn usage_maps_to_exit_2() {
         assert_eq!(GiteeError::Usage("x".into()).exit_code(), 2);
         assert_eq!(GiteeError::Config("x".into()).exit_code(), 2);
-        assert_eq!(
-            GiteeError::RepoResolve("x".into()).exit_code(),
-            2
-        );
+        assert_eq!(GiteeError::RepoResolve("x".into()).exit_code(), 2);
     }
 
     #[test]
     fn generic_api_error_maps_to_exit_1() {
         assert_eq!(
-            GiteeError::Api { status: 500, message: "x".into() }.exit_code(),
+            GiteeError::Api {
+                status: 500,
+                message: "x".into()
+            }
+            .exit_code(),
             1
         );
     }
@@ -137,7 +150,10 @@ mod exit_code_tests {
         assert_eq!(GiteeError::NotFound("x".into()).code_slug(), "not_found");
         assert_eq!(GiteeError::Unauthorized.code_slug(), "auth");
         assert_eq!(GiteeError::NotLoggedIn.code_slug(), "auth");
-        assert_eq!(GiteeError::RateLimited("x".into()).code_slug(), "rate_limited");
+        assert_eq!(
+            GiteeError::RateLimited("x".into()).code_slug(),
+            "rate_limited"
+        );
         assert_eq!(GiteeError::Usage("x".into()).code_slug(), "usage");
     }
 }

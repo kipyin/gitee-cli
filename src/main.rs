@@ -70,7 +70,11 @@ fn print_error(e: &GiteeError, json: bool, debug: bool) {
             "message": e.to_string(),
             "exit_code": e.exit_code(),
         });
-        eprintln!("{}", serde_json::to_string(&envelope).unwrap_or_else(|_| format!("{{\"code\":\"error\",\"message\":\"{}\"}}", e)));
+        eprintln!(
+            "{}",
+            serde_json::to_string(&envelope)
+                .unwrap_or_else(|_| format!("{{\"code\":\"error\",\"message\":\"{}\"}}", e))
+        );
     } else if debug {
         eprintln!("error: {e:?}");
     } else {
@@ -79,7 +83,5 @@ fn print_error(e: &GiteeError, json: bool, debug: bool) {
 }
 
 fn args_to_utf8(args: &[OsString]) -> Option<Vec<String>> {
-    args.iter()
-        .map(|a| a.clone().into_string().ok())
-        .collect()
+    args.iter().map(|a| a.clone().into_string().ok()).collect()
 }

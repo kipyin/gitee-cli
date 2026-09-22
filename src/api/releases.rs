@@ -8,7 +8,6 @@ pub struct Releases<'a> {
     repo: &'a Repo,
 }
 
-
 pub struct EditRelease<'a> {
     pub name: Option<&'a str>,
     pub notes: Option<&'a str>,
@@ -43,9 +42,7 @@ impl Releases<'_> {
         let rel: Option<Release> = self
             .client
             .get(&format!("/repos/{o}/{r}/releases/tags/{tag}"), &[])?;
-        rel.ok_or_else(|| {
-            crate::error::GiteeError::NotFound(format!("release {tag}"))
-        })
+        rel.ok_or_else(|| crate::error::GiteeError::NotFound(format!("release {tag}")))
     }
 
     /// Gitee quirks: `body` is REQUIRED and must be non-empty (400 otherwise),
@@ -68,7 +65,6 @@ impl Releases<'_> {
         self.client.post(&format!("/repos/{o}/{r}/releases"), &form)
     }
 
-
     /// Gitee quirk (swagger 2026-07-18): PATCH requires `tag_name`, `name`, and
     /// `body` on every request — GET-by-tag first, then send the flag value or
     /// the current value for all three. `prerelease` is sent only when requested.
@@ -77,10 +73,7 @@ impl Releases<'_> {
         let current = self.get_by_tag(tag)?;
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let display_name = req
-            .name
-            .or(current.name.as_deref())
-            .unwrap_or(tag);
+        let display_name = req.name.or(current.name.as_deref()).unwrap_or(tag);
         let body = req
             .notes
             .or(current.body.as_deref())

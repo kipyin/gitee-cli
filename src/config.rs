@@ -79,11 +79,14 @@ fn keyring_enabled() -> bool {
     true
 }
 
-
 impl Config {
     pub fn dir() -> Result<PathBuf> {
         #[cfg(test)]
-        if let Some(p) = TEST_CONFIG_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        if let Some(p) = TEST_CONFIG_DIR
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
             return Ok(p);
         }
         if let Ok(p) = std::env::var(ENV_CONFIG_DIR) {
@@ -199,7 +202,6 @@ impl Config {
         Ok(s.aliases.into_iter().collect())
     }
 
-
     /// Reject usernames that would be unsafe or ambiguous in token file paths.
     pub fn sanitize_username(user: &str) -> Result<()> {
         if user.is_empty() {
@@ -234,10 +236,7 @@ impl Config {
     }
 
     pub fn active_user(host: &str) -> Result<Option<String>> {
-        Ok(Self::load_settings()?
-            .active_users
-            .get(host)
-            .cloned())
+        Ok(Self::load_settings()?.active_users.get(host).cloned())
     }
 
     pub fn set_active_user(host: &str, user: &str) -> Result<()> {
@@ -382,9 +381,7 @@ impl Config {
             return Some(TokenSource::Env);
         }
         if let Ok(Some(user)) = Self::active_user(host) {
-            if keyring_enabled()
-                && keyring_get(&Self::keyring_account(host, Some(&user))).is_ok()
-            {
+            if keyring_enabled() && keyring_get(&Self::keyring_account(host, Some(&user))).is_ok() {
                 return Some(TokenSource::Keyring);
             }
             if let Ok(p) = Self::user_token_path(host, &user) {
@@ -574,7 +571,10 @@ fn validate_alias_name(name: &str) -> Result<()> {
 
 /// Expand the first argv token when it matches an alias. Re-expands until the
 /// command token is not an alias. Errors on cycles / self-recursion.
-pub fn expand_aliases(argv: Vec<String>, aliases: &BTreeMap<String, String>) -> Result<Vec<String>> {
+pub fn expand_aliases(
+    argv: Vec<String>,
+    aliases: &BTreeMap<String, String>,
+) -> Result<Vec<String>> {
     if argv.len() < 2 {
         return Ok(argv);
     }
@@ -598,7 +598,9 @@ pub fn expand_aliases(argv: Vec<String>, aliases: &BTreeMap<String, String>) -> 
         let expanded = shell_words::split(expansion)
             .map_err(|e| GiteeError::Usage(format!("alias '{name}' expansion: {e}")))?;
         if expanded.is_empty() {
-            return Err(GiteeError::Usage(format!("alias '{name}' expands to empty")));
+            return Err(GiteeError::Usage(format!(
+                "alias '{name}' expands to empty"
+            )));
         }
         if expanded[0] == name {
             return Err(GiteeError::Usage(format!(
@@ -629,7 +631,10 @@ pub fn apply_defaults(mut argv: Vec<String>, settings: &Settings) -> Vec<String>
 }
 
 /// Like [`apply_defaults`] but preserves non-UTF-8 argv elements.
-pub fn apply_defaults_os(mut argv: Vec<std::ffi::OsString>, settings: &Settings) -> Vec<std::ffi::OsString> {
+pub fn apply_defaults_os(
+    mut argv: Vec<std::ffi::OsString>,
+    settings: &Settings,
+) -> Vec<std::ffi::OsString> {
     if let Some(host) = &settings.host {
         if !has_long_opt_os(&argv, "host") {
             argv.insert(1, std::ffi::OsString::from(format!("--host={host}")));
@@ -656,8 +661,7 @@ fn has_long_opt_os(argv: &[std::ffi::OsString], name: &str) -> bool {
 fn has_long_opt(argv: &[String], name: &str) -> bool {
     let prefixed = format!("--{name}");
     let eq = format!("--{name}=");
-    argv.iter()
-        .any(|a| a == &prefixed || a.starts_with(&eq))
+    argv.iter().any(|a| a == &prefixed || a.starts_with(&eq))
 }
 
 fn first_command_index(argv: &[String]) -> Option<usize> {
@@ -720,7 +724,6 @@ pub(crate) fn restrict_perms(_p: &Path) -> Result<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 pub fn test_config_env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -736,11 +739,7 @@ mod tests {
     fn expand_alias_first_token_with_trailing_args() {
         let mut aliases = BTreeMap::new();
         aliases.insert("co".into(), "pr checkout".into());
-        let argv = vec![
-            "gitee".into(),
-            "co".into(),
-            "12".into(),
-        ];
+        let argv = vec!["gitee".into(), "co".into(), "12".into()];
         let out = expand_aliases(argv, &aliases).unwrap();
         assert_eq!(out, vec!["gitee", "pr", "checkout", "12"]);
     }
@@ -787,17 +786,21 @@ mod tests {
     #[test]
     fn credential_display_username_never_emits_default() {
         assert_eq!(Config::credential_display_username(None), "oauth2");
-        assert_eq!(Config::credential_display_username(Some("default".into())), "oauth2");
-        assert_eq!(Config::credential_display_username(Some("alice".into())), "alice");
+        assert_eq!(
+            Config::credential_display_username(Some("default".into())),
+            "oauth2"
+        );
+        assert_eq!(
+            Config::credential_display_username(Some("alice".into())),
+            "alice"
+        );
     }
 
     #[test]
     fn migrate_legacy_user_uses_oauth2_not_default() {
         let _env = test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-migrate-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("gitee-cli-migrate-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
@@ -806,7 +809,10 @@ mod tests {
         let host = "gitee.test";
         fs::write(dir.join(format!("{host}.token")), "legacy-token\n").unwrap();
         Config::migrate_legacy_user(host).unwrap();
-        assert_eq!(Config::active_user(host).unwrap().as_deref(), Some("oauth2"));
+        assert_eq!(
+            Config::active_user(host).unwrap().as_deref(),
+            Some("oauth2")
+        );
         assert!(!dir.join(format!("{host}.token")).exists());
         assert_eq!(
             Config::token_for_user(host, "oauth2").unwrap(),
@@ -819,10 +825,7 @@ mod tests {
     #[test]
     fn clear_stored_credentials_removes_user_token_file() {
         let _env = test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-clear-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gitee-cli-clear-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
@@ -838,16 +841,16 @@ mod tests {
     #[test]
     fn orphaned_known_user_is_not_logged_in() {
         let _env = test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-orphan-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("gitee-cli-orphan-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
         let host = "gitee.test";
         Config::set_active_user(host, "oauth2").unwrap();
-        assert!(Config::known_users(host).unwrap().contains(&"oauth2".into()));
+        assert!(Config::known_users(host)
+            .unwrap()
+            .contains(&"oauth2".into()));
         assert!(Config::locate(host).is_none());
         assert!(Config::token(host).is_err());
         set_test_dir(None);
@@ -865,10 +868,8 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let _env = test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-migrate-keep-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("gitee-cli-migrate-keep-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
@@ -889,10 +890,7 @@ mod tests {
             legacy.exists(),
             "legacy token must survive a failed migrate"
         );
-        assert_eq!(
-            fs::read_to_string(&legacy).unwrap().trim(),
-            "legacy-token"
-        );
+        assert_eq!(fs::read_to_string(&legacy).unwrap().trim(), "legacy-token");
         assert!(
             !dir.join(format!("{host}.oauth2.token")).exists(),
             "failed migrate must not leave a partial per-user token"
@@ -909,17 +907,18 @@ mod tests {
     #[test]
     fn settings_round_trip_in_temp_dir() {
         let _env = test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-config-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("gitee-cli-config-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         set_test_dir(Some(dir.clone()));
         Config::set_key("host", "gitee.com").unwrap();
         Config::set_key("editor", "vim").unwrap();
         Config::alias_set("co", "pr checkout").unwrap();
-        assert_eq!(Config::get_key("host").unwrap().as_deref(), Some("gitee.com"));
+        assert_eq!(
+            Config::get_key("host").unwrap().as_deref(),
+            Some("gitee.com")
+        );
         assert_eq!(Config::get_key("editor").unwrap().as_deref(), Some("vim"));
         let aliases = Config::alias_list().unwrap();
         assert_eq!(aliases, vec![("co".into(), "pr checkout".into())]);

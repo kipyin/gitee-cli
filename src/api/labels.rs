@@ -82,9 +82,7 @@ impl Labels<'_> {
             )));
         }
         let form = [("name", req.name), ("color", requested.as_str())];
-        let label: Label = self
-            .client
-            .post(&format!("/repos/{o}/{r}/labels"), &form)?;
+        let label: Label = self.client.post(&format!("/repos/{o}/{r}/labels"), &form)?;
         Ok(StateChange::Changed(label))
     }
 

@@ -69,23 +69,12 @@ mod tests {
     #[test]
     fn alias_set_and_delete_use_output_render() {
         let _env = crate::config::test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-alias-json-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gitee-cli-alias-json-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         crate::config::set_test_dir(Some(dir.clone()));
-        let cli = Cli::try_parse_from([
-            "gitee",
-            "--json=",
-            "alias",
-            "set",
-            "co",
-            "pr",
-            "checkout",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["gitee", "--json=", "alias", "set", "co", "pr", "checkout"])
+            .unwrap();
         let ctx = super::super::build_inner(&cli, false).unwrap();
         execute(
             &ctx,

@@ -32,10 +32,7 @@ pub fn execute(ctx: &Ctx, cmd: GistCmd) -> Result<()> {
         } => {
             let pairs = read_gist_files(&files, filename.as_deref())?;
             // --desc omitted → default to the first file name (API requires a description).
-            let description = desc
-                .as_deref()
-                .unwrap_or(&pairs[0].0)
-                .to_string();
+            let description = desc.as_deref().unwrap_or(&pairs[0].0).to_string();
             let description = truncate_description(&description);
             let gist = ctx.client.gists().create(&CreateGist {
                 description: &description,
@@ -55,13 +52,13 @@ pub fn execute(ctx: &Ctx, cmd: GistCmd) -> Result<()> {
                 .ok_or_else(|| GiteeError::Usage(format!("invalid file path: {file}")))?
                 .to_string();
             let pairs = [(name, content)];
-            let gist = ctx
-                .client
-                .gists()
-                .update(&id, &UpdateGist {
+            let gist = ctx.client.gists().update(
+                &id,
+                &UpdateGist {
                     files: &pairs,
                     description: None,
-                })?;
+                },
+            )?;
             let mut out = std::io::stdout().lock();
             ctx.out
                 .render(&mut out, &gist, |w| out::one_gist(w, &gist))?;

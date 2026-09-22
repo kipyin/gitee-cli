@@ -82,10 +82,7 @@ fn get_by_id_hits_gists_path() {
         .with_body(GIST_JSON)
         .create();
 
-    let gist = client(&server)
-        .gists()
-        .get(id)
-        .expect("get should succeed");
+    let gist = client(&server).gists().get(id).expect("get should succeed");
 
     mock.assert();
     assert_eq!(gist.id, id);

@@ -54,7 +54,11 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &status, |w| out::pr_status(w, &status))?;
         }
-        PrCmd::View { number, web, merged } => {
+        PrCmd::View {
+            number,
+            web,
+            merged,
+        } => {
             let repo = ctx.repo()?;
             if web {
                 let url = crate::web::pull_url(&ctx.host, repo, number);
@@ -131,7 +135,9 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             if ctx.preview {
                 let repo = ctx.repo()?;
                 let head = head.clone().unwrap_or_else(|| "<current-branch>".into());
-                let base = base.clone().unwrap_or_else(|| repo.name.clone() + " default branch");
+                let base = base
+                    .clone()
+                    .unwrap_or_else(|| repo.name.clone() + " default branch");
                 let title = title.clone().unwrap_or_default();
                 let body = body.clone().unwrap_or_default();
                 let repo_str = format!("{}/{}", repo.owner, repo.name);
@@ -193,15 +199,13 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 }
                 title = Some(super::interactive::prompt_title(None)?);
                 if body.is_none() {
-                    let initial =
-                        fetch_pr_template(ctx, repo, &base)?.unwrap_or_default();
+                    let initial = fetch_pr_template(ctx, repo, &base)?.unwrap_or_default();
                     let editor = super::interactive::resolve_editor_from_env_and_config()?;
                     body = super::interactive::edit_body_in_editor(&initial, &editor)?;
                 }
             }
-            let title = title.ok_or_else(|| {
-                super::interactive::missing_title_usage("pr create", true)
-            })?;
+            let title =
+                title.ok_or_else(|| super::interactive::missing_title_usage("pr create", true))?;
             if body.is_none() {
                 body = fetch_pr_template(ctx, repo, &base)?;
             }
@@ -266,19 +270,25 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 MergeMethod::Merge
             };
             if ctx.preview {
-                println!("{}", super::preview_line(
-                    &format!("merge pull request !{number} ({})", method.as_str()),
-                    &[
-                        ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                        ("close_related_issue", if no_close_issue { "false" } else { "true" }),
-                    ],
-                ));
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("merge pull request !{number} ({})", method.as_str()),
+                        &[
+                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            (
+                                "close_related_issue",
+                                if no_close_issue { "false" } else { "true" }
+                            ),
+                        ],
+                    )
+                );
                 return Ok(());
             }
-            let change = ctx
-                .client
-                .pulls(repo)
-                .merge_idempotent(number, method, !no_close_issue)?;
+            let change =
+                ctx.client
+                    .pulls(repo)
+                    .merge_idempotent(number, method, !no_close_issue)?;
             let mut out = std::io::stdout().lock();
             match change {
                 crate::api::StateChange::Changed(()) => {
@@ -358,11 +368,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             ctx.out
                 .render(&mut out, &items, |w| out::pr_comment_table(w, &items))?;
         }
-        PrCmd::Comment(crate::cli::PrCommentCmd::Edit {
-            target,
-            last,
-            body,
-        }) => {
+        PrCmd::Comment(crate::cli::PrCommentCmd::Edit { target, last, body }) => {
             let repo = ctx.repo()?;
             if ctx.preview {
                 let action = if last {
@@ -401,22 +407,15 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     }
                 }
             } else {
-                let body_text = super::interactive::resolve_optional_body(
-                    body,
-                    "",
-                    "pr comment edit",
-                )?;
+                let body_text =
+                    super::interactive::resolve_optional_body(body, "", "pr comment edit")?;
                 ops.update_comment(target, &body_text)?
             };
             let mut out = std::io::stdout().lock();
             ctx.out
                 .render(&mut out, &c, |w| out::pr_comment_line(w, &c))?;
         }
-        PrCmd::Comment(crate::cli::PrCommentCmd::Delete {
-            target,
-            last,
-            yes,
-        }) => {
+        PrCmd::Comment(crate::cli::PrCommentCmd::Delete { target, last, yes }) => {
             let repo = ctx.repo()?;
             if ctx.preview {
                 let action = if last {
@@ -666,10 +665,13 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
         PrCmd::Close { number } => {
             let repo = ctx.repo()?;
             if ctx.preview {
-                println!("{}", super::preview_line(
-                    &format!("close pull request !{number}"),
-                    &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                ));
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("close pull request !{number}"),
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
                 return Ok(());
             }
             let change = ctx
@@ -681,10 +683,13 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
         PrCmd::Reopen { number } => {
             let repo = ctx.repo()?;
             if ctx.preview {
-                println!("{}", super::preview_line(
-                    &format!("reopen pull request !{number}"),
-                    &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                ));
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("reopen pull request !{number}"),
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
                 return Ok(());
             }
             let change = ctx

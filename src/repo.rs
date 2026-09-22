@@ -17,7 +17,9 @@ impl Repo {
             .output()
             .map_err(|e| GiteeError::RepoResolve(format!("git: {e}")))?;
         if !url.status.success() {
-            return Err(GiteeError::RepoResolve(format!("no '{remote}' remote found")));
+            return Err(GiteeError::RepoResolve(format!(
+                "no '{remote}' remote found"
+            )));
         }
         let raw = String::from_utf8_lossy(&url.stdout);
         Self::parse_url(raw.trim())

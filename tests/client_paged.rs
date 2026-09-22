@@ -15,9 +15,7 @@ fn api_path(path: &str) -> String {
 }
 
 fn page_items(count: usize) -> String {
-    let items: Vec<String> = (0..count)
-        .map(|i| format!(r#"{{"id":{i}}}"#))
-        .collect();
+    let items: Vec<String> = (0..count).map(|i| format!(r#"{{"id":{i}}}"#)).collect();
     format!("[{}]", items.join(","))
 }
 

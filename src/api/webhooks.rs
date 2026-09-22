@@ -56,9 +56,9 @@ pub fn event_bools(events: &[String]) -> (bool, bool, bool, bool, bool) {
         events.iter().any(|e| e == "push_events"),
         events.iter().any(|e| e == "tag_push_events"),
         events.iter().any(|e| e == "issues_events"),
-        events.iter().any(|e| {
-            e == "merge_requests_events" || e == "pull_requests_events"
-        }),
+        events
+            .iter()
+            .any(|e| e == "merge_requests_events" || e == "pull_requests_events"),
         events.iter().any(|e| e == "note_events"),
     )
 }
@@ -105,14 +105,12 @@ impl Webhooks<'_> {
         if let Some(password) = req.password {
             form.push(("password", password));
         }
-        self.client
-            .post(&format!("/repos/{o}/{r}/hooks"), &form)
+        self.client.post(&format!("/repos/{o}/{r}/hooks"), &form)
     }
 
     pub fn delete(&self, id: i64) -> Result<()> {
         let (o, r) = (&self.repo.owner, &self.repo.name);
-        self.client
-            .delete_ok(&format!("/repos/{o}/{r}/hooks/{id}"))
+        self.client.delete_ok(&format!("/repos/{o}/{r}/hooks/{id}"))
     }
 }
 

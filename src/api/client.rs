@@ -1,17 +1,20 @@
-use crate::error::{GiteeError, Result};
 use super::search::Search;
+use crate::error::{GiteeError, Result};
 use crate::repo::Repo;
 
 use super::collaborators::Collaborators;
 use super::gists::Gists;
-use reqwest::blocking::Client as Http;
 use super::labels::Labels;
-use serde::de::DeserializeOwned;
 use super::milestones::Milestones;
+use reqwest::blocking::Client as Http;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::time::Duration;
 
-use super::{issues::Issues, pulls::Pulls, releases::Releases, repos::Repos, users::Users, webhooks::Webhooks};
+use super::{
+    issues::Issues, pulls::Pulls, releases::Releases, repos::Repos, users::Users,
+    webhooks::Webhooks,
+};
 
 pub struct Client {
     http: Http,
@@ -99,12 +102,19 @@ impl Client {
     }
 
     pub(crate) fn str_refs<K: AsRef<str>>(pairs: &[(K, String)]) -> Vec<(&str, &str)> {
-        pairs.iter().map(|(k, v)| (k.as_ref(), v.as_str())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.as_ref(), v.as_str()))
+            .collect()
     }
 
     /// Gitee form booleans are urlencoded as the strings `"true"`/`"false"`.
     pub(crate) fn bool_str(b: bool) -> &'static str {
-        if b { "true" } else { "false" }
+        if b {
+            "true"
+        } else {
+            "false"
+        }
     }
 
     /// Gitee accepts `Authorization: token <T>`. Sending the token in the header
@@ -249,7 +259,10 @@ impl Client {
             "PATCH" => self.http.patch(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req.header("Authorization", self.auth()).form(form).send()
+        let resp = req
+            .header("Authorization", self.auth())
+            .form(form)
+            .send()
             .map_err(|e| self.map_http_err(e))?;
         self.check(resp, method, path)?
             .json()
@@ -351,10 +364,7 @@ impl Client {
         let mut with_auth = false;
         for _ in 0..8 {
             if self.debug {
-                eprintln!(
-                    "-> GET {url}{}",
-                    if with_auth { " (auth)" } else { "" }
-                );
+                eprintln!("-> GET {url}{}", if with_auth { " (auth)" } else { "" });
             }
             let mut req = self.http_no_redirect().get(&url);
             if with_auth {
@@ -414,7 +424,6 @@ impl Client {
             .expect("reqwest client")
     }
 
-
     fn bytes_or_api_error(&self, resp: reqwest::blocking::Response) -> Result<Vec<u8>> {
         let status = resp.status();
         if status.is_success() {
@@ -429,7 +438,6 @@ impl Client {
         })
     }
 
-
     fn send_ok(&self, method: &str, path: &str, form: &[(&str, &str)]) -> Result<()> {
         self.trace(method, path);
         let req = match method {
@@ -438,7 +446,10 @@ impl Client {
             "DELETE" => self.http.delete(self.full(path)),
             _ => unreachable!(),
         };
-        let resp = req.header("Authorization", self.auth()).form(form).send()
+        let resp = req
+            .header("Authorization", self.auth())
+            .form(form)
+            .send()
             .map_err(|e| self.map_http_err(e))?;
         self.check(resp, method, path).map(|_| ())
     }
