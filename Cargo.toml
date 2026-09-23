@@ -13,6 +13,7 @@ keywords = ["gitee", "cli", "git"]
 categories = ["command-line-utilities"]
 exclude = [
     ".github/**",
+    ".cursor/**",
     "docs/agents/**",
     "AGENTS.md",
 ]

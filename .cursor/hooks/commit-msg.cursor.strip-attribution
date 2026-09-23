@@ -1,0 +1,50 @@
+#!/bin/bash
+# Strip Cursor/agent attribution trailers from a commit-msg file.
+# Called last by the house commit-msg dispatcher. Also a glob fallback:
+# if Cursor's dispatcher is still the commit-msg hook, lexical glob order is
+#   commit-msg.cursor
+#   commit-msg.cursor.co-author
+#   commit-msg.cursor.strip-attribution
+set -euo pipefail
+
+MSG_FILE="${1:-}"
+if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+  echo "identity-strip: missing commit message file" >&2
+  exit 0
+fi
+
+TS="$(date -Is)"
+LOG="${HOME}/.cursor/identity-strip-hook.log"
+mkdir -p "$(dirname "$LOG")"
+
+{
+  echo "===== ${TS} ====="
+  echo "pid=$$ hook=$0 msg_file=$MSG_FILE"
+  echo "--- message BEFORE strip ---"
+  cat "$MSG_FILE"
+  echo "--- end BEFORE ---"
+} >> "$LOG"
+
+TMP="$(mktemp)"
+# Trailer lines only. A subject that mentions Co-authored-by must survive.
+grep -viE '^[[:space:]]*(co-authored-by:|made-with:|made with |generated with |generated-by:)' "$MSG_FILE" > "$TMP" || true
+
+# Trim trailing blank lines left by the co-author hook's padding.
+# Keep a single trailing newline (POSIX text file).
+awk '
+  { lines[n++] = $0 }
+  END {
+    while (n > 0 && lines[n - 1] == "") n--
+    for (i = 0; i < n; i++) print lines[i]
+  }
+' "$TMP" > "$MSG_FILE"
+rm -f "$TMP"
+
+{
+  echo "--- message AFTER strip ---"
+  cat "$MSG_FILE"
+  echo "--- end AFTER ---"
+  echo "strip-complete ts=${TS}"
+} >> "$LOG"
+
+exit 0

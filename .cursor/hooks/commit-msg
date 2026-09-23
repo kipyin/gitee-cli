@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# House commit-msg entry point. Replaces Cursor's commit-msg -> .dispatcher
+# symlink so strip always runs last, even when co-author is planted late.
+set -euo pipefail
+
+HOOKS_DIR="$(cd "$(dirname "$0")" && pwd)"
+HOOK_NAME="$(basename "$0")"
+
+ORIGINAL_HOOKS_PATH=""
+if [[ -f "$HOOKS_DIR/.cursor-original-hooks-path" ]]; then
+  ORIGINAL_HOOKS_PATH="$(cat "$HOOKS_DIR/.cursor-original-hooks-path")"
+fi
+
+if [[ -n "$ORIGINAL_HOOKS_PATH" && -x "$ORIGINAL_HOOKS_PATH/$HOOK_NAME" ]]; then
+  "$ORIGINAL_HOOKS_PATH/$HOOK_NAME" "$@"
+fi
+
+shopt -s nullglob
+for cursor_hook in "$HOOKS_DIR"/$HOOK_NAME.cursor*; do
+  case "$cursor_hook" in
+    *.strip-attribution) continue ;;
+  esac
+  if [[ -x "$cursor_hook" ]]; then
+    "$cursor_hook" "$@"
+  fi
+done
+shopt -u nullglob
+
+MSG_FILE="${1:-}"
+if [[ -n "$MSG_FILE" && -f "$MSG_FILE" ]]; then
+  TMP="$(mktemp)"
+  # Trailer lines only (leading optional space). Prose that mentions the
+  # tokens in a subject/body line is kept.
+  grep -viE '^[[:space:]]*co-authored-by:|^[[:space:]]*(made-with:|made with:|generated with|cursoragent)' \
+    "$MSG_FILE" >"$TMP" || true
+  awk '
+    { lines[n++] = $0 }
+    END {
+      while (n > 0 && lines[n - 1] == "") n--
+      for (i = 0; i < n; i++) print lines[i]
+    }
+  ' "$TMP" >"$MSG_FILE"
+  rm -f "$TMP"
+fi
+exit 0
