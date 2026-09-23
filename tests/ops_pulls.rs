@@ -1234,29 +1234,6 @@ fn edit_omits_unset_fields_from_form_body() {
 }
 
 #[test]
-fn list_milestones_hits_milestones_path() {
-    let mut server = mockito::Server::new();
-    let path = "/repos/oschina/gitee-cli/milestones";
-
-    let mock = server
-        .mock("GET", api_path(path).as_str())
-        .with_status(200)
-        .with_header("content-type", "application/json")
-        .with_body(r#"[{"number":7,"title":"v1.0"},{"number":9,"title":"v2.0"}]"#)
-        .create();
-
-    let milestones = client(&server)
-        .repos()
-        .list_milestones("oschina", "gitee-cli")
-        .expect("list milestones should succeed");
-
-    mock.assert();
-    assert_eq!(milestones.len(), 2);
-    assert_eq!(milestones[0].number, 7);
-    assert_eq!(milestones[1].title, "v2.0");
-}
-
-#[test]
 fn list_sends_assignee_and_tester_filters() {
     let mut server = mockito::Server::new();
     let path = "/repos/oschina/gitee-cli/pulls";

@@ -5,6 +5,7 @@ use clap::CommandFactory;
 use clap_complete::{generate, Shell};
 
 use crate::api::client::Client;
+use crate::api::milestones::MilestoneFilter;
 use crate::cli::{Cli, Command};
 use crate::config::Config;
 use crate::error::{GiteeError, Result};
@@ -227,15 +228,16 @@ pub(crate) fn join_flags(values: &[String]) -> Option<String> {
 }
 
 /// Resolve a `--milestone` value: bare integers pass through; anything else is
-/// matched against the repo's milestone titles (one extra API call).
+/// matched against milestone titles. Title lookup paginates fully via
+/// `Milestones::list` (independent of `milestone list --limit`).
 pub(crate) fn resolve_milestone(ctx: &Ctx, repo: &Repo, id_or_title: &str) -> Result<i64> {
     if let Ok(n) = id_or_title.trim().parse::<i64>() {
         return Ok(n);
     }
-    let list = ctx
-        .client
-        .repos()
-        .list_milestones(&repo.owner, &repo.name)?;
+    let list = ctx.client.milestones(repo).list(&MilestoneFilter {
+        state: None,
+        limit: usize::MAX,
+    })?;
     crate::models::Milestone::resolve(&list, id_or_title).ok_or_else(|| {
         let known = list
             .iter()
@@ -593,5 +595,85 @@ mod create_title_tests {
         } else {
             std::env::remove_var("GITEE_TOKEN");
         }
+    }
+}
+
+#[cfg(test)]
+mod resolve_milestone_tests {
+    use super::*;
+    use crate::api::client::Client;
+
+    fn ctx_for(base: &str) -> Ctx {
+        Ctx {
+            client: Client::new(format!("{base}/api/v5"), "fake-token".into()),
+            out: Output {
+                json: None,
+                jq: None,
+            },
+            host: "gitee.com".into(),
+            preview: false,
+            repo_arg: None,
+            remote_arg: None,
+            repo: OnceCell::new(),
+            me: OnceCell::new(),
+        }
+    }
+
+    fn repo() -> Repo {
+        Repo {
+            owner: "oschina".into(),
+            name: "gitee-cli".into(),
+        }
+    }
+
+    fn milestones_mock(server: &mut mockito::ServerGuard) -> mockito::Mock {
+        server
+            .mock("GET", "/api/v5/repos/oschina/gitee-cli/milestones")
+            .match_query(mockito::Matcher::AllOf(vec![
+                mockito::Matcher::UrlEncoded("page".into(), "1".into()),
+                mockito::Matcher::UrlEncoded("per_page".into(), "100".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"[{"number":7,"title":"v1.0"},{"number":9,"title":"v2.0"}]"#)
+            .create()
+    }
+
+    #[test]
+    fn numeric_milestone_skips_the_list_call() {
+        let ctx = ctx_for("http://127.0.0.1:1");
+        assert_eq!(resolve_milestone(&ctx, &repo(), "7").unwrap(), 7);
+        assert_eq!(resolve_milestone(&ctx, &repo(), "  9 ").unwrap(), 9);
+        assert_eq!(resolve_milestone_opt(&ctx, &repo(), None).unwrap(), None);
+        assert_eq!(
+            resolve_milestone_opt(&ctx, &repo(), Some("7")).unwrap(),
+            Some(7)
+        );
+    }
+
+    #[test]
+    fn title_resolves_through_paged_milestone_list() {
+        let mut server = mockito::Server::new();
+        let mock = milestones_mock(&mut server);
+
+        let ctx = ctx_for(&server.url());
+        let n = resolve_milestone(&ctx, &repo(), "v2.0").expect("title should resolve");
+
+        mock.assert();
+        assert_eq!(n, 9);
+    }
+
+    #[test]
+    fn unknown_title_names_available_milestones() {
+        let mut server = mockito::Server::new();
+        let mock = milestones_mock(&mut server);
+
+        let ctx = ctx_for(&server.url());
+        let err = resolve_milestone(&ctx, &repo(), "nope").unwrap_err();
+
+        mock.assert();
+        let message = err.to_string();
+        assert!(message.contains("no milestone titled 'nope'"));
+        assert!(message.contains("available: v1.0, v2.0"));
     }
 }

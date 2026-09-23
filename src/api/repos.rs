@@ -1,6 +1,6 @@
 use super::client::Client;
 use crate::error::{GiteeError, Result};
-use crate::models::{Milestone, RepoDetails};
+use crate::models::RepoDetails;
 use base64::Engine;
 
 pub struct Repos<'a> {
@@ -154,12 +154,6 @@ impl Repos<'_> {
             Err(GiteeError::NotFound(_)) => Ok(false),
             Err(e) => Err(e),
         }
-    }
-
-    /// All milestones of a repo (used to resolve --milestone titles to numbers).
-    pub fn list_milestones(&self, owner: &str, name: &str) -> Result<Vec<Milestone>> {
-        self.client
-            .get(&format!("/repos/{owner}/{name}/milestones"), &[])
     }
 
     /// Fetch a file's text via the contents API (GET /repos/{o}/{r}/contents/{path}?ref=).

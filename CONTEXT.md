@@ -16,11 +16,13 @@ Single-context repo. System-wide decisions: `docs/adr/`.
 
 **Issue** — Work item on a repo. Model: `Issue` in `src/models.rs`; `number` is `String` (alphanumeric, e.g. `I6D3AV`) — see ADR-0001. Operations: `src/api/issues.rs`.
 
+**Milestone** — Named checkpoint on a repo. Identified by numeric `number` or exact `title`. Model: `Milestone` in `src/models.rs`; operations: `src/api/milestones.rs` (`Milestones::list`).
+
 **Release** — Tag-based release with optional notes and **assets** (`ReleaseAsset`). Identified by `tag_name`; operations include create, list, get-by-tag, upload asset. Model: `Release` in `src/models.rs`; operations: `src/api/releases.rs`.
 
 **State** — Lifecycle vocabulary in `src/models.rs`: `PrState` (`open`, `closed`, `merged`) and `IssueState` (`open`, `progressing`, `closed`, plus `rejected` for deserialize/forward-compat only). **Writable** issue states on Gitee v5 are only `open` | `progressing` | `closed`; live API returns 400 for `rejected`, and `closed` always surfaces as 已完成 (no 拒绝 close-reason). Unknown API values deserialize to `Unknown`; known values serialize as API strings.
 
-**Operations module** — Typed API seam in `src/api/{pulls,issues,releases,repos}.rs`. Owns every path template, query key, form field name, JSON-vs-form encoding choice, and Gitee quirk. See ADR-0002.
+**Operations module** — Typed API seam in `src/api/{pulls,issues,releases,milestones,repos}.rs`. Owns every path template, query key, form field name, JSON-vs-form encoding choice, and Gitee quirk. See ADR-0002.
 
 **Transport** — Thin HTTP wrapper in `src/api/client.rs` (`Client`). Verb-level only: `get`, `get_paged`, `post`, `patch`, `patch_json`, `post_multipart`. No domain path knowledge beyond `{base}` + caller-supplied path.
 
