@@ -1,4 +1,3 @@
-
 use super::Ctx;
 use crate::api::milestones::{CreateMilestone, EditMilestone, MilestoneFilter};
 use crate::cli::MilestoneCmd;

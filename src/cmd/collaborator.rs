@@ -20,9 +20,7 @@ pub fn execute(ctx: &Ctx, cmd: CollaboratorCmd) -> Result<()> {
         } => {
             validate_permission(&permission)?;
             let repo = ctx.repo()?;
-            ctx.client
-                .collaborators(repo)
-                .add(&username, &permission)?;
+            ctx.client.collaborators(repo).add(&username, &permission)?;
             writeln!(
                 std::io::stdout().lock(),
                 "Added collaborator {username} with permission {permission}"
@@ -32,10 +30,7 @@ pub fn execute(ctx: &Ctx, cmd: CollaboratorCmd) -> Result<()> {
             let repo = ctx.repo()?;
             confirm(&format!("Remove collaborator {username}"), yes)?;
             ctx.client.collaborators(repo).remove(&username)?;
-            writeln!(
-                std::io::stdout().lock(),
-                "Removed collaborator {username}"
-            )?;
+            writeln!(std::io::stdout().lock(), "Removed collaborator {username}")?;
         }
     }
     Ok(())

@@ -10,7 +10,7 @@ env:
 
 jobs:
   test:
-    name: test + clippy
+    name: test + fmt + clippy
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,10 +19,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: rustfmt, clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
 
       - name: Test
         run: cargo test --locked

@@ -51,8 +51,8 @@ pub fn execute(client: &Client, args: ApiArgs) -> Result<()> {
     if args.paginate {
         // GET: -F fields belong on the query string (same as a plain raw GET).
         let values = client.raw_paged(&path, &form_refs, &header_refs)?;
-        let text = serde_json::to_string_pretty(&values)
-            .map_err(|e| GiteeError::Usage(e.to_string()))?;
+        let text =
+            serde_json::to_string_pretty(&values).map_err(|e| GiteeError::Usage(e.to_string()))?;
         println!("{text}");
         return Ok(());
     }
@@ -165,7 +165,10 @@ mod tests {
         assert_eq!(normalize_endpoint("/user").unwrap(), "/user");
         assert_eq!(normalize_endpoint("/api/v5/user").unwrap(), "/user");
         assert_eq!(normalize_endpoint("api/v5/user").unwrap(), "/user");
-        assert_eq!(normalize_endpoint("  /api/v5/repos/o/r  ").unwrap(), "/repos/o/r");
+        assert_eq!(
+            normalize_endpoint("  /api/v5/repos/o/r  ").unwrap(),
+            "/repos/o/r"
+        );
     }
 
     #[test]
@@ -195,7 +198,10 @@ mod tests {
     #[test]
     fn parse_header_splits_and_trims() {
         assert_eq!(parse_header("X-Foo: bar").unwrap(), ("X-Foo", "bar"));
-        assert_eq!(parse_header("X-Foo:  bar baz ").unwrap(), ("X-Foo", "bar baz"));
+        assert_eq!(
+            parse_header("X-Foo:  bar baz ").unwrap(),
+            ("X-Foo", "bar baz")
+        );
         assert!(parse_header(": missing").is_err());
         assert!(parse_header("no-colon").is_err());
     }

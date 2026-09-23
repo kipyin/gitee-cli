@@ -115,8 +115,7 @@ impl Repos<'_> {
     }
 
     pub fn delete(&self, owner: &str, name: &str) -> Result<()> {
-        self.client
-            .delete_ok(&format!("/repos/{owner}/{name}"))
+        self.client.delete_ok(&format!("/repos/{owner}/{name}"))
     }
 
     pub fn star(&self, owner: &str, name: &str) -> Result<()> {

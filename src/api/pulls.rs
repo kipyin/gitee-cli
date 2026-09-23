@@ -231,11 +231,7 @@ impl Pulls<'_> {
 
     /// List comments on a pull request. Optional `kind` maps to Gitee's
     /// `comment_type` query (`diff_comment` | `pr_comment`).
-    pub fn list_comments(
-        &self,
-        number: i64,
-        filter: &PrCommentFilter,
-    ) -> Result<Vec<PrComment>> {
+    pub fn list_comments(&self, number: i64, filter: &PrCommentFilter) -> Result<Vec<PrComment>> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut q: Vec<(&str, String)> = Vec::new();
@@ -263,9 +259,7 @@ impl Pulls<'_> {
         resolve_latest_comment(&comments, login)
             .cloned()
             .ok_or_else(|| {
-                GiteeError::Usage(format!(
-                    "no comment by '{login}' on pull request {number}"
-                ))
+                GiteeError::Usage(format!("no comment by '{login}' on pull request {number}"))
             })
     }
 
@@ -280,12 +274,7 @@ impl Pulls<'_> {
     }
 
     /// `--last` edit: resolve `login`'s most-recent comment on the PR, then PATCH.
-    pub fn update_latest_comment(
-        &self,
-        number: i64,
-        login: &str,
-        body: &str,
-    ) -> Result<PrComment> {
+    pub fn update_latest_comment(&self, number: i64, login: &str, body: &str) -> Result<PrComment> {
         let comment = self.latest_comment(number, login)?;
         self.update_comment(comment.id, body)
     }
@@ -306,11 +295,7 @@ impl Pulls<'_> {
     }
 
     /// `--last` delete: resolve `login`'s most-recent comment on the PR, then DELETE.
-    pub fn delete_latest_comment(
-        &self,
-        number: i64,
-        login: &str,
-    ) -> Result<StateChange<()>> {
+    pub fn delete_latest_comment(&self, number: i64, login: &str) -> Result<StateChange<()>> {
         let comment = self.latest_comment(number, login)?;
         self.delete_comment(comment.id)
     }
@@ -581,11 +566,7 @@ impl Pulls<'_> {
 
     /// Remove only the named labels. GETs current membership first; DELETEs
     /// only names that are present. Absent names and DELETE 404 ⇒ no-op.
-    pub fn remove_labels_idempotent(
-        &self,
-        number: i64,
-        names: &[&str],
-    ) -> Result<StateChange<()>> {
+    pub fn remove_labels_idempotent(&self, number: i64, names: &[&str]) -> Result<StateChange<()>> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let current = self.list_labels(number)?;

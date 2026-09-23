@@ -121,9 +121,8 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     body = super::interactive::edit_body_in_editor("", &editor)?;
                 }
             }
-            let title = title.ok_or_else(|| {
-                super::interactive::missing_title_usage("issue create", false)
-            })?;
+            let title = title
+                .ok_or_else(|| super::interactive::missing_title_usage("issue create", false))?;
             let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
             let req = CreateIssue {
                 title: &title,
@@ -151,10 +150,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
             let repo = ctx.repo()?;
             let milestone_number = resolve_milestone_opt(ctx, repo, milestone.as_deref())?;
             let labels = join_flags(&label);
-            let state = state
-                .as_deref()
-                .map(parse_issue_state)
-                .transpose()?;
+            let state = state.as_deref().map(parse_issue_state).transpose()?;
             let req = EditIssue {
                 title: title.as_deref(),
                 body: body.as_deref(),
@@ -172,10 +168,13 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
         IssueCmd::Close { number } => {
             let repo = ctx.repo()?;
             if ctx.preview {
-                println!("{}", super::preview_line(
-                    &format!("close issue {number}"),
-                    &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                ));
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("close issue {number}"),
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
                 return Ok(());
             }
             let change = ctx
@@ -187,10 +186,13 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
         IssueCmd::Reopen { number } => {
             let repo = ctx.repo()?;
             if ctx.preview {
-                println!("{}", super::preview_line(
-                    &format!("reopen issue {number}"),
-                    &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                ));
+                println!(
+                    "{}",
+                    super::preview_line(
+                        &format!("reopen issue {number}"),
+                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                    )
+                );
                 return Ok(());
             }
             let change = ctx
@@ -231,16 +233,15 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
         }
         IssueCmd::Comment(crate::cli::IssueCommentCmd::List { number, limit }) => {
             let repo = ctx.repo()?;
-            let items = ctx.client.issues(repo).list_comments(&number, limit.limit)?;
+            let items = ctx
+                .client
+                .issues(repo)
+                .list_comments(&number, limit.limit)?;
             let mut out = std::io::stdout().lock();
             ctx.out
                 .render(&mut out, &items, |w| out::comment_table(w, &items))?;
         }
-        IssueCmd::Comment(crate::cli::IssueCommentCmd::Edit {
-            target,
-            last,
-            body,
-        }) => {
+        IssueCmd::Comment(crate::cli::IssueCommentCmd::Edit { target, last, body }) => {
             let repo = ctx.repo()?;
             if ctx.preview {
                 let action = if last {
@@ -280,25 +281,16 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 }
             } else {
                 let id: i64 = target.parse().map_err(|_| {
-                    GiteeError::Usage(format!(
-                        "comment id must be an integer, got '{target}'"
-                    ))
+                    GiteeError::Usage(format!("comment id must be an integer, got '{target}'"))
                 })?;
-                let body_text = super::interactive::resolve_optional_body(
-                    body,
-                    "",
-                    "issue comment edit",
-                )?;
+                let body_text =
+                    super::interactive::resolve_optional_body(body, "", "issue comment edit")?;
                 ops.update_comment(id, &body_text)?
             };
             let mut out = std::io::stdout().lock();
             ctx.out.render(&mut out, &c, |w| out::comment_line(w, &c))?;
         }
-        IssueCmd::Comment(crate::cli::IssueCommentCmd::Delete {
-            target,
-            last,
-            yes,
-        }) => {
+        IssueCmd::Comment(crate::cli::IssueCommentCmd::Delete { target, last, yes }) => {
             let repo = ctx.repo()?;
             if ctx.preview {
                 let action = if last {
@@ -327,9 +319,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 ops.delete_latest_comment(&target, &me.login)?
             } else {
                 let id: i64 = target.parse().map_err(|_| {
-                    GiteeError::Usage(format!(
-                        "comment id must be an integer, got '{target}'"
-                    ))
+                    GiteeError::Usage(format!("comment id must be an integer, got '{target}'"))
                 })?;
                 ops.delete_comment(id)?
             };

@@ -63,9 +63,7 @@ pub fn execute(cmd: AuthCmd, host: &str) -> Result<()> {
             }
             Ok(())
         }
-        AuthCmd::Status => {
-            status(host)
-        }
+        AuthCmd::Status => status(host),
         AuthCmd::Token => {
             let t = Config::token(host)?;
             println!("{t}");
@@ -122,9 +120,7 @@ fn status(host: &str) -> Result<()> {
 
     // Gate the multi-account "Logged in" banner on a readable token.
     if src.is_none() {
-        println!(
-            "Not logged in to {host} (saved account metadata, but no token found)."
-        );
+        println!("Not logged in to {host} (saved account metadata, but no token found).");
         println!(
             "Run `gitee auth login` to restore credentials, or `gitee auth logout` to clear metadata."
         );
@@ -154,8 +150,8 @@ pub fn git_credential_helper_value(exe: &str) -> String {
 
 fn setup_git(host: &str) -> Result<()> {
     Config::migrate_legacy_user(host)?;
-    let exe = std::env::current_exe()
-        .map_err(|e| GiteeError::Usage(format!("current_exe: {e}")))?;
+    let exe =
+        std::env::current_exe().map_err(|e| GiteeError::Usage(format!("current_exe: {e}")))?;
     let exe = exe
         .to_str()
         .ok_or_else(|| GiteeError::Usage("current_exe path is not UTF-8".into()))?;
@@ -204,7 +200,10 @@ fn credential_get(default_host: &str, attrs: &BTreeMap<String, String>) -> Resul
     Ok(())
 }
 
-fn credential_host_from_attrs(default_host: &str, attrs: &BTreeMap<String, String>) -> Option<String> {
+fn credential_host_from_attrs(
+    default_host: &str,
+    attrs: &BTreeMap<String, String>,
+) -> Option<String> {
     let protocol = attrs.get("protocol").map(String::as_str).unwrap_or("https");
     if protocol != "https" && protocol != "http" {
         return None;
@@ -307,15 +306,15 @@ mod tests {
     fn auth_login_no_token_no_tty_errors_with_hint() {
         let _env = crate::config::test_config_env_lock();
         let err = execute(
-            AuthCmd::Login { token: None, force: false },
+            AuthCmd::Login {
+                token: None,
+                force: false,
+            },
             "gitee.test",
         )
         .expect_err("non-TTY login without token must error");
         let msg = err.to_string();
-        assert!(
-            msg.contains("--token"),
-            "expected --token hint, got: {msg}"
-        );
+        assert!(msg.contains("--token"), "expected --token hint, got: {msg}");
     }
 
     #[test]
@@ -344,10 +343,8 @@ mod tests {
     #[test]
     fn credential_store_uses_protocol_host_when_cli_default_differs() {
         let _env = crate::config::test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-store-host-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("gitee-cli-store-host-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         crate::config::set_test_dir(Some(dir.clone()));
@@ -368,10 +365,7 @@ mod tests {
     #[test]
     fn credential_store_persists_token_for_host() {
         let _env = crate::config::test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-store-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gitee-cli-store-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         crate::config::set_test_dir(Some(dir.clone()));
@@ -392,10 +386,7 @@ mod tests {
     #[test]
     fn credential_erase_does_not_clear_cli_token() {
         let _env = crate::config::test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-erase-test-{}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("gitee-cli-erase-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         crate::config::set_test_dir(Some(dir.clone()));

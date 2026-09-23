@@ -10,9 +10,7 @@ fn api_path(path: &str) -> String {
 }
 
 fn page_items(count: usize) -> String {
-    let items: Vec<String> = (0..count)
-        .map(|i| format!(r#"{{"id":{i}}}"#))
-        .collect();
+    let items: Vec<String> = (0..count).map(|i| format!(r#"{{"id":{i}}}"#)).collect();
     format!("[{}]", items.join(","))
 }
 
@@ -53,10 +51,7 @@ fn raw_post_sends_urlencoded_form() {
         .match_header("authorization", "token fake-token")
         .match_body(mockito::Matcher::AllOf(vec![
             mockito::Matcher::UrlEncoded("description".into(), "t".into()),
-            mockito::Matcher::UrlEncoded(
-                "files[x.rs][content]".into(),
-                "fn main(){}".into(),
-            ),
+            mockito::Matcher::UrlEncoded("files[x.rs][content]".into(), "fn main(){}".into()),
         ]))
         .with_status(201)
         .with_body(r#"{"id":"1"}"#)

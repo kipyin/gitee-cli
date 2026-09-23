@@ -31,26 +31,20 @@ pub fn execute(ctx: &Ctx, cmd: ConfigCmd) -> Result<()> {
                 Ok(())
             })?;
         }
-        ConfigCmd::Get { key } => {
-            match Config::get_key(&key)? {
-                Some(value) => {
-                    let entry = ConfigEntry {
-                        key: key.clone(),
-                        value: value.clone(),
-                    };
-                    let mut out = std::io::stdout().lock();
-                    ctx.out.render(&mut out, &entry, |w| {
-                        writeln!(w, "{value}")?;
-                        Ok(())
-                    })?;
-                }
-                None => {
-                    return Err(GiteeError::Usage(format!(
-                        "config key '{key}' is not set"
-                    )))
-                }
+        ConfigCmd::Get { key } => match Config::get_key(&key)? {
+            Some(value) => {
+                let entry = ConfigEntry {
+                    key: key.clone(),
+                    value: value.clone(),
+                };
+                let mut out = std::io::stdout().lock();
+                ctx.out.render(&mut out, &entry, |w| {
+                    writeln!(w, "{value}")?;
+                    Ok(())
+                })?;
             }
-        }
+            None => return Err(GiteeError::Usage(format!("config key '{key}' is not set"))),
+        },
         ConfigCmd::Set { key, value } => {
             Config::set_key(&key, &value)?;
             let entry = ConfigEntry {
@@ -67,7 +61,6 @@ pub fn execute(ctx: &Ctx, cmd: ConfigCmd) -> Result<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -76,19 +69,22 @@ mod tests {
     #[test]
     fn config_set_uses_output_render() {
         let _env = crate::config::test_config_env_lock();
-        let dir = std::env::temp_dir().join(format!(
-            "gitee-cli-config-set-json-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("gitee-cli-config-set-json-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         crate::config::set_test_dir(Some(dir.clone()));
-        let cli = crate::cli::Cli::try_parse_from(["gitee", "--json=", "config", "set", "editor", "vim"]).unwrap();
+        let cli =
+            crate::cli::Cli::try_parse_from(["gitee", "--json=", "config", "set", "editor", "vim"])
+                .unwrap();
         let ctx = super::super::build_inner(&cli, false).unwrap();
-        execute(&ctx, ConfigCmd::Set {
-            key: "editor".into(),
-            value: "vim".into(),
-        })
+        execute(
+            &ctx,
+            ConfigCmd::Set {
+                key: "editor".into(),
+                value: "vim".into(),
+            },
+        )
         .unwrap();
         crate::config::set_test_dir(None);
         let _ = std::fs::remove_dir_all(&dir);

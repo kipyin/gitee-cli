@@ -78,14 +78,9 @@ impl Milestones<'_> {
         let r = self.repo.name.as_str();
         let cur = self.get(number)?;
         let title = req.title.unwrap_or(&cur.title);
-        let due_on = req
-            .due_on
-            .or(cur.due_on.as_deref())
-            .unwrap_or_default();
-        let mut f: Vec<(&str, String)> = vec![
-            ("title", title.to_string()),
-            ("due_on", due_on.to_string()),
-        ];
+        let due_on = req.due_on.or(cur.due_on.as_deref()).unwrap_or_default();
+        let mut f: Vec<(&str, String)> =
+            vec![("title", title.to_string()), ("due_on", due_on.to_string())];
         if let Some(d) = req.description {
             f.push(("description", d.to_string()));
         }

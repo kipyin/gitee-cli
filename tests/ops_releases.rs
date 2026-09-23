@@ -327,8 +327,7 @@ fn download_writes_asset_bytes_to_dir() {
     let asset_url = format!("{}{}", server.url(), asset_path);
     let asset_bytes = b"fake tarball payload";
 
-    let mut release: serde_json::Value =
-        serde_json::from_str(RELEASE_JSON).expect("fixture json");
+    let mut release: serde_json::Value = serde_json::from_str(RELEASE_JSON).expect("fixture json");
     release["assets"] = serde_json::json!([{
         "name": "gitee-linux-amd64.tar.xz",
         "browser_download_url": asset_url
@@ -353,17 +352,12 @@ fn download_writes_asset_bytes_to_dir() {
         .releases(&test_repo())
         .get_by_tag("v1.2.0")
         .expect("get_by_tag");
-    let dir = std::env::temp_dir().join(format!(
-        "gitee-cli-download-{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("gitee-cli-download-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("mkdir");
 
     for asset in release.assets.unwrap_or_default() {
-        let bytes = c
-            .get_bytes(&asset.browser_download_url)
-            .expect("get_bytes");
+        let bytes = c.get_bytes(&asset.browser_download_url).expect("get_bytes");
         let path = dir.join(&asset.name);
         std::fs::write(&path, &bytes).expect("write");
         assert_eq!(std::fs::read(&path).expect("read"), asset_bytes.as_slice());
@@ -387,10 +381,7 @@ fn get_bytes_retries_with_auth_on_401() {
     let url = format!("{}{}", server.url(), path);
     let payload = b"authenticated bytes";
 
-    let first = server
-        .mock("GET", path)
-        .with_status(401)
-        .create();
+    let first = server.mock("GET", path).with_status(401).create();
 
     let second = server
         .mock("GET", path)
@@ -402,7 +393,9 @@ fn get_bytes_retries_with_auth_on_401() {
         .with_body(payload.as_slice())
         .create();
 
-    let bytes = client(&server).get_bytes(&url).expect("get_bytes with retry");
+    let bytes = client(&server)
+        .get_bytes(&url)
+        .expect("get_bytes with retry");
     assert_eq!(bytes, payload);
 
     first.assert();

@@ -137,11 +137,9 @@ fn only_finish_on_success_writes_tip_bytes() {
                 !buf.is_empty(),
                 "finish_on_success must write when a newer release is available"
             );
-            assert!(
-                String::from_utf8(buf)
-                    .unwrap()
-                    .contains("A new release of gitee is available: 0.1.5 → 0.2.0")
-            );
+            assert!(String::from_utf8(buf)
+                .unwrap()
+                .contains("A new release of gitee is available: 0.1.5 → 0.2.0"));
         }
         mock_ok.assert();
     });

@@ -12,25 +12,25 @@ use crate::models::UserBasic;
 use crate::out::Output;
 use crate::repo::Repo;
 
-pub mod api;
 pub mod alias;
-pub mod extension;
+pub mod api;
 pub mod auth;
 pub mod browse;
 pub mod collaborator;
 pub mod config_cmd;
+pub mod extension;
 pub mod gist;
 pub mod interactive;
 pub mod issue;
 pub mod label;
+pub mod milestone;
 pub mod org;
 pub mod pr;
-pub mod milestone;
 pub mod release;
+pub mod repo;
 pub mod search;
 pub mod ssh_key;
 pub mod status;
-pub mod repo;
 pub mod webhook;
 
 pub struct Ctx {
@@ -332,8 +332,12 @@ mod auth_free_tests {
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("config.json"), "{}
-").unwrap();
+        std::fs::write(
+            dir.join("config.json"),
+            "{}
+",
+        )
+        .unwrap();
         std::env::set_var("GITEE_CONFIG_DIR", &dir);
         for args in ["gitee config list", "gitee alias list", "gitee browse"] {
             let cli = Cli::try_parse_from(args.split_whitespace()).expect("parse");
@@ -370,7 +374,6 @@ mod flag_tests {
         assert_eq!(line, "would delete repo");
     }
 }
-
 
 #[cfg(test)]
 mod create_title_tests {

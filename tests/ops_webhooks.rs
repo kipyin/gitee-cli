@@ -2,7 +2,8 @@ use gitee_cli_rs::api::client::Client;
 use gitee_cli_rs::api::webhooks::CreateWebhook;
 use gitee_cli_rs::repo::Repo;
 
-const HOOK_JSON: &str = r#"{"id":55,"url":"https://example.com/hook","password":"","result_code":0,"result_msg":""}"#;
+const HOOK_JSON: &str =
+    r#"{"id":55,"url":"https://example.com/hook","password":"","result_code":0,"result_msg":""}"#;
 
 fn client(server: &mockito::ServerGuard) -> Client {
     Client::new(format!("{}/api/v5", server.url()), "fake-token".into())

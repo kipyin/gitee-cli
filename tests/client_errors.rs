@@ -40,7 +40,10 @@ fn patch_issues_404_project_or_enterprise_maps_to_api() {
 
     let client = client(&server);
     let err = client
-        .patch_json::<Issue>(path, &serde_json::json!({"repo": "r", "title": "t", "state": "open"}))
+        .patch_json::<Issue>(
+            path,
+            &serde_json::json!({"repo": "r", "title": "t", "state": "open"}),
+        )
         .expect_err("expected api error");
 
     match err {
@@ -167,8 +170,5 @@ fn get_200_deserializes_issue() {
     assert_eq!(issue.number, "42");
     assert_eq!(issue.title, "Bug report");
     assert_eq!(issue.state, IssueState::Open);
-    assert_eq!(
-        issue.html_url,
-        "https://gitee.com/owner/repo/issues/I42"
-    );
+    assert_eq!(issue.html_url, "https://gitee.com/owner/repo/issues/I42");
 }

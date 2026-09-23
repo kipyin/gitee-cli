@@ -33,7 +33,11 @@ pub(crate) fn path_dirs() -> Vec<PathBuf> {
 /// choice of `dirs::data_dir()` (NOT `data_local_dir`).
 pub fn managed_dir() -> Result<PathBuf> {
     #[cfg(test)]
-    if let Some(p) = TEST_MANAGED_DIR.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+    if let Some(p) = TEST_MANAGED_DIR
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    {
         return Ok(p);
     }
     let base = dirs::data_dir().ok_or_else(|| {
@@ -460,8 +464,7 @@ pub fn create(name: &str, cargo: bool) -> Result<()> {
         "# {bin}\n\nA `gitee` extension. Invoked as `gitee {name} ...`.\n\n## Environment contract\n\nThe `gitee` CLI forwards these to every extension child process:\n\n- `GITEE_TOKEN` — the active personal access token (or your own `$GITEE_TOKEN` if set).\n- `GITEE_HOST` — the active Gitee host (e.g. `gitee.com`), unless you already exported it.\n- All trailing argv, forwarded verbatim.\n\n## Build\n\n{build}\n\n## Install\n\n```\ngitee extension install <owner/{name}>\n```\n",
         build = if cargo { "```cargo build --release``` produces a `gitee-{name}` binary at `target/release/`." } else { "No build step; the `gitee-{name}` script at the repo root is the entry point." }
     );
-    std::fs::write(cwd.join("README.md"), readme)
-        .map_err(|e| GiteeError::Usage(e.to_string()))?;
+    std::fs::write(cwd.join("README.md"), readme).map_err(|e| GiteeError::Usage(e.to_string()))?;
     println!("scaffolded extension '{name}' in {}", cwd.display());
     Ok(())
 }
@@ -493,10 +496,7 @@ pub fn remove(name: &str, yes: bool) -> Result<()> {
             dir.display()
         )));
     }
-    let action = format!(
-        "remove extension '{name}' at {}",
-        dir.display()
-    );
+    let action = format!("remove extension '{name}' at {}", dir.display());
     crate::cmd::confirm(&action, yes)?;
     std::fs::remove_dir_all(&dir).map_err(|e| GiteeError::Usage(e.to_string()))?;
     println!("removed extension '{name}'");
@@ -735,7 +735,10 @@ mod tests {
         let _ = fs::remove_dir_all(&managed);
         let _ = fs::remove_dir_all(&path_dir);
 
-        assert!(found.starts_with(&managed), "managed dir should win: {found:?}");
+        assert!(
+            found.starts_with(&managed),
+            "managed dir should win: {found:?}"
+        );
     }
 
     #[test]
@@ -755,8 +758,14 @@ mod tests {
     #[test]
     fn parse_build_kind_accepts_known_values() {
         assert!(parse_build_kind(None).unwrap().is_none());
-        assert!(matches!(parse_build_kind(Some("cargo")).unwrap(), Some(BuildKind::Cargo)));
-        assert!(matches!(parse_build_kind(Some("npm")).unwrap(), Some(BuildKind::Npm)));
+        assert!(matches!(
+            parse_build_kind(Some("cargo")).unwrap(),
+            Some(BuildKind::Cargo)
+        ));
+        assert!(matches!(
+            parse_build_kind(Some("npm")).unwrap(),
+            Some(BuildKind::Npm)
+        ));
         assert!(parse_build_kind(Some("go")).is_err());
     }
 
@@ -769,7 +778,11 @@ mod tests {
         create("demo", false).expect("create");
         std::env::set_current_dir(&prev).unwrap();
         let script = dir.join("gitee-demo");
-        assert!(script.is_file(), "script should exist at {}", script.display());
+        assert!(
+            script.is_file(),
+            "script should exist at {}",
+            script.display()
+        );
         let body = fs::read_to_string(&script).unwrap();
         assert!(body.contains("demo extension"));
         let readme = fs::read_to_string(dir.join("README.md")).unwrap();
