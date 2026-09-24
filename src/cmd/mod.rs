@@ -215,18 +215,6 @@ pub fn confirm(action: &str, yes: bool) -> Result<()> {
     }
 }
 
-/// Flatten repeatable, comma-splittable flag values (e.g. `--label a,b --label c`)
-/// into one comma-joined string; `None` when nothing was given.
-pub(crate) fn join_flags(values: &[String]) -> Option<String> {
-    let parts: Vec<&str> = values
-        .iter()
-        .flat_map(|v| v.split(','))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect();
-    (!parts.is_empty()).then(|| parts.join(","))
-}
-
 /// Resolve a `--milestone` value: bare integers pass through; anything else is
 /// matched against milestone titles. Title lookup paginates fully via
 /// `Milestones::list` (independent of `milestone list --limit`).
@@ -352,18 +340,6 @@ mod auth_free_tests {
 
 #[cfg(test)]
 mod flag_tests {
-    #[test]
-    fn join_flags_flattens_repeatable_and_comma_split() {
-        let v = vec!["a,b".to_string(), " c ".to_string()];
-        assert_eq!(super::join_flags(&v).as_deref(), Some("a,b,c"));
-    }
-
-    #[test]
-    fn join_flags_empty_is_none() {
-        assert_eq!(super::join_flags(&[]), None);
-        assert_eq!(super::join_flags(&["  ".to_string()]), None);
-    }
-
     #[test]
     fn preview_line_includes_action_and_keyed_details() {
         let line = super::preview_line("close issue I88", &[("repo", "oschina/gitee-cli")]);

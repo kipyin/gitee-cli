@@ -1005,6 +1005,36 @@ pub enum GitCredentialCmd {
     Erase,
 }
 
+/// Flatten repeatable, comma-splittable flag values (e.g. `--label a,b --label c`)
+/// into one comma-joined string; `None` when nothing was given.
+pub(crate) fn join_flags(values: &[String]) -> Option<String> {
+    let parts: Vec<&str> = values
+        .iter()
+        .flat_map(|v| v.split(','))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(","))
+}
+
+#[cfg(test)]
+mod join_flags_tests {
+    use super::join_flags;
+
+    #[test]
+    fn flattens_repeatable_and_comma_split() {
+        let v = vec!["a,b".to_string(), " c ".to_string()];
+        assert_eq!(join_flags(&v).as_deref(), Some("a,b,c"));
+    }
+
+    #[test]
+    fn empty_is_none() {
+        assert_eq!(join_flags(&[]), None);
+        assert_eq!(join_flags(&["  ".to_string()]), None);
+        assert_eq!(join_flags(&[",".to_string()]), None);
+    }
+}
+
 #[cfg(test)]
 mod parse_tests {
     use super::{

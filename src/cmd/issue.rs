@@ -1,8 +1,8 @@
 use std::io::Write;
 
-use super::{confirm, join_flags, resolve_milestone_opt, Ctx};
+use super::{confirm, resolve_milestone_opt, Ctx};
 use crate::api::issues::{CreateIssue, EditIssue, IssueFilter};
-use crate::cli::IssueCmd;
+use crate::cli::{join_flags, IssueCmd};
 use crate::error::{GiteeError, Result};
 use crate::models::IssueState;
 use crate::out;
