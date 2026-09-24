@@ -1,8 +1,10 @@
 use super::client::Client;
+use super::{missing_names, present_names};
 use crate::api::StateChange;
 use crate::error::{GiteeError, Result};
 use crate::models::Label;
 use crate::repo::Repo;
+use std::collections::HashSet;
 
 pub struct Labels<'a> {
     client: &'a Client,
@@ -106,6 +108,57 @@ impl Labels<'_> {
         let r = self.repo.name.as_str();
         self.client
             .delete_ok(&format!("/repos/{o}/{r}/labels/{name}"))
+    }
+}
+
+/// POST label names that are not already in `current`, as a JSON array.
+/// An empty missing set returns `Already(current)` and does not send.
+pub(crate) fn post_missing_labels(
+    client: &Client,
+    path: &str,
+    current: Vec<Label>,
+    names: &[&str],
+) -> Result<StateChange<Vec<Label>>> {
+    let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
+    let missing = missing_names(names, &present);
+    if missing.is_empty() {
+        return Ok(StateChange::Already(current));
+    }
+    let body = serde_json::Value::Array(
+        missing
+            .iter()
+            .map(|n| serde_json::Value::String((*n).to_string()))
+            .collect(),
+    );
+    let labels: Vec<Label> = client.post_json(path, &body)?;
+    Ok(StateChange::Changed(labels))
+}
+
+/// DELETE label names that are already in `current`.
+/// Absent names are skipped. A 404 from `delete_one` is ignored.
+/// No successful delete returns `Already`.
+pub(crate) fn delete_present_labels(
+    current: &[Label],
+    names: &[&str],
+    mut delete_one: impl FnMut(&str) -> Result<()>,
+) -> Result<StateChange<()>> {
+    let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
+    let to_remove = present_names(names, &present);
+    if to_remove.is_empty() {
+        return Ok(StateChange::Already(()));
+    }
+    let mut changed = false;
+    for name in to_remove {
+        match delete_one(name) {
+            Ok(()) => changed = true,
+            Err(GiteeError::NotFound(_)) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    if changed {
+        Ok(StateChange::Changed(()))
+    } else {
+        Ok(StateChange::Already(()))
     }
 }
 

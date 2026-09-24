@@ -1,9 +1,8 @@
 use super::client::Client;
-use crate::api::{missing_names, present_names, resolve_latest_comment, StateChange};
+use crate::api::{resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{Comment, Issue, IssueState, Label};
 use crate::repo::Repo;
-use std::collections::HashSet;
 
 /// When a state write hits Gitee's opaque enterprise/project 404, surface a
 /// clearer hint than a bare path. Non-state edits keep the original error.
@@ -310,19 +309,7 @@ impl Issues<'_> {
         let r = self.repo.name.as_str();
         let path = format!("/repos/{o}/{r}/issues/{number}/labels");
         let current = self.list_labels(number)?;
-        let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
-        let missing = missing_names(names, &present);
-        if missing.is_empty() {
-            return Ok(StateChange::Already(current));
-        }
-        let body = serde_json::Value::Array(
-            missing
-                .iter()
-                .map(|n| serde_json::Value::String((*n).to_string()))
-                .collect(),
-        );
-        let labels: Vec<Label> = self.client.post_json(&path, &body)?;
-        Ok(StateChange::Changed(labels))
+        super::labels::post_missing_labels(self.client, &path, current, names)
     }
 
     /// Remove only the named labels. GETs current membership first; DELETEs
@@ -335,27 +322,10 @@ impl Issues<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let current = self.list_labels(number)?;
-        let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
-        let to_remove = present_names(names, &present);
-        if to_remove.is_empty() {
-            return Ok(StateChange::Already(()));
-        }
-        let mut changed = false;
-        for name in to_remove {
-            match self
-                .client
+        super::labels::delete_present_labels(&current, names, |name| {
+            self.client
                 .delete_ok(&format!("/repos/{o}/{r}/issues/{number}/labels/{name}"))
-            {
-                Ok(()) => changed = true,
-                Err(GiteeError::NotFound(_)) => {}
-                Err(e) => return Err(e),
-            }
-        }
-        if changed {
-            Ok(StateChange::Changed(()))
-        } else {
-            Ok(StateChange::Already(()))
-        }
+        })
     }
 
     /// GET the issue first; if `body` already contains `tag`, returns `Ok(false)` without PATCH.
