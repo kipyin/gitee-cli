@@ -57,6 +57,45 @@ fn extension_binary_name(name: &str) -> String {
     format!("{PREFIX}{name}")
 }
 
+/// Windows file names for `gitee-<name>`: `.exe`, `.cmd`, `.bat`.
+/// One dash between the prefix and the extension name.
+#[cfg(any(windows, test))]
+fn windows_extension_file_names(stem: &str) -> [String; 3] {
+    [
+        format!("{stem}.exe"),
+        format!("{stem}.cmd"),
+        format!("{stem}.bat"),
+    ]
+}
+
+/// File names checked when resolving an extension binary. The bare
+/// `gitee-<name>` stem comes first; Windows also checks the three suffixes.
+fn extension_candidate_names(name: &str) -> Vec<String> {
+    let stem = extension_binary_name(name);
+    #[cfg(windows)]
+    {
+        let mut names = vec![stem.clone()];
+        names.extend(windows_extension_file_names(&stem));
+        names
+    }
+    #[cfg(not(windows))]
+    {
+        vec![stem]
+    }
+}
+
+/// Cargo release artifact for `stem` (`stem.exe` on Windows).
+fn cargo_bin_file_name(stem: &str) -> String {
+    #[cfg(windows)]
+    {
+        format!("{stem}.exe")
+    }
+    #[cfg(not(windows))]
+    {
+        stem.to_string()
+    }
+}
+
 #[cfg(unix)]
 fn is_executable(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
@@ -82,16 +121,10 @@ pub fn find_on_path(name: &str) -> Option<PathBuf> {
     if let Ok(Some(p)) = find_installed(name) {
         return Some(p);
     }
-    let bin = extension_binary_name(name);
     for dir in flat_search_dirs().ok()? {
-        let path = dir.join(&bin);
-        if is_executable(&path) {
-            return Some(path);
-        }
-        #[cfg(windows)]
-        for ext in ["exe", "cmd", "bat"] {
-            let path = dir.join(format!("{bin}.{ext}"));
-            if path.is_file() {
+        for file_name in extension_candidate_names(name) {
+            let path = dir.join(&file_name);
+            if is_executable(&path) {
                 return Some(path);
             }
         }
@@ -162,23 +195,18 @@ pub fn list_installed() -> Result<Vec<String>> {
     Ok(names)
 }
 
-/// Path to `<managed>/<name>/gitee-<name>` if present (and executable on Unix).
+/// Path to the managed `gitee-<name>` binary when it is present.
+/// On Unix that file is `gitee-<name>` and must be executable. On Windows the
+/// same stem is also accepted as `.exe`, `.cmd`, or `.bat`.
 pub fn find_installed(name: &str) -> Result<Option<PathBuf>> {
     if name.is_empty() {
         return Ok(None);
     }
     let dir = managed_dir()?.join(name);
-    let bin = dir.join(extension_binary_name(name));
-    if is_executable(&bin) {
-        return Ok(Some(bin));
-    }
-    #[cfg(windows)]
-    {
-        for ext in ["exe", "cmd", "bat"] {
-            let p = dir.join(format!("{}-{name}.{ext}", PREFIX));
-            if p.is_file() {
-                return Ok(Some(p));
-            }
+    for file_name in extension_candidate_names(name) {
+        let path = dir.join(file_name);
+        if is_executable(&path) {
+            return Ok(Some(path));
         }
     }
     Ok(None)
@@ -314,8 +342,8 @@ fn build_cargo(ext_dir: &Path, name: &str) -> Result<()> {
     }
     let target = ext_dir.join("target/release");
     let bin_name = crate_name(ext_dir).unwrap_or_else(|| extension_binary_name(name));
-    let src = target.join(&bin_name);
-    let dst = ext_dir.join(extension_binary_name(name));
+    let src = target.join(cargo_bin_file_name(&bin_name));
+    let dst = ext_dir.join(cargo_bin_file_name(&extension_binary_name(name)));
     if !src.exists() {
         return Err(GiteeError::Usage(format!(
             "cargo build produced no binary at {}",
@@ -572,6 +600,33 @@ mod tests {
     fn write_fake_ext(dir: &Path, name: &str) {
         let path = dir.join(format!("{PREFIX}{name}"));
         fs::write(&path, b"").expect("write");
+    }
+
+    #[test]
+    fn windows_extension_file_names_keep_a_single_dash() {
+        let stem = extension_binary_name("demo");
+        assert_eq!(stem, "gitee-demo");
+        assert_eq!(
+            windows_extension_file_names(&stem),
+            [
+                "gitee-demo.exe".to_string(),
+                "gitee-demo.cmd".to_string(),
+                "gitee-demo.bat".to_string(),
+            ]
+        );
+        assert!(extension_candidate_names("demo")
+            .iter()
+            .all(|n| !n.contains("gitee--")));
+    }
+
+    #[test]
+    fn cargo_bin_file_name_appends_exe_only_on_windows() {
+        let stem = extension_binary_name("demo");
+        let file = cargo_bin_file_name(&stem);
+        #[cfg(windows)]
+        assert_eq!(file, "gitee-demo.exe");
+        #[cfg(not(windows))]
+        assert_eq!(file, "gitee-demo");
     }
 
     #[test]
