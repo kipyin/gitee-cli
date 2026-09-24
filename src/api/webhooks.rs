@@ -1,4 +1,5 @@
 use super::client::Client;
+use crate::cli::join_flags;
 use crate::error::{GiteeError, Result};
 use crate::models::Webhook;
 use crate::repo::Repo;
@@ -63,21 +64,6 @@ pub fn event_bools(events: &[String]) -> (bool, bool, bool, bool, bool) {
     )
 }
 
-fn join_flags(values: &[String]) -> Option<String> {
-    if values.is_empty() {
-        return None;
-    }
-    Some(
-        values
-            .iter()
-            .flat_map(|v| v.split(','))
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join(","),
-    )
-}
-
 impl Webhooks<'_> {
     pub(crate) fn new<'a>(client: &'a Client, repo: &'a Repo) -> Webhooks<'a> {
         Webhooks { client, repo }
@@ -121,6 +107,14 @@ mod tests {
     #[test]
     fn parse_events_defaults_to_push() {
         assert_eq!(parse_events(&[]).unwrap(), vec!["push_events"]);
+        assert_eq!(parse_events(&[" ".into()]).unwrap(), vec!["push_events"]);
+        assert_eq!(parse_events(&[",".into()]).unwrap(), vec!["push_events"]);
+    }
+
+    #[test]
+    fn parse_events_splits_commas_and_skips_blanks() {
+        let events = parse_events(&[" push_events, note_events ".into(), " ".into()]).unwrap();
+        assert_eq!(events, vec!["push_events", "note_events"]);
     }
 
     #[test]

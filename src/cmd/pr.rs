@@ -1,8 +1,8 @@
 use std::io::Write;
 
-use super::{confirm, join_flags, resolve_milestone_opt, Ctx};
+use super::{confirm, resolve_milestone_opt, Ctx};
 use crate::api::pulls::{CreatePr, EditPr, PrCommentFilter, PrFilter};
-use crate::cli::PrCmd;
+use crate::cli::{join_flags, PrCmd};
 use crate::error::{GiteeError, Result};
 use crate::models::{MergeMethod, PrCommentKind, PrState};
 use crate::out;
