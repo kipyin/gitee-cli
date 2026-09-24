@@ -1,5 +1,5 @@
 use super::client::Client;
-use crate::api::{resolve_latest_comment, StateChange};
+use crate::api::{missing_names, present_names, resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{Comment, Issue, IssueState, Label};
 use crate::repo::Repo;
@@ -310,13 +310,8 @@ impl Issues<'_> {
         let r = self.repo.name.as_str();
         let path = format!("/repos/{o}/{r}/issues/{number}/labels");
         let current = self.list_labels(number)?;
-        let present: HashSet<String> = current.iter().map(|l| l.name.clone()).collect();
-        let mut seen = HashSet::new();
-        let missing: Vec<&str> = names
-            .iter()
-            .copied()
-            .filter(|n| !present.contains(*n) && seen.insert(*n))
-            .collect();
+        let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
+        let missing = missing_names(names, &present);
         if missing.is_empty() {
             return Ok(StateChange::Already(current));
         }
@@ -340,13 +335,8 @@ impl Issues<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let current = self.list_labels(number)?;
-        let present: HashSet<String> = current.iter().map(|l| l.name.clone()).collect();
-        let mut seen = HashSet::new();
-        let to_remove: Vec<&str> = names
-            .iter()
-            .copied()
-            .filter(|n| present.contains(*n) && seen.insert(*n))
-            .collect();
+        let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
+        let to_remove = present_names(names, &present);
         if to_remove.is_empty() {
             return Ok(StateChange::Already(()));
         }
