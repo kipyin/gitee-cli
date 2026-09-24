@@ -11,6 +11,7 @@ pub mod search;
 pub mod users;
 pub mod webhooks;
 
+use crate::error::{GiteeError, Result};
 use crate::models::{Comment, PrComment};
 use std::collections::HashSet;
 
@@ -62,6 +63,16 @@ pub fn resolve_latest_comment<'a, T: AuthoredComment>(
 impl<T> StateChange<T> {
     pub fn was_changed(&self) -> bool {
         matches!(self, StateChange::Changed(_))
+    }
+}
+
+/// Interpret an empty-body delete: success changed the resource, and HTTP 404
+/// means it was already gone. Any other error is returned unchanged.
+pub(crate) fn state_from_delete(result: Result<()>) -> Result<StateChange<()>> {
+    match result {
+        Ok(()) => Ok(StateChange::Changed(())),
+        Err(GiteeError::NotFound(_)) => Ok(StateChange::Already(())),
+        Err(e) => Err(e),
     }
 }
 
@@ -122,5 +133,25 @@ mod name_selection_tests {
         let present = set(&["bug"]);
         assert!(missing_names(&[], &present).is_empty());
         assert!(present_names(&[], &present).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod delete_state_tests {
+    use super::{state_from_delete, StateChange};
+    use crate::error::GiteeError;
+
+    #[test]
+    fn success_is_changed_not_found_is_already_other_errors_pass_through() {
+        assert!(matches!(
+            state_from_delete(Ok(())).unwrap(),
+            StateChange::Changed(())
+        ));
+        assert!(matches!(
+            state_from_delete(Err(GiteeError::NotFound("gone".into()))).unwrap(),
+            StateChange::Already(())
+        ));
+        let err = state_from_delete(Err(GiteeError::Usage("nope".into()))).unwrap_err();
+        assert!(matches!(err, GiteeError::Usage(msg) if msg == "nope"));
     }
 }
