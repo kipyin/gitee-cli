@@ -1,5 +1,5 @@
 use super::client::Client;
-use crate::api::{resolve_latest_comment, StateChange};
+use crate::api::{resolve_latest_comment, state_from_delete, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{Comment, Issue, IssueState, Label};
 use crate::repo::Repo;
@@ -273,14 +273,10 @@ impl Issues<'_> {
     pub fn delete_comment(&self, id: i64) -> Result<StateChange<()>> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        match self
-            .client
-            .delete_ok(&format!("/repos/{o}/{r}/issues/comments/{id}"))
-        {
-            Ok(()) => Ok(StateChange::Changed(())),
-            Err(GiteeError::NotFound(_)) => Ok(StateChange::Already(())),
-            Err(e) => Err(e),
-        }
+        state_from_delete(
+            self.client
+                .delete_ok(&format!("/repos/{o}/{r}/issues/comments/{id}")),
+        )
     }
 
     /// `--last` delete: resolve `login`'s most-recent comment on the issue, then DELETE.

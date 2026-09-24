@@ -1,5 +1,7 @@
 use super::client::Client;
-use crate::api::{missing_names, present_names, resolve_latest_comment, StateChange};
+use crate::api::{
+    missing_names, present_names, resolve_latest_comment, state_from_delete, StateChange,
+};
 use crate::error::{GiteeError, Result};
 use crate::models::{
     FileDiff, Label, MergeMethod, PrComment, PrCommentKind, PrCommit, PrState, PullRequest,
@@ -284,14 +286,10 @@ impl Pulls<'_> {
     pub fn delete_comment(&self, id: i64) -> Result<StateChange<()>> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        match self
-            .client
-            .delete_ok(&format!("/repos/{o}/{r}/pulls/comments/{id}"))
-        {
-            Ok(()) => Ok(StateChange::Changed(())),
-            Err(GiteeError::NotFound(_)) => Ok(StateChange::Already(())),
-            Err(e) => Err(e),
-        }
+        state_from_delete(
+            self.client
+                .delete_ok(&format!("/repos/{o}/{r}/pulls/comments/{id}")),
+        )
     }
 
     /// `--last` delete: resolve `login`'s most-recent comment on the PR, then DELETE.
@@ -513,14 +511,10 @@ impl Pulls<'_> {
         }
         let joined = to_remove.join(",");
         let query = [(field, joined.as_str())];
-        match self
-            .client
-            .delete_ok_query(&format!("/repos/{o}/{r}/pulls/{number}/{field}"), &query)
-        {
-            Ok(()) => Ok(StateChange::Changed(())),
-            Err(GiteeError::NotFound(_)) => Ok(StateChange::Already(())),
-            Err(e) => Err(e),
-        }
+        state_from_delete(
+            self.client
+                .delete_ok_query(&format!("/repos/{o}/{r}/pulls/{number}/{field}"), &query),
+        )
     }
 
     /// Add labels without replacing the rest. GETs current membership first;
