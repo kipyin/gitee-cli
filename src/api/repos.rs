@@ -1,4 +1,5 @@
 use super::client::Client;
+use crate::api::found_from_get;
 use crate::error::{GiteeError, Result};
 use crate::models::RepoDetails;
 use base64::Engine;
@@ -129,12 +130,7 @@ impl Repos<'_> {
     }
 
     pub fn is_starred(&self, owner: &str, name: &str) -> Result<bool> {
-        let path = format!("/user/starred/{owner}/{name}");
-        match self.client.get_ok(&path) {
-            Ok(()) => Ok(true),
-            Err(GiteeError::NotFound(_)) => Ok(false),
-            Err(e) => Err(e),
-        }
+        found_from_get(self.client.get_ok(&format!("/user/starred/{owner}/{name}")))
     }
 
     pub fn watch(&self, owner: &str, name: &str) -> Result<()> {
@@ -148,12 +144,10 @@ impl Repos<'_> {
     }
 
     pub fn is_watching(&self, owner: &str, name: &str) -> Result<bool> {
-        let path = format!("/user/subscriptions/{owner}/{name}");
-        match self.client.get_ok(&path) {
-            Ok(()) => Ok(true),
-            Err(GiteeError::NotFound(_)) => Ok(false),
-            Err(e) => Err(e),
-        }
+        found_from_get(
+            self.client
+                .get_ok(&format!("/user/subscriptions/{owner}/{name}")),
+        )
     }
 
     /// Fetch a file's text via the contents API (GET /repos/{o}/{r}/contents/{path}?ref=).

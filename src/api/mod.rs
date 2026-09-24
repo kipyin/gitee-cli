@@ -76,6 +76,16 @@ pub(crate) fn state_from_delete(result: Result<()>) -> Result<StateChange<()>> {
     }
 }
 
+/// Interpret an empty-body GET used as a yes/no check: success means yes, and
+/// HTTP 404 means no. Any other error is returned unchanged.
+pub(crate) fn found_from_get(result: Result<()>) -> Result<bool> {
+    match result {
+        Ok(()) => Ok(true),
+        Err(GiteeError::NotFound(_)) => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
 /// Names from `requested` that are not in `present`, in request order.
 /// A repeated name is kept once, at its first occurrence.
 pub(crate) fn missing_names<'a>(requested: &[&'a str], present: &HashSet<&str>) -> Vec<&'a str> {
@@ -152,6 +162,20 @@ mod delete_state_tests {
             StateChange::Already(())
         ));
         let err = state_from_delete(Err(GiteeError::Usage("nope".into()))).unwrap_err();
+        assert!(matches!(err, GiteeError::Usage(msg) if msg == "nope"));
+    }
+}
+
+#[cfg(test)]
+mod get_found_tests {
+    use super::found_from_get;
+    use crate::error::GiteeError;
+
+    #[test]
+    fn success_is_true_not_found_is_false_other_errors_pass_through() {
+        assert!(found_from_get(Ok(())).unwrap());
+        assert!(!found_from_get(Err(GiteeError::NotFound("gone".into()))).unwrap());
+        let err = found_from_get(Err(GiteeError::Usage("nope".into()))).unwrap_err();
         assert!(matches!(err, GiteeError::Usage(msg) if msg == "nope"));
     }
 }
