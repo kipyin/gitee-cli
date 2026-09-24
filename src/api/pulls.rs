@@ -1,5 +1,5 @@
 use super::client::Client;
-use crate::api::{resolve_latest_comment, StateChange};
+use crate::api::{missing_names, present_names, resolve_latest_comment, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{
     FileDiff, Label, MergeMethod, PrComment, PrCommentKind, PrCommit, PrState, PullRequest,
@@ -483,13 +483,8 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let pr = self.get(number)?;
-        let present: HashSet<String> = current_of(&pr).iter().map(|u| u.login.clone()).collect();
-        let mut seen = HashSet::new();
-        let missing: Vec<&str> = logins
-            .iter()
-            .copied()
-            .filter(|n| !present.contains(*n) && seen.insert(*n))
-            .collect();
+        let present: HashSet<&str> = current_of(&pr).iter().map(|u| u.login.as_str()).collect();
+        let missing = missing_names(logins, &present);
         if missing.is_empty() {
             return Ok(StateChange::Already(pr));
         }
@@ -511,13 +506,8 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let pr = self.get(number)?;
-        let present: HashSet<String> = current_of(&pr).iter().map(|u| u.login.clone()).collect();
-        let mut seen = HashSet::new();
-        let to_remove: Vec<&str> = logins
-            .iter()
-            .copied()
-            .filter(|n| present.contains(*n) && seen.insert(*n))
-            .collect();
+        let present: HashSet<&str> = current_of(&pr).iter().map(|u| u.login.as_str()).collect();
+        let to_remove = present_names(logins, &present);
         if to_remove.is_empty() {
             return Ok(StateChange::Already(()));
         }
@@ -544,13 +534,8 @@ impl Pulls<'_> {
         let r = self.repo.name.as_str();
         let path = format!("/repos/{o}/{r}/pulls/{number}/labels");
         let current = self.list_labels(number)?;
-        let present: HashSet<String> = current.iter().map(|l| l.name.clone()).collect();
-        let mut seen = HashSet::new();
-        let missing: Vec<&str> = names
-            .iter()
-            .copied()
-            .filter(|n| !present.contains(*n) && seen.insert(*n))
-            .collect();
+        let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
+        let missing = missing_names(names, &present);
         if missing.is_empty() {
             return Ok(StateChange::Already(current));
         }
@@ -570,13 +555,8 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let current = self.list_labels(number)?;
-        let present: HashSet<String> = current.iter().map(|l| l.name.clone()).collect();
-        let mut seen = HashSet::new();
-        let to_remove: Vec<&str> = names
-            .iter()
-            .copied()
-            .filter(|n| present.contains(*n) && seen.insert(*n))
-            .collect();
+        let present: HashSet<&str> = current.iter().map(|l| l.name.as_str()).collect();
+        let to_remove = present_names(names, &present);
         if to_remove.is_empty() {
             return Ok(StateChange::Already(()));
         }
