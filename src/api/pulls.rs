@@ -1,6 +1,7 @@
 use super::client::Client;
 use crate::api::{
-    missing_names, present_names, resolve_latest_comment, state_from_delete, StateChange,
+    found_from_get, missing_names, present_names, resolve_latest_comment, state_from_delete,
+    StateChange,
 };
 use crate::error::{GiteeError, Result};
 use crate::models::{
@@ -118,11 +119,7 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let path = format!("/repos/{o}/{r}/pulls/{number}/merge");
-        match self.client.get_ok(&path) {
-            Ok(()) => Ok(true),
-            Err(GiteeError::NotFound(_)) => Ok(false),
-            Err(e) => Err(e),
-        }
+        found_from_get(self.client.get_ok(&path))
     }
 
     pub fn files(&self, number: i64) -> Result<Vec<FileDiff>> {
