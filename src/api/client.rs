@@ -334,7 +334,8 @@ impl Client {
             .http
             .get(self.full(path))
             .header("Authorization", self.auth())
-            .send()?;
+            .send()
+            .map_err(|e| self.map_http_err(e))?;
         self.check(resp, "GET", path).map(|_| ())
     }
 
@@ -348,7 +349,8 @@ impl Client {
             .post(self.full(path))
             .header("Authorization", self.auth())
             .multipart(form)
-            .send()?;
+            .send()
+            .map_err(|e| self.map_http_err(e))?;
         self.check(resp, "POST", path)?
             .json()
             .map_err(GiteeError::Http)
@@ -370,7 +372,7 @@ impl Client {
             if with_auth {
                 req = req.header("Authorization", self.auth());
             }
-            let resp = req.send().map_err(GiteeError::Http)?;
+            let resp = req.send().map_err(|e| self.map_http_err(e))?;
             let status = resp.status();
             if status.is_success() {
                 return resp.bytes().map(|b| b.to_vec()).map_err(GiteeError::Http);
@@ -513,7 +515,7 @@ impl Client {
             rb = rb.header(*k, *v);
         }
 
-        let resp = rb.send()?;
+        let resp = rb.send().map_err(|e| self.map_http_err(e))?;
         let status = resp.status();
         if status.is_success() {
             return Ok(resp.text().unwrap_or_default());

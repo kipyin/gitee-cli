@@ -1,4 +1,4 @@
-use gitee_cli_rs::api::client::Client;
+use gitee_cli_rs::api::client::{Client, RawRequest};
 use gitee_cli_rs::error::GiteeError;
 use gitee_cli_rs::models::{Issue, IssueState};
 
@@ -171,4 +171,56 @@ fn get_200_deserializes_issue() {
     assert_eq!(issue.title, "Bug report");
     assert_eq!(issue.state, IssueState::Open);
     assert_eq!(issue.html_url, "https://gitee.com/owner/repo/issues/I42");
+}
+
+/// Connect failures are `Network` on every send path, including the ones that
+/// used to surface as `Http` (`get_ok`, multipart upload, asset download, `raw`).
+#[test]
+fn connect_failure_is_network_on_every_send() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    drop(listener);
+
+    let client = Client::new(
+        format!("http://127.0.0.1:{port}/api/v5"),
+        "fake-token".into(),
+    );
+    let assert_network = |err: GiteeError| {
+        assert_eq!(err.exit_code(), 6);
+        assert_eq!(err.code_slug(), "network");
+        let rendered = err.to_string();
+        assert!(
+            matches!(err, GiteeError::Network(_)),
+            "expected Network, got {rendered}"
+        );
+    };
+
+    assert_network(client.get::<Issue>("/user", &[]).expect_err("get"));
+    assert_network(client.get_ok("/user").expect_err("get_ok"));
+    assert_network(
+        client
+            .raw(&RawRequest {
+                method: "GET",
+                path: "/user",
+                query: &[],
+                form: &[],
+                headers: &[],
+                body: None,
+            })
+            .expect_err("raw"),
+    );
+    assert_network(
+        client
+            .get_bytes(&format!("http://127.0.0.1:{port}/asset"))
+            .expect_err("get_bytes"),
+    );
+
+    let file = std::env::temp_dir().join(format!("gitee-cli-connect-{port}"));
+    std::fs::write(&file, b"asset").expect("temp file");
+    let uploaded = client.post_multipart::<serde_json::Value>(
+        "/repos/o/r/releases/v1/attach_files",
+        file.to_str().expect("utf8 path"),
+    );
+    let _ = std::fs::remove_file(&file);
+    assert_network(uploaded.expect_err("post_multipart"));
 }
