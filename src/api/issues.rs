@@ -144,10 +144,7 @@ impl Issues<'_> {
     /// becomes issue_state 已完成 (not 拒绝 / wontfix).
     pub fn set_state(&self, number: &str, state: IssueState) -> Result<Issue> {
         let o = self.repo.owner.as_str();
-        let name = &self.repo.name;
-        let cur: Issue = self
-            .client
-            .get(&format!("/repos/{o}/{name}/issues/{number}"), &[])?;
+        let cur = self.get(number)?;
         let body = serde_json::json!({
             "repo": self.repo.name,
             "title": cur.title,
@@ -167,10 +164,7 @@ impl Issues<'_> {
         target: IssueState,
     ) -> Result<StateChange<Issue>> {
         let o = self.repo.owner.as_str();
-        let name = &self.repo.name;
-        let cur: Issue = self
-            .client
-            .get(&format!("/repos/{o}/{name}/issues/{number}"), &[])?;
+        let cur = self.get(number)?;
         if cur.state == target {
             return Ok(StateChange::Already(cur));
         }
@@ -190,10 +184,7 @@ impl Issues<'_> {
     /// `title` must always be echoed; only `Some` fields are added.
     pub fn edit(&self, number: &str, req: &EditIssue<'_>) -> Result<Issue> {
         let o = self.repo.owner.as_str();
-        let name = &self.repo.name;
-        let cur: Issue = self
-            .client
-            .get(&format!("/repos/{o}/{name}/issues/{number}"), &[])?;
+        let cur = self.get(number)?;
         let mut body = serde_json::json!({
             "repo": self.repo.name,
             "title": req.title.unwrap_or(&cur.title),
@@ -328,10 +319,7 @@ impl Issues<'_> {
     /// Otherwise PATCH JSON `{repo, title, body}` with appended `Linked: {tag}` and returns `Ok(true)`.
     pub fn link(&self, number: &str, tag: &str) -> Result<bool> {
         let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
-        let cur: Issue = self
-            .client
-            .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
+        let cur = self.get(number)?;
         let Some(new) = append_linked_tag(cur.body.as_deref(), tag) else {
             return Ok(false);
         };
