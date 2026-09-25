@@ -295,7 +295,7 @@ fn paint(code: &str, s: &str) -> String {
     paint_if(color(), code, s)
 }
 
-fn paint_if(enabled: bool, code: &str, s: &str) -> String {
+pub(crate) fn paint_if(enabled: bool, code: &str, s: &str) -> String {
     if enabled {
         format!("\x1b[{code}m{s}\x1b[0m")
     } else {

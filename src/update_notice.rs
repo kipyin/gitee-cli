@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime};
 use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, Settings};
+use crate::out::paint_if;
 
 /// Production GitHub API base URL.
 pub const GITHUB_API_BASE: &str = "https://api.github.com";
@@ -368,14 +369,6 @@ pub fn is_strictly_newer(remote_tag: &str, current: &str) -> bool {
 /// Whether ANSI color is allowed for the Update notice tip (stderr stream).
 fn tip_color_enabled() -> bool {
     std::env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal()
-}
-
-fn paint_if(enabled: bool, code: &str, s: &str) -> String {
-    if enabled {
-        format!("\x1b[{code}m{s}\x1b[0m")
-    } else {
-        s.to_string()
-    }
 }
 
 /// Format the Update notice tip (leading/trailing blank lines).
