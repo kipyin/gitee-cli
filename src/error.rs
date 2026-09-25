@@ -31,6 +31,25 @@ pub enum GiteeError {
     Network(String),
 }
 
+/// One classification of a [`GiteeError`]. Exit codes and `--json` `code`
+/// slugs are both derived from this so the two mappings cannot drift.
+///
+/// Arm order matches the previous separate matches: specific API statuses and
+/// connect/timeout failures are recognized before the generic `Api` / `Http`
+/// arms.
+enum ErrorClass {
+    RateLimited,
+    Auth,
+    NotFound,
+    Network,
+    Http,
+    Io,
+    Config,
+    RepoResolve,
+    Usage,
+    Error,
+}
+
 /// Stable, documented exit codes (see README "Exit codes").
 ///
 /// - `0` success
@@ -41,38 +60,47 @@ pub enum GiteeError {
 /// - `5` rate limited (HTTP 429)
 /// - `6` network error (host unreachable)
 impl GiteeError {
-    pub fn exit_code(&self) -> i32 {
+    fn class(&self) -> ErrorClass {
         use GiteeError::*;
         match self {
-            Api { status: 429, .. } | RateLimited(_) => 5,
-            Api { status: 401, .. } | Unauthorized | NotLoggedIn => 3,
-            Api { status: 404, .. } | NotFound(_) => 4,
-            Http(e) if e.is_connect() || e.is_timeout() => 6,
-            Network(_) => 6,
-            Http(_) => 1,
-            Io(_) => 1,
-            Config(_) => 2,
-            RepoResolve(_) => 2,
-            Usage(_) => 2,
-            Api { .. } => 1,
+            Api { status: 429, .. } | RateLimited(_) => ErrorClass::RateLimited,
+            Api { status: 401, .. } | Unauthorized | NotLoggedIn => ErrorClass::Auth,
+            Api { status: 404, .. } | NotFound(_) => ErrorClass::NotFound,
+            Http(e) if e.is_connect() || e.is_timeout() => ErrorClass::Network,
+            Network(_) => ErrorClass::Network,
+            Http(_) => ErrorClass::Http,
+            Io(_) => ErrorClass::Io,
+            Config(_) => ErrorClass::Config,
+            RepoResolve(_) => ErrorClass::RepoResolve,
+            Usage(_) => ErrorClass::Usage,
+            Api { .. } => ErrorClass::Error,
+        }
+    }
+
+    pub fn exit_code(&self) -> i32 {
+        match self.class() {
+            ErrorClass::RateLimited => 5,
+            ErrorClass::Auth => 3,
+            ErrorClass::NotFound => 4,
+            ErrorClass::Network => 6,
+            ErrorClass::Usage | ErrorClass::Config | ErrorClass::RepoResolve => 2,
+            ErrorClass::Http | ErrorClass::Io | ErrorClass::Error => 1,
         }
     }
 
     /// Stable, machine-readable `code` slug for `--json` error envelopes.
     pub fn code_slug(&self) -> &'static str {
-        use GiteeError::*;
-        match self {
-            Api { status: 429, .. } | RateLimited(_) => "rate_limited",
-            Api { status: 401, .. } | Unauthorized | NotLoggedIn => "auth",
-            Api { status: 404, .. } | NotFound(_) => "not_found",
-            Http(e) if e.is_connect() || e.is_timeout() => "network",
-            Network(_) => "network",
-            Http(_) => "http",
-            Io(_) => "io",
-            Config(_) => "config",
-            RepoResolve(_) => "repo_resolve",
-            Usage(_) => "usage",
-            Api { .. } => "error",
+        match self.class() {
+            ErrorClass::RateLimited => "rate_limited",
+            ErrorClass::Auth => "auth",
+            ErrorClass::NotFound => "not_found",
+            ErrorClass::Network => "network",
+            ErrorClass::Http => "http",
+            ErrorClass::Io => "io",
+            ErrorClass::Config => "config",
+            ErrorClass::RepoResolve => "repo_resolve",
+            ErrorClass::Usage => "usage",
+            ErrorClass::Error => "error",
         }
     }
 }
@@ -155,5 +183,59 @@ mod exit_code_tests {
             "rate_limited"
         );
         assert_eq!(GiteeError::Usage("x".into()).code_slug(), "usage");
+    }
+
+    /// Exit code and JSON slug come from the same class. Each row is
+    /// `(error, slug, exit code)`.
+    #[test]
+    fn exit_code_follows_the_same_class_as_the_slug() {
+        let io = GiteeError::Io(std::io::Error::other("x"));
+        let cases = [
+            (GiteeError::RateLimited("x".into()), "rate_limited", 5),
+            (GiteeError::Unauthorized, "auth", 3),
+            (GiteeError::NotLoggedIn, "auth", 3),
+            (
+                GiteeError::Api {
+                    status: 401,
+                    message: "x".into(),
+                },
+                "auth",
+                3,
+            ),
+            (GiteeError::NotFound("x".into()), "not_found", 4),
+            (
+                GiteeError::Api {
+                    status: 404,
+                    message: "x".into(),
+                },
+                "not_found",
+                4,
+            ),
+            (GiteeError::Network("x".into()), "network", 6),
+            (
+                GiteeError::Api {
+                    status: 429,
+                    message: "x".into(),
+                },
+                "rate_limited",
+                5,
+            ),
+            (GiteeError::Usage("x".into()), "usage", 2),
+            (GiteeError::Config("x".into()), "config", 2),
+            (GiteeError::RepoResolve("x".into()), "repo_resolve", 2),
+            (io, "io", 1),
+            (
+                GiteeError::Api {
+                    status: 500,
+                    message: "x".into(),
+                },
+                "error",
+                1,
+            ),
+        ];
+        for (err, slug, code) in cases {
+            assert_eq!(err.code_slug(), slug);
+            assert_eq!(err.exit_code(), code);
+        }
     }
 }
