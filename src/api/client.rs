@@ -33,6 +33,22 @@ pub struct RawRequest<'a> {
     pub body: Option<&'a [u8]>,
 }
 
+/// Gitee list endpoints page with `page` and `per_page`. Typed `get_paged`
+/// and raw `--paginate` both send this size and stop on a short page.
+const PAGE_SIZE: usize = 100;
+
+/// Query pairs for one list page: `page`, `per_page`, then `extra` in order.
+fn page_query(page: u32, extra: &[(&str, &str)]) -> Vec<(String, String)> {
+    let mut q = vec![
+        ("page".to_string(), page.to_string()),
+        ("per_page".to_string(), PAGE_SIZE.to_string()),
+    ];
+    for (k, v) in extra {
+        q.push(((*k).to_string(), (*v).to_string()));
+    }
+    q
+}
+
 impl Client {
     pub fn new(base: String, token: String) -> Self {
         let http = Http::builder()
@@ -217,18 +233,13 @@ impl Client {
     ) -> Result<Vec<T>> {
         let mut out: Vec<T> = Vec::new();
         let mut page = 1u32;
-        let per = 100;
         while out.len() < limit {
-            let mut q: Vec<(&str, String)> =
-                vec![("page", page.to_string()), ("per_page", per.to_string())];
-            for (k, v) in query {
-                q.push((k, v.to_string()));
-            }
-            let qref: Vec<(&str, &str)> = q.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            let q = page_query(page, query);
+            let qref = Self::str_refs(&q);
             let chunk: Vec<T> = self.get(path, &qref)?;
             let n = chunk.len();
             out.extend(chunk);
-            if n < per {
+            if n < PAGE_SIZE {
                 break;
             }
             page += 1;
@@ -533,7 +544,7 @@ impl Client {
         })
     }
 
-    /// GET-only pagination: walk `page`/`per_page=100` until a short page.
+    /// GET-only pagination: walk `page`/`per_page` until a short page.
     pub fn raw_paged(
         &self,
         path: &str,
@@ -542,16 +553,9 @@ impl Client {
     ) -> Result<Vec<Value>> {
         let mut out: Vec<Value> = Vec::new();
         let mut page = 1u32;
-        let per = 100;
         loop {
-            let mut q: Vec<(String, String)> = vec![
-                ("page".into(), page.to_string()),
-                ("per_page".into(), per.to_string()),
-            ];
-            for (k, v) in query {
-                q.push((k.to_string(), v.to_string()));
-            }
-            let qref: Vec<(&str, &str)> = q.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+            let q = page_query(page, query);
+            let qref = Self::str_refs(&q);
             let body = self.raw(&RawRequest {
                 method: "GET",
                 path,
@@ -568,11 +572,42 @@ impl Client {
             })?;
             let n = arr.len();
             out.extend(arr.iter().cloned());
-            if n < per {
+            if n < PAGE_SIZE {
                 break;
             }
             page += 1;
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod page_query_tests {
+    use super::{page_query, PAGE_SIZE};
+
+    #[test]
+    fn page_query_puts_paging_keys_before_caller_pairs() {
+        let q = page_query(2, &[("state", "open"), ("sort", "created")]);
+        assert_eq!(
+            q,
+            vec![
+                ("page".to_string(), "2".to_string()),
+                ("per_page".to_string(), PAGE_SIZE.to_string()),
+                ("state".to_string(), "open".to_string()),
+                ("sort".to_string(), "created".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn page_query_without_extra_is_only_paging_keys() {
+        let q = page_query(1, &[]);
+        assert_eq!(
+            q,
+            vec![
+                ("page".to_string(), "1".to_string()),
+                ("per_page".to_string(), PAGE_SIZE.to_string()),
+            ]
+        );
     }
 }
