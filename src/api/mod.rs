@@ -86,6 +86,18 @@ pub(crate) fn found_from_get(result: Result<()>) -> Result<bool> {
     }
 }
 
+/// Body after appending `Linked: {tag}`, or `None` when `body` already
+/// contains `tag` as a substring. A missing body is empty, so the result
+/// starts with a blank line before the marker.
+pub(crate) fn append_linked_tag(body: Option<&str>, tag: &str) -> Option<String> {
+    let body = body.unwrap_or("");
+    if body.contains(tag) {
+        None
+    } else {
+        Some(format!("{body}\n\nLinked: {tag}"))
+    }
+}
+
 /// Names from `requested` that are not in `present`, in request order.
 /// A repeated name is kept once, at its first occurrence.
 pub(crate) fn missing_names<'a>(requested: &[&'a str], present: &HashSet<&str>) -> Vec<&'a str> {
@@ -163,6 +175,29 @@ mod delete_state_tests {
         ));
         let err = state_from_delete(Err(GiteeError::Usage("nope".into()))).unwrap_err();
         assert!(matches!(err, GiteeError::Usage(msg) if msg == "nope"));
+    }
+}
+
+#[cfg(test)]
+mod linked_tag_tests {
+    use super::append_linked_tag;
+
+    #[test]
+    fn appends_blank_line_and_marker() {
+        assert_eq!(
+            append_linked_tag(Some("hello"), "#42").as_deref(),
+            Some("hello\n\nLinked: #42")
+        );
+        assert_eq!(
+            append_linked_tag(None, "!7").as_deref(),
+            Some("\n\nLinked: !7")
+        );
+    }
+
+    #[test]
+    fn skips_when_tag_already_present() {
+        assert!(append_linked_tag(Some("Already Linked: !7"), "!7").is_none());
+        assert!(append_linked_tag(Some("see !7 in text"), "!7").is_none());
     }
 }
 

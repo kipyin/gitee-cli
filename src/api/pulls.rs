@@ -1,7 +1,7 @@
 use super::client::Client;
 use crate::api::{
-    found_from_get, missing_names, present_names, resolve_latest_comment, state_from_delete,
-    StateChange,
+    append_linked_tag, found_from_get, missing_names, present_names, resolve_latest_comment,
+    state_from_delete, StateChange,
 };
 use crate::error::{GiteeError, Result};
 use crate::models::{
@@ -548,11 +548,9 @@ impl Pulls<'_> {
         let pr: PullRequest = self
             .client
             .get(&format!("/repos/{o}/{r}/pulls/{number}"), &[])?;
-        let cur = pr.body.clone().unwrap_or_default();
-        if cur.contains(tag) {
+        let Some(new) = append_linked_tag(pr.body.as_deref(), tag) else {
             return Ok(false);
-        }
-        let new = format!("{cur}\n\nLinked: {tag}");
+        };
         let f: Vec<(&str, String)> = vec![("body", new)];
         let form = Client::str_refs(&f);
         let _: PullRequest = self
