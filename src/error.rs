@@ -189,7 +189,7 @@ mod exit_code_tests {
     /// `(error, slug, exit code)`.
     #[test]
     fn exit_code_follows_the_same_class_as_the_slug() {
-        let io = GiteeError::Io(std::io::Error::new(std::io::ErrorKind::Other, "x"));
+        let io = GiteeError::Io(std::io::Error::other("x"));
         let cases = [
             (GiteeError::RateLimited("x".into()), "rate_limited", 5),
             (GiteeError::Unauthorized, "auth", 3),
