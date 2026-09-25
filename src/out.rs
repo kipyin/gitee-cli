@@ -597,44 +597,33 @@ pub struct IssueStatus {
     pub assigned: Vec<Issue>,
 }
 
+/// Print a titled status block: the heading, then either `(none)` or `render`.
+fn write_section<T, W, F>(w: &mut W, title: &str, items: &[T], render: F) -> io::Result<()>
+where
+    W: Write,
+    F: FnOnce(&mut W, &[T]) -> io::Result<()>,
+{
+    writeln!(w, "{}", bold(title))?;
+    if items.is_empty() {
+        writeln!(w, "{}", dim("(none)"))
+    } else {
+        render(w, items)
+    }
+}
+
 pub fn pr_status(w: &mut impl Write, s: &PrStatus) -> std::io::Result<()> {
-    writeln!(w, "{}", bold("Created by me"))?;
-    if s.created.is_empty() {
-        writeln!(w, "{}", dim("(none)"))?;
-    } else {
-        pr_table(w, &s.created)?;
-    }
+    write_section(w, "Created by me", &s.created, pr_table)?;
     writeln!(w)?;
-    writeln!(w, "{}", bold("Assigned to me"))?;
-    if s.assigned.is_empty() {
-        writeln!(w, "{}", dim("(none)"))?;
-    } else {
-        pr_table(w, &s.assigned)?;
-    }
+    write_section(w, "Assigned to me", &s.assigned, pr_table)?;
     writeln!(w)?;
-    writeln!(w, "{}", bold("Awaiting my test"))?;
-    if s.awaiting_test.is_empty() {
-        writeln!(w, "{}", dim("(none)"))?;
-    } else {
-        pr_table(w, &s.awaiting_test)?;
-    }
+    write_section(w, "Awaiting my test", &s.awaiting_test, pr_table)?;
     Ok(())
 }
 
 pub fn issue_status(w: &mut impl Write, s: &IssueStatus) -> std::io::Result<()> {
-    writeln!(w, "{}", bold("Created by me"))?;
-    if s.created.is_empty() {
-        writeln!(w, "{}", dim("(none)"))?;
-    } else {
-        issue_table(w, &s.created)?;
-    }
+    write_section(w, "Created by me", &s.created, issue_table)?;
     writeln!(w)?;
-    writeln!(w, "{}", bold("Assigned to me"))?;
-    if s.assigned.is_empty() {
-        writeln!(w, "{}", dim("(none)"))?;
-    } else {
-        issue_table(w, &s.assigned)?;
-    }
+    write_section(w, "Assigned to me", &s.assigned, issue_table)?;
     Ok(())
 }
 
@@ -1466,19 +1455,9 @@ fn dashboard_issue_table(w: &mut impl Write, items: &[Issue]) -> std::io::Result
 }
 
 pub fn dashboard(w: &mut impl Write, d: &Dashboard) -> std::io::Result<()> {
-    writeln!(w, "{}", bold("Assigned to me"))?;
-    if d.assigned.is_empty() {
-        writeln!(w, "{}", dim("(none)"))?;
-    } else {
-        dashboard_issue_table(w, &d.assigned)?;
-    }
+    write_section(w, "Assigned to me", &d.assigned, dashboard_issue_table)?;
     writeln!(w)?;
-    writeln!(w, "{}", bold("Created by me"))?;
-    if d.created.is_empty() {
-        writeln!(w, "{}", dim("(none)"))?;
-    } else {
-        dashboard_issue_table(w, &d.created)?;
-    }
+    write_section(w, "Created by me", &d.created, dashboard_issue_table)?;
     Ok(())
 }
 
