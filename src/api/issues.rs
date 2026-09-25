@@ -1,5 +1,5 @@
 use super::client::Client;
-use crate::api::{resolve_latest_comment, state_from_delete, StateChange};
+use crate::api::{append_linked_tag, resolve_latest_comment, state_from_delete, StateChange};
 use crate::error::{GiteeError, Result};
 use crate::models::{Comment, Issue, IssueState, Label};
 use crate::repo::Repo;
@@ -332,11 +332,9 @@ impl Issues<'_> {
         let cur: Issue = self
             .client
             .get(&format!("/repos/{o}/{r}/issues/{number}"), &[])?;
-        let old = cur.body.clone().unwrap_or_default();
-        if old.contains(tag) {
+        let Some(new) = append_linked_tag(cur.body.as_deref(), tag) else {
             return Ok(false);
-        }
-        let new = format!("{old}\n\nLinked: {tag}");
+        };
         let body = serde_json::json!({
             "repo": self.repo.name,
             "title": cur.title,
