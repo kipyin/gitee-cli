@@ -545,9 +545,7 @@ impl Pulls<'_> {
     pub fn link(&self, number: i64, tag: &str) -> Result<bool> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let pr: PullRequest = self
-            .client
-            .get(&format!("/repos/{o}/{r}/pulls/{number}"), &[])?;
+        let pr = self.get(number)?;
         let Some(new) = append_linked_tag(pr.body.as_deref(), tag) else {
             return Ok(false);
         };
