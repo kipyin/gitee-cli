@@ -59,12 +59,8 @@ impl Milestones<'_> {
             ("title", req.title.to_string()),
             ("due_on", req.due_on.to_string()),
         ];
-        if let Some(d) = req.description {
-            f.push(("description", d.to_string()));
-        }
-        if let Some(s) = req.state {
-            f.push(("state", s.to_string()));
-        }
+        Client::push_some(&mut f, "description", req.description);
+        Client::push_some(&mut f, "state", req.state);
         let form = Client::str_refs(&f);
         self.client
             .post(&format!("/repos/{o}/{r}/milestones"), &form)
@@ -81,12 +77,8 @@ impl Milestones<'_> {
         let due_on = req.due_on.or(cur.due_on.as_deref()).unwrap_or_default();
         let mut f: Vec<(&str, String)> =
             vec![("title", title.to_string()), ("due_on", due_on.to_string())];
-        if let Some(d) = req.description {
-            f.push(("description", d.to_string()));
-        }
-        if let Some(s) = req.state {
-            f.push(("state", s.to_string()));
-        }
+        Client::push_some(&mut f, "description", req.description);
+        Client::push_some(&mut f, "state", req.state);
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/milestones/{number}"), &form)

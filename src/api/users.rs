@@ -29,9 +29,7 @@ impl Users<'_> {
     /// Cross-repo issues for the authenticated user (GET /user/issues).
     pub fn issues(&self, filter: &UserIssueFilter<'_>) -> Result<Vec<Issue>> {
         let mut q: Vec<(&str, String)> = vec![("filter", filter.filter.to_string())];
-        if let Some(s) = filter.state {
-            q.push(("state", s.to_string()));
-        }
+        Client::push_some(&mut q, "state", filter.state);
         let qref = Client::str_refs(&q);
         self.client.get_paged("/user/issues", &qref, filter.limit)
     }

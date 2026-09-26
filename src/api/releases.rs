@@ -57,9 +57,7 @@ impl Releases<'_> {
             ("name", display_name.to_string()),
             ("body", req.notes.unwrap_or(display_name).to_string()),
         ];
-        if let Some(t) = req.target {
-            f.push(("target_commitish", t.to_string()));
-        }
+        Client::push_some(&mut f, "target_commitish", req.target);
         f.push(("prerelease", Client::bool_str(req.prerelease).to_string()));
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/{r}/releases"), &form)

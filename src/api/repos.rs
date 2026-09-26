@@ -57,18 +57,10 @@ impl Repos<'_> {
             None => "/user/repos".to_string(),
         };
         let mut f: Vec<(&str, String)> = vec![("name", req.name.to_string())];
-        if let Some(d) = req.description {
-            f.push(("description", d.to_string()));
-        }
-        if let Some(h) = req.homepage {
-            f.push(("homepage", h.to_string()));
-        }
-        if let Some(g) = req.gitignore_template {
-            f.push(("gitignore_template", g.to_string()));
-        }
-        if let Some(l) = req.license_template {
-            f.push(("license_template", l.to_string()));
-        }
+        Client::push_some(&mut f, "description", req.description);
+        Client::push_some(&mut f, "homepage", req.homepage);
+        Client::push_some(&mut f, "gitignore_template", req.gitignore_template);
+        Client::push_some(&mut f, "license_template", req.license_template);
         // Gitee bool quirk: booleans are urlencoded as "true"/"false" strings.
         // Swagger also documents integer `public`; we send `private` instead.
         f.push(("private", Client::bool_str(req.private).to_string()));
@@ -80,18 +72,12 @@ impl Repos<'_> {
     /// even when only changing other fields — callers must pass the current name.
     pub fn edit(&self, owner: &str, repo: &str, req: &EditRepo<'_>) -> Result<RepoDetails> {
         let mut f: Vec<(&str, String)> = vec![("name", req.name.to_string())];
-        if let Some(d) = req.description {
-            f.push(("description", d.to_string()));
-        }
-        if let Some(h) = req.homepage {
-            f.push(("homepage", h.to_string()));
-        }
+        Client::push_some(&mut f, "description", req.description);
+        Client::push_some(&mut f, "homepage", req.homepage);
         if let Some(p) = req.private {
             f.push(("private", Client::bool_str(p).to_string()));
         }
-        if let Some(b) = req.default_branch {
-            f.push(("default_branch", b.to_string()));
-        }
+        Client::push_some(&mut f, "default_branch", req.default_branch);
         let form = Client::str_refs(&f);
         self.client.patch(&format!("/repos/{owner}/{repo}"), &form)
     }

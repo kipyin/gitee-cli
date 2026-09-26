@@ -89,18 +89,10 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut q: Vec<(&str, String)> = Vec::new();
-        if let Some(s) = filter.state {
-            q.push(("state", s.to_string()));
-        }
-        if let Some(a) = filter.author {
-            q.push(("author", a.to_string()));
-        }
-        if let Some(a) = filter.assignee {
-            q.push(("assignee", a.to_string()));
-        }
-        if let Some(t) = filter.tester {
-            q.push(("tester", t.to_string()));
-        }
+        Client::push_some(&mut q, "state", filter.state);
+        Client::push_some(&mut q, "author", filter.author);
+        Client::push_some(&mut q, "assignee", filter.assignee);
+        Client::push_some(&mut q, "tester", filter.tester);
         let qref = Client::str_refs(&q);
         let path = format!("/repos/{o}/{r}/pulls");
         self.client.get_paged(&path, &qref, filter.limit)
@@ -148,24 +140,14 @@ impl Pulls<'_> {
             ("head", req.head.to_string()),
             ("base", req.base.to_string()),
         ];
-        if let Some(b) = req.body {
-            f.push(("body", b.to_string()));
-        }
-        if let Some(v) = req.labels {
-            f.push(("labels", v.to_string()));
-        }
-        if let Some(v) = req.assignees {
-            f.push(("assignees", v.to_string()));
-        }
-        if let Some(v) = req.testers {
-            f.push(("testers", v.to_string()));
-        }
+        Client::push_some(&mut f, "body", req.body);
+        Client::push_some(&mut f, "labels", req.labels);
+        Client::push_some(&mut f, "assignees", req.assignees);
+        Client::push_some(&mut f, "testers", req.testers);
         if let Some(n) = req.milestone_number {
             f.push(("milestone_number", n.to_string()));
         }
-        if let Some(i) = req.issue {
-            f.push(("issue", i.to_string()));
-        }
+        Client::push_some(&mut f, "issue", req.issue);
         if req.close_related_issue {
             f.push(("close_related_issue", "true".to_string()));
         }
@@ -214,15 +196,11 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = vec![("body", body.to_string())];
-        if let Some(p) = positional.path {
-            f.push(("path", p.to_string()));
-        }
+        Client::push_some(&mut f, "path", positional.path);
         if let Some(pos) = positional.position {
             f.push(("position", pos.to_string()));
         }
-        if let Some(c) = positional.commit_id {
-            f.push(("commit_id", c.to_string()));
-        }
+        Client::push_some(&mut f, "commit_id", positional.commit_id);
         let form = Client::str_refs(&f);
         self.client
             .post(&format!("/repos/{o}/{r}/pulls/{number}/comments"), &form)
@@ -234,9 +212,11 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut q: Vec<(&str, String)> = Vec::new();
-        if let Some(k) = filter.kind {
-            q.push(("comment_type", k.as_api_str().to_string()));
-        }
+        Client::push_some(
+            &mut q,
+            "comment_type",
+            filter.kind.map(PrCommentKind::as_api_str),
+        );
         let qref = Client::str_refs(&q);
         self.client.get_paged(
             &format!("/repos/{o}/{r}/pulls/{number}/comments"),
@@ -376,21 +356,11 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = Vec::new();
-        if let Some(v) = req.title {
-            f.push(("title", v.to_string()));
-        }
-        if let Some(v) = req.body {
-            f.push(("body", v.to_string()));
-        }
-        if let Some(v) = req.labels {
-            f.push(("labels", v.to_string()));
-        }
-        if let Some(v) = req.assignees {
-            f.push(("assignees", v.to_string()));
-        }
-        if let Some(v) = req.testers {
-            f.push(("testers", v.to_string()));
-        }
+        Client::push_some(&mut f, "title", req.title);
+        Client::push_some(&mut f, "body", req.body);
+        Client::push_some(&mut f, "labels", req.labels);
+        Client::push_some(&mut f, "assignees", req.assignees);
+        Client::push_some(&mut f, "testers", req.testers);
         if let Some(n) = req.milestone_number {
             f.push(("milestone_number", n.to_string()));
         }
