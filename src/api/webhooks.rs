@@ -4,14 +4,45 @@ use crate::error::{GiteeError, Result};
 use crate::models::Webhook;
 use crate::repo::Repo;
 
-pub const EVENT_FLAGS: &[&str] = &[
-    "push_events",
-    "tag_push_events",
-    "issues_events",
-    "merge_requests_events",
-    "pull_requests_events", // alias → merge_requests_events
-    "note_events",
-];
+/// `(cli token, form field)`. One row per accepted `--events` token.
+/// A row whose token differs from its field is an alias: `pull_requests_events`
+/// turns on `merge_requests_events` and does not add a form field.
+macro_rules! event_specs {
+    ($(($cli:literal, $field:literal)),+ $(,)?) => {
+        const EVENT_SPECS: &[(&str, &str)] = &[$(($cli, $field)),+];
+        /// Accepted `--events` tokens, in spec order.
+        pub const EVENT_FLAGS: &[&str] = &[$($cli),+];
+    };
+}
+
+event_specs! {
+    ("push_events", "push_events"),
+    ("tag_push_events", "tag_push_events"),
+    ("issues_events", "issues_events"),
+    ("merge_requests_events", "merge_requests_events"),
+    ("pull_requests_events", "merge_requests_events"),
+    ("note_events", "note_events"),
+}
+
+/// Form fields in spec order. Alias rows (token ≠ field) are omitted.
+fn form_fields() -> [&'static str; 5] {
+    let fields: Vec<&'static str> = EVENT_SPECS
+        .iter()
+        .filter(|(cli, field)| cli == field)
+        .map(|(_, field)| *field)
+        .collect();
+    fields
+        .try_into()
+        .expect("canonical webhook events are the rows where the CLI token is the form field")
+}
+
+fn field_on(events: &[String], field: &str) -> bool {
+    events.iter().any(|ev| {
+        EVENT_SPECS
+            .iter()
+            .any(|(cli, api)| *cli == ev.as_str() && *api == field)
+    })
+}
 
 pub struct Webhooks<'a> {
     client: &'a Client,
@@ -52,16 +83,10 @@ pub fn parse_events(raw: &[String]) -> Result<Vec<String>> {
 }
 
 /// Map parsed event names to the bool fields Gitee expects on create.
+/// Tuple order is `form_fields()`: push, tag push, issues, merge requests, note.
 pub fn event_bools(events: &[String]) -> (bool, bool, bool, bool, bool) {
-    (
-        events.iter().any(|e| e == "push_events"),
-        events.iter().any(|e| e == "tag_push_events"),
-        events.iter().any(|e| e == "issues_events"),
-        events
-            .iter()
-            .any(|e| e == "merge_requests_events" || e == "pull_requests_events"),
-        events.iter().any(|e| e == "note_events"),
-    )
+    let [push, tag, issues, merge, note] = form_fields().map(|field| field_on(events, field));
+    (push, tag, issues, merge, note)
 }
 
 impl Webhooks<'_> {
@@ -77,17 +102,18 @@ impl Webhooks<'_> {
 
     pub fn create(&self, req: &CreateWebhook<'_>) -> Result<Webhook> {
         let (o, r) = (&self.repo.owner, &self.repo.name);
-        let mut form: Vec<(&str, &str)> = vec![
-            ("url", req.url),
-            ("push_events", Client::bool_str(req.push_events)),
-            ("tag_push_events", Client::bool_str(req.tag_push_events)),
-            ("issues_events", Client::bool_str(req.issues_events)),
-            (
-                "merge_requests_events",
-                Client::bool_str(req.merge_requests_events),
-            ),
-            ("note_events", Client::bool_str(req.note_events)),
+        // Same order as `event_bools` / `form_fields()`.
+        let enabled = [
+            req.push_events,
+            req.tag_push_events,
+            req.issues_events,
+            req.merge_requests_events,
+            req.note_events,
         ];
+        let mut form: Vec<(&str, &str)> = vec![("url", req.url)];
+        for (field, on) in form_fields().into_iter().zip(enabled) {
+            form.push((field, Client::bool_str(on)));
+        }
         if let Some(password) = req.password {
             form.push(("password", password));
         }
@@ -127,6 +153,22 @@ mod tests {
         assert!(!issues);
         assert!(merge);
         assert!(!note);
+    }
+
+    #[test]
+    fn each_event_enables_only_its_form_field() {
+        let cases = [
+            ("push_events", [true, false, false, false, false]),
+            ("tag_push_events", [false, true, false, false, false]),
+            ("issues_events", [false, false, true, false, false]),
+            ("merge_requests_events", [false, false, false, true, false]),
+            ("pull_requests_events", [false, false, false, true, false]),
+            ("note_events", [false, false, false, false, true]),
+        ];
+        for (name, expect) in cases {
+            let (push, tag, issues, merge, note) = event_bools(&[name.into()]);
+            assert_eq!([push, tag, issues, merge, note], expect, "{name}");
+        }
     }
 
     #[test]
