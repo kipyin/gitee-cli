@@ -455,7 +455,10 @@ pub enum IssueCmd {
         ///
         /// Gitee v5 rejects `rejected` (HTTP 400). `closed` always surfaces
         /// as 已完成, not 拒绝 — see command help for the wontfix workaround.
-        #[arg(long, value_parser = ["open", "progressing", "closed"])]
+        #[arg(
+            long,
+            value_parser = clap::builder::PossibleValuesParser::new(crate::models::ISSUE_WRITE_STATES)
+        )]
         state: Option<String>,
     },
     Close {
@@ -1329,6 +1332,12 @@ mod parse_tests {
         };
         assert_eq!(number, "I1AB");
         assert_eq!(state.as_deref(), Some("progressing"));
+    }
+
+    #[test]
+    fn issue_edit_rejects_non_writable_state() {
+        let r = Cli::try_parse_from(["gitee", "issue", "edit", "I1AB", "--state", "rejected"]);
+        assert!(r.is_err(), "rejected is not a writable issue state");
     }
 
     #[test]

@@ -15,7 +15,7 @@ macro_rules! state_enum {
         }
 
         impl $name {
-            pub fn as_str(&self) -> &'static str {
+            pub const fn as_str(&self) -> &'static str {
                 match self {
                     $($name::$variant => $s),+,
                     $name::Unknown => "unknown",
@@ -58,6 +58,27 @@ state_enum!(IssueState {
     Closed => "closed",
     Rejected => "rejected",
 });
+
+/// Writable `issue edit --state` variants, in flag order.
+/// Tokens are `IssueState::as_str`. `rejected` is omitted: Gitee v5 returns
+/// HTTP 400 if it is written.
+macro_rules! issue_write_states {
+    ($($variant:ident),+ $(,)?) => {
+        const ISSUE_WRITE: &[IssueState] = &[$(IssueState::$variant),+];
+
+        /// Accepted `issue edit --state` tokens, in flag order.
+        pub const ISSUE_WRITE_STATES: &[&str] = &[$(IssueState::$variant.as_str()),+];
+
+        impl IssueState {
+            /// Map a writable CLI token. `rejected` and any other string return `None`.
+            pub fn from_write_token(raw: &str) -> Option<Self> {
+                ISSUE_WRITE.iter().copied().find(|state| state.as_str() == raw)
+            }
+        }
+    };
+}
+
+issue_write_states!(Open, Progressing, Closed);
 
 /// Gitee merge methods for PR merge (form field `merge_method`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -723,7 +744,7 @@ mod webhook_tests {
 mod state_tests {
     use super::{
         Issue, IssueState, MergeMethod, Milestone, PrComment, PrCommentKind, PrCommit, PrState,
-        PullRequest, PR_COMMENT_TYPES,
+        PullRequest, ISSUE_WRITE_STATES, PR_COMMENT_TYPES,
     };
     use serde_json;
 
@@ -790,6 +811,17 @@ mod state_tests {
             serde_json::from_str::<IssueState>(r#""archived""#).unwrap(),
             IssueState::Unknown
         );
+    }
+
+    #[test]
+    fn issue_write_states_round_trip_and_omit_rejected() {
+        assert_eq!(ISSUE_WRITE_STATES, &["open", "progressing", "closed"][..]);
+        for token in ISSUE_WRITE_STATES {
+            let state = IssueState::from_write_token(token).unwrap();
+            assert_eq!(state.as_str(), *token);
+        }
+        assert!(IssueState::from_write_token("rejected").is_none());
+        assert!(IssueState::from_write_token("OPEN").is_none());
     }
 
     #[test]
