@@ -854,10 +854,31 @@ pub enum ConfigCmd {
     Set { key: String, value: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BuildKind {
-    Cargo,
-    Npm,
+/// `(variant, extension install --build token)`.
+macro_rules! build_kind_specs {
+    ($($variant:ident => $token:literal),+ $(,)?) => {
+        #[derive(Clone, Debug, PartialEq, Eq)]
+        pub enum BuildKind {
+            $($variant),+
+        }
+
+        /// Accepted `extension install --build` tokens, in flag order.
+        pub const BUILD_KINDS: &[&str] = &[$($token),+];
+
+        impl BuildKind {
+            pub fn from_token(raw: &str) -> Option<Self> {
+                match raw {
+                    $($token => Some(Self::$variant),)+
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+build_kind_specs! {
+    Cargo => "cargo",
+    Npm => "npm",
 }
 
 #[derive(Subcommand, Clone)]
@@ -869,7 +890,7 @@ pub enum ExtensionCmd {
         /// `owner/repo` (or a full Gitee URL) of the extension to install.
         repo: String,
         /// Build system to run after cloning: `cargo` or `npm`.
-        #[arg(long, value_parser = ["cargo", "npm"])]
+        #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(BUILD_KINDS))]
         build: Option<String>,
         /// Skip the trust confirmation prompt.
         #[arg(long, short = 'y')]
@@ -1044,10 +1065,10 @@ mod join_flags_tests {
 #[cfg(test)]
 mod parse_tests {
     use super::{
-        AliasCmd, AuthCmd, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd, GistCmd,
-        GitCredentialCmd, IssueCmd, IssueCommentCmd, IssueLabelCmd, MilestoneCmd, OrgCmd,
+        AliasCmd, AuthCmd, BuildKind, Cli, CollaboratorCmd, Command, ConfigCmd, ExtensionCmd,
+        GistCmd, GitCredentialCmd, IssueCmd, IssueCommentCmd, IssueLabelCmd, MilestoneCmd, OrgCmd,
         PrAssigneeCmd, PrCmd, PrCommentCmd, PrLabelCmd, PrTesterCmd, ReleaseCmd, RepoCmd,
-        SshKeyCmd, WebhookCmd,
+        SshKeyCmd, WebhookCmd, BUILD_KINDS,
     };
     use clap::Parser;
 
@@ -1874,6 +1895,14 @@ mod parse_tests {
         };
         assert!(build.is_none());
         assert!(!yes);
+    }
+
+    #[test]
+    fn build_kinds_round_trip_flag_tokens() {
+        assert_eq!(BUILD_KINDS, &["cargo", "npm"][..]);
+        assert_eq!(BuildKind::from_token("cargo"), Some(BuildKind::Cargo));
+        assert_eq!(BuildKind::from_token("npm"), Some(BuildKind::Npm));
+        assert_eq!(BuildKind::from_token("go"), None);
     }
 
     #[test]
