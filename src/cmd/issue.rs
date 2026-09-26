@@ -4,20 +4,18 @@ use super::{confirm, resolve_milestone_opt, Ctx};
 use crate::api::issues::{CreateIssue, EditIssue, IssueFilter};
 use crate::cli::{join_flags, IssueCmd};
 use crate::error::{GiteeError, Result};
-use crate::models::IssueState;
+use crate::models::{IssueState, ISSUE_WRITE_STATES};
 use crate::out;
 
-/// Map clap-restricted `--state` values (`open` | `progressing` | `closed`)
-/// onto `IssueState`.
+/// Map clap-restricted `--state` values (`ISSUE_WRITE_STATES`:
+/// `open` | `progressing` | `closed`) onto `IssueState`.
 fn parse_issue_state(raw: &str) -> Result<IssueState> {
-    match raw {
-        "open" => Ok(IssueState::Open),
-        "progressing" => Ok(IssueState::Progressing),
-        "closed" => Ok(IssueState::Closed),
-        other => Err(GiteeError::Usage(format!(
-            "unsupported issue state '{other}' (want open|progressing|closed)"
-        ))),
-    }
+    IssueState::from_write_token(raw).ok_or_else(|| {
+        GiteeError::Usage(format!(
+            "unsupported issue state '{raw}' (want {})",
+            ISSUE_WRITE_STATES.join("|")
+        ))
+    })
 }
 
 pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
