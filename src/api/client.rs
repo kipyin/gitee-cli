@@ -282,30 +282,29 @@ impl Client {
 
     /// Issue update requires a JSON body (Gitee rejects form encoding here).
     pub fn patch_json<T: DeserializeOwned>(&self, path: &str, body: &Value) -> Result<T> {
-        self.trace("PATCH", path);
-        let resp = self
-            .http
-            .patch(self.full(path))
-            .header("Authorization", self.auth())
-            .json(body)
-            .send()
-            .map_err(|e| self.map_http_err(e))?;
-        self.check(resp, "PATCH", path)?
-            .json()
-            .map_err(GiteeError::Http)
+        self.send_json("PATCH", path, body)
     }
 
     /// POST with a JSON body (e.g. issue/PR label add: a JSON array of names).
     pub fn post_json<T: DeserializeOwned>(&self, path: &str, body: &Value) -> Result<T> {
-        self.trace("POST", path);
-        let resp = self
-            .http
-            .post(self.full(path))
+        self.send_json("POST", path, body)
+    }
+
+    /// JSON counterpart of [`Self::send`]. Callers choose POST or PATCH; both
+    /// attach `Authorization`, send `body`, and decode a JSON response.
+    fn send_json<T: DeserializeOwned>(&self, method: &str, path: &str, body: &Value) -> Result<T> {
+        self.trace(method, path);
+        let req = match method {
+            "POST" => self.http.post(self.full(path)),
+            "PATCH" => self.http.patch(self.full(path)),
+            _ => unreachable!(),
+        };
+        let resp = req
             .header("Authorization", self.auth())
             .json(body)
             .send()
             .map_err(|e| self.map_http_err(e))?;
-        self.check(resp, "POST", path)?
+        self.check(resp, method, path)?
             .json()
             .map_err(GiteeError::Http)
     }
