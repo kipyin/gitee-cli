@@ -301,7 +301,10 @@ pub enum PrCommentCmd {
         number: i64,
         /// Filter by type: `diff` (line/positional) or `general` (maps to Gitee
         /// `diff_comment` / `pr_comment`).
-        #[arg(long = "type", value_parser = ["diff", "general"])]
+        #[arg(
+            long = "type",
+            value_parser = clap::builder::PossibleValuesParser::new(crate::models::PR_COMMENT_TYPES)
+        )]
         comment_type: Option<String>,
         #[command(flatten)]
         limit: LimitArgs,
