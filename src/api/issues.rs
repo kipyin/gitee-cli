@@ -97,15 +97,9 @@ impl Issues<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut q: Vec<(&str, String)> = Vec::new();
-        if let Some(s) = filter.state {
-            q.push(("state", s.to_string()));
-        }
-        if let Some(a) = filter.assignee {
-            q.push(("assignee", a.to_string()));
-        }
-        if let Some(c) = filter.creator {
-            q.push(("creator", c.to_string()));
-        }
+        Client::push_some(&mut q, "state", filter.state);
+        Client::push_some(&mut q, "assignee", filter.assignee);
+        Client::push_some(&mut q, "creator", filter.creator);
         let qref = Client::str_refs(&q);
         let path = format!("/repos/{o}/{r}/issues");
         self.client.get_paged(&path, &qref, filter.limit)
@@ -126,15 +120,9 @@ impl Issues<'_> {
             ("repo", self.repo.name.clone()),
             ("title", req.title.to_string()),
         ];
-        if let Some(b) = req.body {
-            f.push(("body", b.to_string()));
-        }
-        if let Some(a) = req.assignee {
-            f.push(("assignee", a.to_string()));
-        }
-        if let Some(l) = req.labels {
-            f.push(("labels", l.to_string()));
-        }
+        Client::push_some(&mut f, "body", req.body);
+        Client::push_some(&mut f, "assignee", req.assignee);
+        Client::push_some(&mut f, "labels", req.labels);
         if let Some(n) = req.milestone_number {
             f.push(("milestone", n.to_string()));
         }

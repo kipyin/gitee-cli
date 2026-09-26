@@ -92,9 +92,7 @@ impl Labels<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = Vec::new();
-        if let Some(name) = req.name {
-            f.push(("name", name.to_string()));
-        }
+        Client::push_some(&mut f, "name", req.name);
         if let Some(color) = req.color {
             f.push(("color", normalize_color(color)?));
         }

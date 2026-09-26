@@ -46,21 +46,13 @@ impl Search<'_> {
 
     pub fn repos(&self, filter: &SearchReposFilter<'_>) -> Result<Vec<RepoDetails>> {
         let mut q: Vec<(&str, String)> = vec![("q", filter.q.to_string())];
-        if let Some(v) = filter.owner {
-            q.push(("owner", v.to_string()));
-        }
-        if let Some(v) = filter.language {
-            q.push(("language", v.to_string()));
-        }
+        Client::push_some(&mut q, "owner", filter.owner);
+        Client::push_some(&mut q, "language", filter.language);
         if filter.fork {
             q.push(("fork", "true".to_string()));
         }
-        if let Some(v) = filter.sort {
-            q.push(("sort", v.to_string()));
-        }
-        if let Some(v) = filter.order {
-            q.push(("order", v.to_string()));
-        }
+        Client::push_some(&mut q, "sort", filter.sort);
+        Client::push_some(&mut q, "order", filter.order);
         let qref = Client::str_refs(&q);
         self.client
             .get_paged("/search/repositories", &qref, filter.limit)
@@ -68,42 +60,22 @@ impl Search<'_> {
 
     pub fn issues(&self, filter: &SearchIssuesFilter<'_>) -> Result<Vec<Issue>> {
         let mut q: Vec<(&str, String)> = vec![("q", filter.q.to_string())];
-        if let Some(v) = filter.repo {
-            q.push(("repo", v.to_string()));
-        }
-        if let Some(v) = filter.language {
-            q.push(("language", v.to_string()));
-        }
-        if let Some(v) = filter.label {
-            q.push(("label", v.to_string()));
-        }
-        if let Some(v) = filter.state {
-            q.push(("state", v.to_string()));
-        }
-        if let Some(v) = filter.author {
-            q.push(("author", v.to_string()));
-        }
-        if let Some(v) = filter.assignee {
-            q.push(("assignee", v.to_string()));
-        }
-        if let Some(v) = filter.sort {
-            q.push(("sort", v.to_string()));
-        }
-        if let Some(v) = filter.order {
-            q.push(("order", v.to_string()));
-        }
+        Client::push_some(&mut q, "repo", filter.repo);
+        Client::push_some(&mut q, "language", filter.language);
+        Client::push_some(&mut q, "label", filter.label);
+        Client::push_some(&mut q, "state", filter.state);
+        Client::push_some(&mut q, "author", filter.author);
+        Client::push_some(&mut q, "assignee", filter.assignee);
+        Client::push_some(&mut q, "sort", filter.sort);
+        Client::push_some(&mut q, "order", filter.order);
         let qref = Client::str_refs(&q);
         self.client.get_paged("/search/issues", &qref, filter.limit)
     }
 
     pub fn users(&self, filter: &SearchUsersFilter<'_>) -> Result<Vec<UserBasic>> {
         let mut q: Vec<(&str, String)> = vec![("q", filter.q.to_string())];
-        if let Some(v) = filter.sort {
-            q.push(("sort", v.to_string()));
-        }
-        if let Some(v) = filter.order {
-            q.push(("order", v.to_string()));
-        }
+        Client::push_some(&mut q, "sort", filter.sort);
+        Client::push_some(&mut q, "order", filter.order);
         let qref = Client::str_refs(&q);
         self.client.get_paged("/search/users", &qref, filter.limit)
     }

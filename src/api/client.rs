@@ -124,6 +124,17 @@ impl Client {
             .collect()
     }
 
+    /// Append `key=value` when `value` is set. `None` leaves `pairs` unchanged.
+    pub(crate) fn push_some<'a>(
+        pairs: &mut Vec<(&'a str, String)>,
+        key: &'a str,
+        value: Option<&str>,
+    ) {
+        if let Some(v) = value {
+            pairs.push((key, v.to_string()));
+        }
+    }
+
     /// Gitee form booleans are urlencoded as the strings `"true"`/`"false"`.
     pub(crate) fn bool_str(b: bool) -> &'static str {
         if b {
@@ -577,6 +588,27 @@ impl Client {
             page += 1;
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod push_some_tests {
+    use super::Client;
+
+    #[test]
+    fn push_some_appends_only_present_values_in_order() {
+        let mut pairs = vec![("q", "cli".to_string())];
+        Client::push_some(&mut pairs, "owner", None);
+        Client::push_some(&mut pairs, "language", Some("Rust"));
+        Client::push_some(&mut pairs, "sort", Some("stars_count"));
+        assert_eq!(
+            pairs,
+            vec![
+                ("q", "cli".to_string()),
+                ("language", "Rust".to_string()),
+                ("sort", "stars_count".to_string()),
+            ]
+        );
     }
 }
 
