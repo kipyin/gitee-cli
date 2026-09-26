@@ -36,6 +36,15 @@ fn map_issue_state_err(
     }
 }
 
+/// JSON object Gitee requires on every issue PATCH: `repo` plus `title`.
+/// Omitting `title` blanks the issue title.
+fn issue_echo_body(repo: &str, title: &str) -> serde_json::Map<String, serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    map.insert("repo".into(), repo.into());
+    map.insert("title".into(), title.into());
+    map
+}
+
 pub struct Issues<'a> {
     client: &'a Client,
     repo: &'a Repo,
@@ -136,6 +145,27 @@ impl Issues<'_> {
         self.client.post(&format!("/repos/{o}/issues"), &form)
     }
 
+    /// Owner-scoped issue PATCH (`/repos/{owner}/issues/{number}`, not
+    /// `.../{owner}/{repo}/issues/...`). `changing_state` rewrites Gitee's
+    /// enterprise/project 404 into an actionable error.
+    fn patch_owner_issue(
+        &self,
+        number: &str,
+        body: &serde_json::Value,
+        changing_state: bool,
+    ) -> Result<Issue> {
+        let o = self.repo.owner.as_str();
+        self.client
+            .patch_json(&format!("/repos/{o}/issues/{number}"), body)
+            .map_err(|e| map_issue_state_err(e, changing_state, o, number))
+    }
+
+    fn patch_state(&self, number: &str, title: &str, state: IssueState) -> Result<Issue> {
+        let mut map = issue_echo_body(&self.repo.name, title);
+        map.insert("state".into(), state.as_str().into());
+        self.patch_owner_issue(number, &serde_json::Value::Object(map), true)
+    }
+
     /// Gitee quirk: state changes are PATCH /repos/{owner}/issues/{number} with a JSON body
     /// `{repo, title, state}`. The current title must be echoed back or Gitee blanks it.
     ///
@@ -143,16 +173,8 @@ impl Issues<'_> {
     /// `progressing`, `closed`. Sending `rejected` yields 400. Closing always
     /// becomes issue_state 已完成 (not 拒绝 / wontfix).
     pub fn set_state(&self, number: &str, state: IssueState) -> Result<Issue> {
-        let o = self.repo.owner.as_str();
         let cur = self.get(number)?;
-        let body = serde_json::json!({
-            "repo": self.repo.name,
-            "title": cur.title,
-            "state": state.as_str(),
-        });
-        self.client
-            .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
-            .map_err(|e| map_issue_state_err(e, true, o, number))
+        self.patch_state(number, &cur.title, state)
     }
 
     /// Idempotent state change: GETs the current issue first; if it is already
@@ -163,33 +185,19 @@ impl Issues<'_> {
         number: &str,
         target: IssueState,
     ) -> Result<StateChange<Issue>> {
-        let o = self.repo.owner.as_str();
         let cur = self.get(number)?;
         if cur.state == target {
             return Ok(StateChange::Already(cur));
         }
-        let body = serde_json::json!({
-            "repo": self.repo.name,
-            "title": cur.title,
-            "state": target.as_str(),
-        });
-        let issue: Issue = self
-            .client
-            .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
-            .map_err(|e| map_issue_state_err(e, true, o, number))?;
+        let issue = self.patch_state(number, &cur.title, target)?;
         Ok(StateChange::Changed(issue))
     }
 
     /// PATCH metadata. Same JSON quirk as set_state: `repo` and the current
     /// `title` must always be echoed; only `Some` fields are added.
     pub fn edit(&self, number: &str, req: &EditIssue<'_>) -> Result<Issue> {
-        let o = self.repo.owner.as_str();
         let cur = self.get(number)?;
-        let mut body = serde_json::json!({
-            "repo": self.repo.name,
-            "title": req.title.unwrap_or(&cur.title),
-        });
-        let map = body.as_object_mut().expect("json object");
+        let mut map = issue_echo_body(&self.repo.name, req.title.unwrap_or(&cur.title));
         if let Some(v) = req.body {
             map.insert("body".into(), v.into());
         }
@@ -208,9 +216,7 @@ impl Issues<'_> {
         if let Some(s) = req.state {
             map.insert("state".into(), s.as_str().into());
         }
-        self.client
-            .patch_json(&format!("/repos/{o}/issues/{number}"), &body)
-            .map_err(|e| map_issue_state_err(e, req.state.is_some(), o, number))
+        self.patch_owner_issue(number, &serde_json::Value::Object(map), req.state.is_some())
     }
 
     pub fn comment(&self, number: &str, body: &str) -> Result<Comment> {
@@ -318,19 +324,13 @@ impl Issues<'_> {
     /// GET the issue first; if `body` already contains `tag`, returns `Ok(false)` without PATCH.
     /// Otherwise PATCH JSON `{repo, title, body}` with appended `Linked: {tag}` and returns `Ok(true)`.
     pub fn link(&self, number: &str, tag: &str) -> Result<bool> {
-        let o = self.repo.owner.as_str();
         let cur = self.get(number)?;
         let Some(new) = append_linked_tag(cur.body.as_deref(), tag) else {
             return Ok(false);
         };
-        let body = serde_json::json!({
-            "repo": self.repo.name,
-            "title": cur.title,
-            "body": new,
-        });
-        let _: Issue = self
-            .client
-            .patch_json(&format!("/repos/{o}/issues/{number}"), &body)?;
+        let mut map = issue_echo_body(&self.repo.name, &cur.title);
+        map.insert("body".into(), new.into());
+        self.patch_owner_issue(number, &serde_json::Value::Object(map), false)?;
         Ok(true)
     }
 }
