@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::cli::BuildKind;
+use crate::cli::{BuildKind, BUILD_KINDS};
 use crate::config::Config;
 use crate::error::{GiteeError, Result};
 
@@ -239,14 +239,19 @@ pub fn exec(name: &str, args: &[OsString], host: &str) -> Result<()> {
 }
 
 fn parse_build_kind(s: Option<&str>) -> Result<Option<BuildKind>> {
-    match s {
-        None => Ok(None),
-        Some("cargo") => Ok(Some(BuildKind::Cargo)),
-        Some("npm") => Ok(Some(BuildKind::Npm)),
-        Some(other) => Err(GiteeError::Usage(format!(
-            "unknown --build value '{other}'; expected 'cargo' or 'npm'"
-        ))),
-    }
+    let Some(raw) = s else {
+        return Ok(None);
+    };
+    BuildKind::from_token(raw).map(Some).ok_or_else(|| {
+        let expected = BUILD_KINDS
+            .iter()
+            .map(|token| format!("'{token}'"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+        GiteeError::Usage(format!(
+            "unknown --build value '{raw}'; expected {expected}"
+        ))
+    })
 }
 
 /// `owner/repo` → extension name (the repo's last path segment, stripped of an
@@ -821,7 +826,11 @@ mod tests {
             parse_build_kind(Some("npm")).unwrap(),
             Some(BuildKind::Npm)
         ));
-        assert!(parse_build_kind(Some("go")).is_err());
+        let err = parse_build_kind(Some("go")).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "unknown --build value 'go'; expected 'cargo' or 'npm'"
+        );
     }
 
     #[cfg(unix)]
