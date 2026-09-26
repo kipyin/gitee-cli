@@ -78,30 +78,41 @@ impl MergeMethod {
     }
 }
 
-/// CLI `--type` for `pr comment list`. Ops maps to Gitee `comment_type`
-/// (`diff_comment` | `pr_comment`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PrCommentKind {
-    Diff,
-    General,
+/// `(variant, CLI --type token, Gitee comment_type)`.
+/// One row per accepted `pr comment list --type` value.
+macro_rules! comment_kind_specs {
+    ($(($variant:ident, $cli:literal, $api:literal)),+ $(,)?) => {
+        /// CLI `--type` for `pr comment list`. Ops maps each token to Gitee
+        /// `comment_type` via the same spec.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub enum PrCommentKind {
+            $($variant),+
+        }
+
+        /// Accepted `--type` tokens, in spec order.
+        pub const PR_COMMENT_TYPES: &[&str] = &[$($cli),+];
+
+        impl PrCommentKind {
+            pub fn from_cli(s: &str) -> Option<Self> {
+                match s {
+                    $($cli => Some(Self::$variant),)+
+                    _ => None,
+                }
+            }
+
+            /// Gitee `comment_type` query value.
+            pub fn as_api_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $api),+
+                }
+            }
+        }
+    };
 }
 
-impl PrCommentKind {
-    pub fn from_cli(s: &str) -> Option<Self> {
-        match s {
-            "diff" => Some(Self::Diff),
-            "general" => Some(Self::General),
-            _ => None,
-        }
-    }
-
-    /// Gitee `comment_type` query value.
-    pub fn as_api_str(self) -> &'static str {
-        match self {
-            Self::Diff => "diff_comment",
-            Self::General => "pr_comment",
-        }
-    }
+comment_kind_specs! {
+    (Diff, "diff", "diff_comment"),
+    (General, "general", "pr_comment"),
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -712,7 +723,7 @@ mod webhook_tests {
 mod state_tests {
     use super::{
         Issue, IssueState, MergeMethod, Milestone, PrComment, PrCommentKind, PrCommit, PrState,
-        PullRequest,
+        PullRequest, PR_COMMENT_TYPES,
     };
     use serde_json;
 
@@ -844,6 +855,7 @@ mod state_tests {
 
     #[test]
     fn pr_comment_kind_maps_cli_to_api_comment_type() {
+        assert_eq!(PR_COMMENT_TYPES, ["diff", "general"].as_slice());
         assert_eq!(PrCommentKind::from_cli("diff"), Some(PrCommentKind::Diff));
         assert_eq!(
             PrCommentKind::from_cli("general"),
@@ -852,6 +864,11 @@ mod state_tests {
         assert_eq!(PrCommentKind::from_cli("other"), None);
         assert_eq!(PrCommentKind::Diff.as_api_str(), "diff_comment");
         assert_eq!(PrCommentKind::General.as_api_str(), "pr_comment");
+        let mapped: Vec<&str> = PR_COMMENT_TYPES
+            .iter()
+            .map(|token| PrCommentKind::from_cli(token).unwrap().as_api_str())
+            .collect();
+        assert_eq!(mapped, ["diff_comment", "pr_comment"]);
     }
 
     #[test]

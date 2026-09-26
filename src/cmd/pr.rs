@@ -352,7 +352,8 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             let kind = match comment_type.as_deref() {
                 Some(s) => Some(PrCommentKind::from_cli(s).ok_or_else(|| {
                     GiteeError::Usage(format!(
-                        "unsupported comment type '{s}' (want diff|general)"
+                        "unsupported comment type '{s}' (want {})",
+                        crate::models::PR_COMMENT_TYPES.join("|")
                     ))
                 })?),
                 None => None,
