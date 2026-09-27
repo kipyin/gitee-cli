@@ -262,13 +262,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             no_close_issue,
         } => {
             let repo = ctx.repo()?;
-            let method = if rebase {
-                MergeMethod::Rebase
-            } else if squash {
-                MergeMethod::Squash
-            } else {
-                MergeMethod::Merge
-            };
+            let method = MergeMethod::from_merge_flags(squash, rebase);
             if ctx.preview {
                 println!(
                     "{}",

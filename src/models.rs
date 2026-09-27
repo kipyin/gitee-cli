@@ -80,23 +80,40 @@ macro_rules! issue_write_states {
 
 issue_write_states!(Open, Progressing, Closed);
 
-/// Gitee merge methods for PR merge (form field `merge_method`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum MergeMethod {
-    #[default]
-    Merge,
-    Squash,
-    Rebase,
+/// Gitee `merge_method` form values and `pr merge --squash` / `--rebase` resolution.
+macro_rules! merge_method_specs {
+    ($(($variant:ident, $api:literal)),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+        pub enum MergeMethod {
+            #[default]
+            $($variant),+,
+        }
+
+        impl MergeMethod {
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $(MergeMethod::$variant => $api),+,
+                }
+            }
+
+            /// `pr merge --squash` / `--rebase` (rebase wins when both are set).
+            pub fn from_merge_flags(squash: bool, rebase: bool) -> Self {
+                if rebase {
+                    MergeMethod::Rebase
+                } else if squash {
+                    MergeMethod::Squash
+                } else {
+                    MergeMethod::Merge
+                }
+            }
+        }
+    };
 }
 
-impl MergeMethod {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            MergeMethod::Merge => "merge",
-            MergeMethod::Squash => "squash",
-            MergeMethod::Rebase => "rebase",
-        }
-    }
+merge_method_specs! {
+    (Merge, "merge"),
+    (Squash, "squash"),
+    (Rebase, "rebase"),
 }
 
 /// `(variant, CLI --type token, Gitee comment_type)`.
@@ -973,5 +990,25 @@ mod state_tests {
         assert_eq!(MergeMethod::Merge.as_str(), "merge");
         assert_eq!(MergeMethod::Squash.as_str(), "squash");
         assert_eq!(MergeMethod::Rebase.as_str(), "rebase");
+    }
+
+    #[test]
+    fn merge_method_from_merge_flags() {
+        assert_eq!(
+            MergeMethod::from_merge_flags(false, false),
+            MergeMethod::Merge
+        );
+        assert_eq!(
+            MergeMethod::from_merge_flags(true, false),
+            MergeMethod::Squash
+        );
+        assert_eq!(
+            MergeMethod::from_merge_flags(false, true),
+            MergeMethod::Rebase
+        );
+        assert_eq!(
+            MergeMethod::from_merge_flags(true, true),
+            MergeMethod::Rebase
+        );
     }
 }
