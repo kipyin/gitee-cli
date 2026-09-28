@@ -829,7 +829,7 @@ pub enum MilestoneCmd {
         due_on: String,
         #[arg(long)]
         description: Option<String>,
-        #[arg(long, value_parser = ["open", "closed"])]
+        #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(crate::models::MILESTONE_WRITE_STATES))]
         state: Option<String>,
     },
     /// Edit a milestone. At least one flag is required.
@@ -842,7 +842,7 @@ pub enum MilestoneCmd {
         due_on: Option<String>,
         #[arg(long)]
         description: Option<String>,
-        #[arg(long, value_parser = ["open", "closed"])]
+        #[arg(long, value_parser = clap::builder::PossibleValuesParser::new(crate::models::MILESTONE_WRITE_STATES))]
         state: Option<String>,
     },
 }
@@ -1623,6 +1623,58 @@ mod parse_tests {
     fn milestone_edit_requires_at_least_one_flag() {
         let r = Cli::try_parse_from(["gitee", "milestone", "edit", "1"]);
         assert!(r.is_err(), "milestone edit with no flags must fail");
+    }
+
+    #[test]
+    fn milestone_create_and_edit_state_accepts_write_tokens() {
+        use crate::models::MILESTONE_WRITE_STATES;
+
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "milestone",
+            "create",
+            "--title",
+            "T",
+            "--due-on",
+            "2026-12-31",
+            "--state",
+            MILESTONE_WRITE_STATES[1],
+        ])
+        .expect("milestone create --state should parse");
+        let Command::Milestone(MilestoneCmd::Create { state, .. }) = cli.cmd else {
+            panic!("expected milestone create");
+        };
+        assert_eq!(state.as_deref(), Some("closed"));
+
+        let cli = Cli::try_parse_from([
+            "gitee",
+            "milestone",
+            "edit",
+            "1",
+            "--state",
+            MILESTONE_WRITE_STATES[0],
+        ])
+        .expect("milestone edit --state should parse");
+        let Command::Milestone(MilestoneCmd::Edit { state, .. }) = cli.cmd else {
+            panic!("expected milestone edit");
+        };
+        assert_eq!(state.as_deref(), Some("open"));
+
+        assert!(
+            Cli::try_parse_from([
+                "gitee",
+                "milestone",
+                "create",
+                "--title",
+                "T",
+                "--due-on",
+                "2026-12-31",
+                "--state",
+                "merged",
+            ])
+            .is_err(),
+            "invalid milestone --state must fail"
+        );
     }
 
     #[test]

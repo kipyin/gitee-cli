@@ -80,6 +80,15 @@ macro_rules! issue_write_states {
 
 issue_write_states!(Open, Progressing, Closed);
 
+/// Writable `milestone create|edit --state` tokens, in flag order.
+macro_rules! milestone_write_states {
+    ($($token:literal),+ $(,)?) => {
+        pub const MILESTONE_WRITE_STATES: &[&str] = &[$($token),+];
+    };
+}
+
+milestone_write_states!("open", "closed");
+
 /// Gitee `merge_method` form values and `pr merge --squash` / `--rebase` resolution.
 macro_rules! merge_method_specs {
     ($(($variant:ident, $api:literal)),+ $(,)?) => {
@@ -761,7 +770,7 @@ mod webhook_tests {
 mod state_tests {
     use super::{
         Issue, IssueState, MergeMethod, Milestone, PrComment, PrCommentKind, PrCommit, PrState,
-        PullRequest, ISSUE_WRITE_STATES, PR_COMMENT_TYPES,
+        PullRequest, ISSUE_WRITE_STATES, MILESTONE_WRITE_STATES, PR_COMMENT_TYPES,
     };
     use serde_json;
 
@@ -828,6 +837,11 @@ mod state_tests {
             serde_json::from_str::<IssueState>(r#""archived""#).unwrap(),
             IssueState::Unknown
         );
+    }
+
+    #[test]
+    fn milestone_write_states_match_create_and_edit_flags() {
+        assert_eq!(MILESTONE_WRITE_STATES, &["open", "closed"][..]);
     }
 
     #[test]
