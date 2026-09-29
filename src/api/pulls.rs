@@ -195,7 +195,7 @@ impl Pulls<'_> {
     ) -> Result<PrComment> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let mut f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        let mut f = Client::body_form(body);
         Client::push_some(&mut f, "path", positional.path);
         if let Some(pos) = positional.position {
             f.push(("position", pos.to_string()));
@@ -246,7 +246,7 @@ impl Pulls<'_> {
     pub fn update_comment(&self, id: i64, body: &str) -> Result<PrComment> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        let f = Client::body_form(body);
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/pulls/comments/{id}"), &form)
@@ -519,7 +519,7 @@ impl Pulls<'_> {
         let Some(new) = append_linked_tag(pr.body.as_deref(), tag) else {
             return Ok(false);
         };
-        let f: Vec<(&str, String)> = vec![("body", new)];
+        let f = Client::body_form(&new);
         let form = Client::str_refs(&f);
         let _: PullRequest = self
             .client

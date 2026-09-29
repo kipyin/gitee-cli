@@ -135,6 +135,11 @@ impl Client {
         }
     }
 
+    /// Urlencoded form with a single `body` field (comment create/update, link PATCH, etc.).
+    pub(crate) fn body_form(body: &str) -> Vec<(&str, String)> {
+        vec![("body", body.to_string())]
+    }
+
     /// Gitee form booleans are urlencoded as the strings `"true"`/`"false"`.
     pub(crate) fn bool_str(b: bool) -> &'static str {
         if b {
