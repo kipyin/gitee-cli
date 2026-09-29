@@ -210,7 +210,7 @@ impl Issues<'_> {
     pub fn comment(&self, number: &str, body: &str) -> Result<Comment> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        let f = Client::body_form(body);
         let form = Client::str_refs(&f);
         self.client
             .post(&format!("/repos/{o}/{r}/issues/{number}/comments"), &form)
@@ -241,7 +241,7 @@ impl Issues<'_> {
     pub fn update_comment(&self, id: i64, body: &str) -> Result<Comment> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let f: Vec<(&str, String)> = vec![("body", body.to_string())];
+        let f = Client::body_form(body);
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/issues/comments/{id}"), &form)
