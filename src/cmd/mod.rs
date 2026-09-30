@@ -50,6 +50,11 @@ pub struct Ctx {
 /// Format a `--preview` intent line consistently. Arms that honor `--preview`
 /// call this before doing any work when `ctx.preview` is set, then return
 /// `Ok(())`.
+/// Borrow each owned flag value as `&str` (e.g. `--label` / `--assignee` vectors).
+pub(crate) fn as_str_refs(items: &[String]) -> Vec<&str> {
+    items.iter().map(String::as_str).collect()
+}
+
 pub fn preview_line(action: &str, details: &[(&str, &str)]) -> String {
     let mut s = format!("would {action}");
     if !details.is_empty() {

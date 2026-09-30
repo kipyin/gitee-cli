@@ -354,7 +354,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 );
                 return Ok(());
             }
-            let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let refs = super::as_str_refs(&labels);
             let change = ctx
                 .client
                 .issues(repo)
@@ -382,7 +382,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 );
                 return Ok(());
             }
-            let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+            let refs = super::as_str_refs(&labels);
             let change = ctx
                 .client
                 .issues(repo)
