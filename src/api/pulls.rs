@@ -148,12 +148,8 @@ impl Pulls<'_> {
             f.push(("milestone_number", n.to_string()));
         }
         Client::push_some(&mut f, "issue", req.issue);
-        if req.close_related_issue {
-            f.push(("close_related_issue", "true".to_string()));
-        }
-        if req.draft {
-            f.push(("draft", Client::bool_str(true).to_string()));
-        }
+        Client::push_true_flag(&mut f, "close_related_issue", req.close_related_issue);
+        Client::push_true_flag(&mut f, "draft", req.draft);
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/{r}/pulls"), &form)
     }
@@ -280,9 +276,7 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = Vec::new();
-        if force {
-            f.push(("force", "true".to_string()));
-        }
+        Client::push_true_flag(&mut f, "force", force);
         let form = Client::str_refs(&f);
         self.client
             .post_ok(&format!("/repos/{o}/{r}/pulls/{number}/review"), &form)
@@ -293,9 +287,7 @@ impl Pulls<'_> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = Vec::new();
-        if force {
-            f.push(("force", "true".to_string()));
-        }
+        Client::push_true_flag(&mut f, "force", force);
         let form = Client::str_refs(&f);
         self.client
             .post_ok(&format!("/repos/{o}/{r}/pulls/{number}/test"), &form)

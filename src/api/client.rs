@@ -149,6 +149,13 @@ impl Client {
         }
     }
 
+    /// Append `key=true` when `when` is true. Many Gitee endpoints omit false flags.
+    pub(crate) fn push_true_flag(pairs: &mut Vec<(&str, String)>, key: &'static str, when: bool) {
+        if when {
+            pairs.push((key, Self::bool_str(true).to_string()));
+        }
+    }
+
     /// Gitee accepts `Authorization: token <T>`. Sending the token in the header
     /// keeps it out of URLs/query strings, and therefore out of reqwest error
     /// messages and server/proxy access logs.
@@ -593,6 +600,23 @@ impl Client {
             page += 1;
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod push_true_flag_tests {
+    use super::Client;
+
+    #[test]
+    fn push_true_flag_appends_only_when_true() {
+        let mut pairs = vec![("q", "cli".to_string())];
+        Client::push_true_flag(&mut pairs, "fork", false);
+        assert_eq!(pairs, vec![("q", "cli".to_string())]);
+        Client::push_true_flag(&mut pairs, "fork", true);
+        assert_eq!(
+            pairs,
+            vec![("q", "cli".to_string()), ("fork", "true".to_string())]
+        );
     }
 }
 
