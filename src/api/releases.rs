@@ -81,9 +81,7 @@ impl Releases<'_> {
             ("name", display_name.to_string()),
             ("body", body.to_string()),
         ];
-        if req.prerelease == Some(true) {
-            f.push(("prerelease", "true".to_string()));
-        }
+        Client::push_true_flag(&mut f, "prerelease", req.prerelease == Some(true));
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/releases/{}", current.id), &form)

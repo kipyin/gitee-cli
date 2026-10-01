@@ -126,9 +126,7 @@ impl Issues<'_> {
         if let Some(n) = req.milestone_number {
             f.push(("milestone", n.to_string()));
         }
-        if req.security_hole {
-            f.push(("security_hole", "true".to_string()));
-        }
+        Client::push_true_flag(&mut f, "security_hole", req.security_hole);
         let form = Client::str_refs(&f);
         self.client.post(&format!("/repos/{o}/issues"), &form)
     }

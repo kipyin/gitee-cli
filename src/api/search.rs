@@ -48,9 +48,7 @@ impl Search<'_> {
         let mut q: Vec<(&str, String)> = vec![("q", filter.q.to_string())];
         Client::push_some(&mut q, "owner", filter.owner);
         Client::push_some(&mut q, "language", filter.language);
-        if filter.fork {
-            q.push(("fork", "true".to_string()));
-        }
+        Client::push_true_flag(&mut q, "fork", filter.fork);
         Client::push_some(&mut q, "sort", filter.sort);
         Client::push_some(&mut q, "order", filter.order);
         let qref = Client::str_refs(&q);
