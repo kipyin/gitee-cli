@@ -14,23 +14,20 @@ impl Collaborators<'_> {
     }
 
     pub fn list(&self, limit: usize) -> Result<Vec<Collaborator>> {
-        let (o, r) = (&self.repo.owner, &self.repo.name);
         self.client
-            .get_paged(&format!("/repos/{o}/{r}/collaborators"), &[], limit)
+            .get_paged(&self.repo.api_path("collaborators"), &[], limit)
     }
 
     /// Permission vocabulary: `pull` | `push` | `admin` (English enums per Gitee v5 docs).
     pub fn add(&self, username: &str, permission: &str) -> Result<()> {
-        let (o, r) = (&self.repo.owner, &self.repo.name);
         self.client.put_ok(
-            &format!("/repos/{o}/{r}/collaborators/{username}"),
+            &self.repo.api_path(format!("collaborators/{username}")),
             &[("permission", permission)],
         )
     }
 
     pub fn remove(&self, username: &str) -> Result<()> {
-        let (o, r) = (&self.repo.owner, &self.repo.name);
         self.client
-            .delete_ok(&format!("/repos/{o}/{r}/collaborators/{username}"))
+            .delete_ok(&self.repo.api_path(format!("collaborators/{username}")))
     }
 }

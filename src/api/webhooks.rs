@@ -95,13 +95,11 @@ impl Webhooks<'_> {
     }
 
     pub fn list(&self, limit: usize) -> Result<Vec<Webhook>> {
-        let (o, r) = (&self.repo.owner, &self.repo.name);
         self.client
-            .get_paged(&format!("/repos/{o}/{r}/hooks"), &[], limit)
+            .get_paged(&self.repo.api_path("hooks"), &[], limit)
     }
 
     pub fn create(&self, req: &CreateWebhook<'_>) -> Result<Webhook> {
-        let (o, r) = (&self.repo.owner, &self.repo.name);
         // Same order as `event_bools` / `form_fields()`.
         let enabled = [
             req.push_events,
@@ -117,12 +115,12 @@ impl Webhooks<'_> {
         if let Some(password) = req.password {
             form.push(("password", password));
         }
-        self.client.post(&format!("/repos/{o}/{r}/hooks"), &form)
+        self.client.post(&self.repo.api_path("hooks"), &form)
     }
 
     pub fn delete(&self, id: i64) -> Result<()> {
-        let (o, r) = (&self.repo.owner, &self.repo.name);
-        self.client.delete_ok(&format!("/repos/{o}/{r}/hooks/{id}"))
+        self.client
+            .delete_ok(&self.repo.api_path(format!("hooks/{id}")))
     }
 }
 

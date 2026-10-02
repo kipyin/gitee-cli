@@ -28,20 +28,16 @@ impl Releases<'_> {
     }
 
     pub fn list(&self, limit: usize) -> Result<Vec<Release>> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
-        let path = format!("/repos/{o}/{r}/releases");
+        let path = self.repo.api_path("releases");
         self.client.get_paged(&path, &[], limit)
     }
 
     /// Gitee quirk: a missing release returns HTTP 200 with a JSON `null`
     /// body (not 404). Deserialize as Option and map null to NotFound.
     pub fn get_by_tag(&self, tag: &str) -> Result<Release> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let rel: Option<Release> = self
             .client
-            .get(&format!("/repos/{o}/{r}/releases/tags/{tag}"), &[])?;
+            .get(&self.repo.api_path(format!("releases/tags/{tag}")), &[])?;
         rel.ok_or_else(|| crate::error::GiteeError::NotFound(format!("release {tag}")))
     }
 
@@ -49,8 +45,6 @@ impl Releases<'_> {
     /// so it defaults to the display name; `prerelease` is always sent as
     /// `"true"` or `"false"`; `name` defaults to `tag`.
     pub fn create(&self, req: &CreateRelease<'_>) -> Result<Release> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let display_name = req.name.unwrap_or(req.tag);
         let mut f: Vec<(&str, String)> = vec![
             ("tag_name", req.tag.to_string()),
@@ -60,7 +54,7 @@ impl Releases<'_> {
         Client::push_some(&mut f, "target_commitish", req.target);
         f.push(("prerelease", Client::bool_str(req.prerelease).to_string()));
         let form = Client::str_refs(&f);
-        self.client.post(&format!("/repos/{o}/{r}/releases"), &form)
+        self.client.post(&self.repo.api_path("releases"), &form)
     }
 
     /// Gitee quirk (swagger 2026-07-18): PATCH requires `tag_name`, `name`, and
@@ -69,8 +63,6 @@ impl Releases<'_> {
     /// `--latest` omitted: PATCH /releases/{id} has no latest param (swagger 2026-07-18).
     pub fn edit(&self, tag: &str, req: &EditRelease<'_>) -> Result<Release> {
         let current = self.get_by_tag(tag)?;
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let display_name = req.name.or(current.name.as_deref()).unwrap_or(tag);
         let body = req
             .notes
@@ -83,25 +75,23 @@ impl Releases<'_> {
         ];
         Client::push_true_flag(&mut f, "prerelease", req.prerelease == Some(true));
         let form = Client::str_refs(&f);
-        self.client
-            .patch(&format!("/repos/{o}/{r}/releases/{}", current.id), &form)
+        self.client.patch(
+            &self.repo.api_path(format!("releases/{}", current.id)),
+            &form,
+        )
     }
 
     pub fn delete(&self, tag: &str) -> Result<()> {
         let release = self.get_by_tag(tag)?;
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         self.client
-            .delete_ok(&format!("/repos/{o}/{r}/releases/{}", release.id))
+            .delete_ok(&self.repo.api_path(format!("releases/{}", release.id)))
     }
 
     pub fn upload(&self, tag: &str, file_path: &str) -> Result<ReleaseAsset> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let release = self.get_by_tag(tag)?;
         let id = release.id;
         self.client.post_multipart(
-            &format!("/repos/{o}/{r}/releases/{id}/attach_files"),
+            &self.repo.api_path(format!("releases/{id}/attach_files")),
             file_path,
         )
     }
