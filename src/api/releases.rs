@@ -75,8 +75,10 @@ impl Releases<'_> {
         ];
         Client::push_true_flag(&mut f, "prerelease", req.prerelease == Some(true));
         let form = Client::str_refs(&f);
-        self.client
-            .patch(&self.repo.api_path(format!("releases/{}", current.id)), &form)
+        self.client.patch(
+            &self.repo.api_path(format!("releases/{}", current.id)),
+            &form,
+        )
     }
 
     pub fn delete(&self, tag: &str) -> Result<()> {

@@ -112,9 +112,6 @@ mod tests {
             name: "git".into(),
         };
         assert_eq!(r.api_path("milestones"), "/repos/oschina/git/milestones");
-        assert_eq!(
-            r.api_path("/hooks/3"),
-            "/repos/oschina/git/hooks/3"
-        );
+        assert_eq!(r.api_path("/hooks/3"), "/repos/oschina/git/hooks/3");
     }
 }
