@@ -35,9 +35,7 @@ impl Milestones<'_> {
     }
 
     pub fn list(&self, filter: &MilestoneFilter<'_>) -> Result<Vec<Milestone>> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
-        let path = format!("/repos/{o}/{r}/milestones");
+        let path = self.repo.api_path("milestones");
         let mut q: Vec<(&str, &str)> = Vec::new();
         if let Some(s) = filter.state {
             q.push(("state", s));
@@ -46,15 +44,11 @@ impl Milestones<'_> {
     }
 
     pub fn get(&self, number: i64) -> Result<Milestone> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         self.client
-            .get(&format!("/repos/{o}/{r}/milestones/{number}"), &[])
+            .get(&self.repo.api_path(format!("milestones/{number}")), &[])
     }
 
     pub fn create(&self, req: &CreateMilestone<'_>) -> Result<Milestone> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = vec![
             ("title", req.title.to_string()),
             ("due_on", req.due_on.to_string()),
@@ -62,16 +56,13 @@ impl Milestones<'_> {
         Client::push_some(&mut f, "description", req.description);
         Client::push_some(&mut f, "state", req.state);
         let form = Client::str_refs(&f);
-        self.client
-            .post(&format!("/repos/{o}/{r}/milestones"), &form)
+        self.client.post(&self.repo.api_path("milestones"), &form)
     }
 
     /// Gitee quirk: PATCH requires both `title` and `due_on` every time (400 if either
     /// is missing). Fetch the current milestone and echo unset fields, like
     /// `Issues::edit` echoing the current title.
     pub fn edit(&self, number: i64, req: &EditMilestone<'_>) -> Result<Milestone> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let cur = self.get(number)?;
         let title = req.title.unwrap_or(&cur.title);
         let due_on = req.due_on.or(cur.due_on.as_deref()).unwrap_or_default();
@@ -81,6 +72,6 @@ impl Milestones<'_> {
         Client::push_some(&mut f, "state", req.state);
         let form = Client::str_refs(&f);
         self.client
-            .patch(&format!("/repos/{o}/{r}/milestones/{number}"), &form)
+            .patch(&self.repo.api_path(format!("milestones/{number}")), &form)
     }
 }

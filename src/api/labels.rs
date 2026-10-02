@@ -51,9 +51,7 @@ impl Labels<'_> {
     /// documents no `page`/`per_page` params, so we fetch the full list with
     /// `get` and truncate to `limit` client-side.
     pub fn list(&self, limit: usize) -> Result<Vec<Label>> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
-        let path = format!("/repos/{o}/{r}/labels");
+        let path = self.repo.api_path("labels");
         let mut items: Vec<Label> = self.client.get(&path, &[])?;
         if items.len() > limit {
             items.truncate(limit);
@@ -67,10 +65,8 @@ impl Labels<'_> {
     /// different color, return a Usage error suggesting `label edit`. If it
     /// doesn't exist, create it and return `StateChange::Changed(label)`.
     pub fn create_idempotent(&self, req: &CreateLabel<'_>) -> Result<StateChange<Label>> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let requested = normalize_color(req.color)?;
-        let existing: Vec<Label> = self.client.get(&format!("/repos/{o}/{r}/labels"), &[])?;
+        let existing: Vec<Label> = self.client.get(&self.repo.api_path("labels"), &[])?;
         if let Some(found) = existing.iter().find(|l| l.name == req.name) {
             if colors_match(found.color.as_deref(), &requested) {
                 return Ok(StateChange::Already(found.clone()));
@@ -84,28 +80,26 @@ impl Labels<'_> {
             )));
         }
         let form = [("name", req.name), ("color", requested.as_str())];
-        let label: Label = self.client.post(&format!("/repos/{o}/{r}/labels"), &form)?;
+        let label: Label = self.client.post(&self.repo.api_path("labels"), &form)?;
         Ok(StateChange::Changed(label))
     }
 
     pub fn edit(&self, original_name: &str, req: &EditLabel<'_>) -> Result<Label> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         let mut f: Vec<(&str, String)> = Vec::new();
         Client::push_some(&mut f, "name", req.name);
         if let Some(color) = req.color {
             f.push(("color", normalize_color(color)?));
         }
         let form = Client::str_refs(&f);
-        self.client
-            .patch(&format!("/repos/{o}/{r}/labels/{original_name}"), &form)
+        self.client.patch(
+            &self.repo.api_path(format!("labels/{original_name}")),
+            &form,
+        )
     }
 
     pub fn delete(&self, name: &str) -> Result<()> {
-        let o = self.repo.owner.as_str();
-        let r = self.repo.name.as_str();
         self.client
-            .delete_ok(&format!("/repos/{o}/{r}/labels/{name}"))
+            .delete_ok(&self.repo.api_path(format!("labels/{name}")))
     }
 }
 

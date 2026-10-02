@@ -53,6 +53,12 @@ impl Repo {
         let path = path.trim_start_matches('/').trim_end_matches(".git");
         Self::parse_pair(path)
     }
+
+    /// Gitee v5 path under `/repos/{owner}/{name}/…` (suffix may omit a leading `/`).
+    pub(crate) fn api_path(&self, suffix: impl AsRef<str>) -> String {
+        let suffix = suffix.as_ref().trim_start_matches('/');
+        format!("/repos/{}/{}/{}", self.owner, self.name, suffix)
+    }
 }
 
 #[cfg(test)]
@@ -97,5 +103,18 @@ mod tests {
         assert_eq!(a.owner, "oschina");
         let b = Repo::from_spec("git@gitee.com:oschina/git.git").unwrap();
         assert_eq!(b.owner, "oschina");
+    }
+
+    #[test]
+    fn api_path_builds_repos_prefix() {
+        let r = Repo {
+            owner: "oschina".into(),
+            name: "git".into(),
+        };
+        assert_eq!(r.api_path("milestones"), "/repos/oschina/git/milestones");
+        assert_eq!(
+            r.api_path("/hooks/3"),
+            "/repos/oschina/git/hooks/3"
+        );
     }
 }
