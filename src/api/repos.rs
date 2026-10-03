@@ -63,7 +63,7 @@ impl Repos<'_> {
         Client::push_some(&mut f, "license_template", req.license_template);
         // Gitee bool quirk: booleans are urlencoded as "true"/"false" strings.
         // Swagger also documents integer `public`; we send `private` instead.
-        f.push(("private", Client::bool_str(req.private).to_string()));
+        Client::push_bool(&mut f, "private", req.private);
         let form = Client::str_refs(&f);
         self.client.post(&path, &form)
     }
@@ -75,7 +75,7 @@ impl Repos<'_> {
         Client::push_some(&mut f, "description", req.description);
         Client::push_some(&mut f, "homepage", req.homepage);
         if let Some(p) = req.private {
-            f.push(("private", Client::bool_str(p).to_string()));
+            Client::push_bool(&mut f, "private", p);
         }
         Client::push_some(&mut f, "default_branch", req.default_branch);
         let form = Client::str_refs(&f);

@@ -52,7 +52,7 @@ impl Releases<'_> {
             ("body", req.notes.unwrap_or(display_name).to_string()),
         ];
         Client::push_some(&mut f, "target_commitish", req.target);
-        f.push(("prerelease", Client::bool_str(req.prerelease).to_string()));
+        Client::push_bool(&mut f, "prerelease", req.prerelease);
         let form = Client::str_refs(&f);
         self.client.post(&self.repo.api_path("releases"), &form)
     }

@@ -156,6 +156,11 @@ impl Client {
         }
     }
 
+    /// Append `key` with Gitee's `"true"` / `"false"` urlencoded bool strings.
+    pub(crate) fn push_bool(pairs: &mut Vec<(&str, String)>, key: &'static str, value: bool) {
+        pairs.push((key, Self::bool_str(value).to_string()));
+    }
+
     /// Gitee accepts `Authorization: token <T>`. Sending the token in the header
     /// keeps it out of URLs/query strings, and therefore out of reqwest error
     /// messages and server/proxy access logs.
@@ -600,6 +605,26 @@ impl Client {
             page += 1;
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod push_bool_tests {
+    use super::Client;
+
+    #[test]
+    fn push_bool_appends_true_and_false_strings() {
+        let mut pairs = vec![("q", "cli".to_string())];
+        Client::push_bool(&mut pairs, "private", true);
+        Client::push_bool(&mut pairs, "draft", false);
+        assert_eq!(
+            pairs,
+            vec![
+                ("q", "cli".to_string()),
+                ("private", "true".to_string()),
+                ("draft", "false".to_string()),
+            ]
+        );
     }
 }
 

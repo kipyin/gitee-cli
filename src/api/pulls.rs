@@ -157,11 +157,8 @@ impl Pulls<'_> {
     pub fn merge(&self, number: i64, method: MergeMethod, close_related_issue: bool) -> Result<()> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let close = Client::bool_str(close_related_issue);
-        let f: Vec<(&str, String)> = vec![
-            ("merge_method", method.as_str().to_string()),
-            ("close_related_issue", close.to_string()),
-        ];
+        let mut f: Vec<(&str, String)> = vec![("merge_method", method.as_str().to_string())];
+        Client::push_bool(&mut f, "close_related_issue", close_related_issue);
         let form = Client::str_refs(&f);
         self.client
             .put_ok(&format!("/repos/{o}/{r}/pulls/{number}/merge"), &form)
@@ -322,7 +319,8 @@ impl Pulls<'_> {
     pub fn set_draft(&self, number: i64, draft: bool) -> Result<PullRequest> {
         let o = self.repo.owner.as_str();
         let r = self.repo.name.as_str();
-        let f: Vec<(&str, String)> = vec![("draft", Client::bool_str(draft).to_string())];
+        let mut f: Vec<(&str, String)> = Vec::new();
+        Client::push_bool(&mut f, "draft", draft);
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)
