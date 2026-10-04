@@ -144,9 +144,7 @@ impl Pulls<'_> {
         Client::push_some(&mut f, "labels", req.labels);
         Client::push_some(&mut f, "assignees", req.assignees);
         Client::push_some(&mut f, "testers", req.testers);
-        if let Some(n) = req.milestone_number {
-            f.push(("milestone_number", n.to_string()));
-        }
+        Client::push_some_i64(&mut f, "milestone_number", req.milestone_number);
         Client::push_some(&mut f, "issue", req.issue);
         Client::push_true_flag(&mut f, "close_related_issue", req.close_related_issue);
         Client::push_true_flag(&mut f, "draft", req.draft);
@@ -190,9 +188,7 @@ impl Pulls<'_> {
         let r = self.repo.name.as_str();
         let mut f = Client::body_form(body);
         Client::push_some(&mut f, "path", positional.path);
-        if let Some(pos) = positional.position {
-            f.push(("position", pos.to_string()));
-        }
+        Client::push_some_i64(&mut f, "position", positional.position);
         Client::push_some(&mut f, "commit_id", positional.commit_id);
         let form = Client::str_refs(&f);
         self.client
@@ -351,9 +347,7 @@ impl Pulls<'_> {
         Client::push_some(&mut f, "labels", req.labels);
         Client::push_some(&mut f, "assignees", req.assignees);
         Client::push_some(&mut f, "testers", req.testers);
-        if let Some(n) = req.milestone_number {
-            f.push(("milestone_number", n.to_string()));
-        }
+        Client::push_some_i64(&mut f, "milestone_number", req.milestone_number);
         let form = Client::str_refs(&f);
         self.client
             .patch(&format!("/repos/{o}/{r}/pulls/{number}"), &form)
