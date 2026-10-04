@@ -135,6 +135,17 @@ impl Client {
         }
     }
 
+    /// Append `key=<n>` when `value` is set. `None` leaves `pairs` unchanged.
+    pub(crate) fn push_some_i64<'a>(
+        pairs: &mut Vec<(&'a str, String)>,
+        key: &'a str,
+        value: Option<i64>,
+    ) {
+        if let Some(n) = value {
+            pairs.push((key, n.to_string()));
+        }
+    }
+
     /// Urlencoded form with a single `body` field (comment create/update, link PATCH, etc.).
     pub(crate) fn body_form(body: &str) -> Vec<(&str, String)> {
         vec![("body", body.to_string())]
@@ -641,6 +652,27 @@ mod push_true_flag_tests {
         assert_eq!(
             pairs,
             vec![("q", "cli".to_string()), ("fork", "true".to_string())]
+        );
+    }
+}
+
+#[cfg(test)]
+mod push_some_i64_tests {
+    use super::Client;
+
+    #[test]
+    fn push_some_i64_appends_only_present_values_in_order() {
+        let mut pairs = vec![("title", "x".to_string())];
+        Client::push_some_i64(&mut pairs, "milestone", None);
+        Client::push_some_i64(&mut pairs, "milestone_number", Some(7));
+        Client::push_some_i64(&mut pairs, "position", Some(42));
+        assert_eq!(
+            pairs,
+            vec![
+                ("title", "x".to_string()),
+                ("milestone_number", "7".to_string()),
+                ("position", "42".to_string()),
+            ]
         );
     }
 }
