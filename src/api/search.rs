@@ -49,8 +49,7 @@ impl Search<'_> {
         Client::push_some(&mut q, "owner", filter.owner);
         Client::push_some(&mut q, "language", filter.language);
         Client::push_true_flag(&mut q, "fork", filter.fork);
-        Client::push_some(&mut q, "sort", filter.sort);
-        Client::push_some(&mut q, "order", filter.order);
+        Client::push_sort_order(&mut q, filter.sort, filter.order);
         let qref = Client::str_refs(&q);
         self.client
             .get_paged("/search/repositories", &qref, filter.limit)
@@ -64,16 +63,14 @@ impl Search<'_> {
         Client::push_some(&mut q, "state", filter.state);
         Client::push_some(&mut q, "author", filter.author);
         Client::push_some(&mut q, "assignee", filter.assignee);
-        Client::push_some(&mut q, "sort", filter.sort);
-        Client::push_some(&mut q, "order", filter.order);
+        Client::push_sort_order(&mut q, filter.sort, filter.order);
         let qref = Client::str_refs(&q);
         self.client.get_paged("/search/issues", &qref, filter.limit)
     }
 
     pub fn users(&self, filter: &SearchUsersFilter<'_>) -> Result<Vec<UserBasic>> {
         let mut q: Vec<(&str, String)> = vec![("q", filter.q.to_string())];
-        Client::push_some(&mut q, "sort", filter.sort);
-        Client::push_some(&mut q, "order", filter.order);
+        Client::push_sort_order(&mut q, filter.sort, filter.order);
         let qref = Client::str_refs(&q);
         self.client.get_paged("/search/users", &qref, filter.limit)
     }

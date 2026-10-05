@@ -146,6 +146,16 @@ impl Client {
         }
     }
 
+    /// Append optional Gitee `sort` and `order` list/search query params.
+    pub(crate) fn push_sort_order<'a>(
+        pairs: &mut Vec<(&'a str, String)>,
+        sort: Option<&'a str>,
+        order: Option<&'a str>,
+    ) {
+        Self::push_some(pairs, "sort", sort);
+        Self::push_some(pairs, "order", order);
+    }
+
     /// Urlencoded form with a single `body` field (comment create/update, link PATCH, etc.).
     pub(crate) fn body_form(body: &str) -> Vec<(&str, String)> {
         vec![("body", body.to_string())]
@@ -672,6 +682,27 @@ mod push_some_i64_tests {
                 ("title", "x".to_string()),
                 ("milestone_number", "7".to_string()),
                 ("position", "42".to_string()),
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod push_sort_order_tests {
+    use super::Client;
+
+    #[test]
+    fn push_sort_order_appends_only_present_sort_and_order() {
+        let mut pairs = vec![("q", "cli".to_string())];
+        Client::push_sort_order(&mut pairs, None, None);
+        assert_eq!(pairs, vec![("q", "cli".to_string())]);
+        Client::push_sort_order(&mut pairs, Some("stars_count"), Some("desc"));
+        assert_eq!(
+            pairs,
+            vec![
+                ("q", "cli".to_string()),
+                ("sort", "stars_count".to_string()),
+                ("order", "desc".to_string()),
             ]
         );
     }
