@@ -241,10 +241,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             if ctx.preview {
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &repo.to_string())],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -373,10 +370,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &repo.to_string())],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -420,10 +414,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &repo.to_string())],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -465,10 +456,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add labels on pull request !{number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
@@ -492,10 +480,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove labels on pull request !{number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
@@ -525,10 +510,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add assignees on pull request !{number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("assignees", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("assignees", &joined),],
                     )
                 );
                 return Ok(());
@@ -553,10 +535,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove assignees on pull request !{number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("assignees", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("assignees", &joined),],
                     )
                 );
                 return Ok(());
@@ -589,10 +568,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add testers on pull request !{number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("testers", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("testers", &joined),],
                     )
                 );
                 return Ok(());
@@ -617,10 +593,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove testers on pull request !{number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("testers", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("testers", &joined),],
                     )
                 );
                 return Ok(());

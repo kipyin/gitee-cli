@@ -217,10 +217,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("create comment on issue {number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("body", &body.body),
-                        ],
+                        &[("repo", &repo.to_string()), ("body", &body.body),],
                     )
                 );
                 return Ok(());
@@ -249,10 +246,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &repo.to_string())],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -298,10 +292,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &repo.to_string())],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -346,10 +337,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add labels on issue {number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
@@ -374,10 +362,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove labels on issue {number}"),
-                        &[
-                            ("repo", &repo.to_string()),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
