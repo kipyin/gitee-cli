@@ -3,7 +3,7 @@ use crate::repo::Repo;
 use std::io::Write;
 
 pub fn repo_url(host: &str, repo: &Repo) -> String {
-    format!("https://{host}/{}/{}", repo.owner, repo.name)
+    format!("https://{host}/{repo}")
 }
 
 pub fn pull_url(host: &str, repo: &Repo, number: i64) -> String {

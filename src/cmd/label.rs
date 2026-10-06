@@ -23,7 +23,7 @@ pub fn execute(ctx: &Ctx, cmd: LabelCmd) -> Result<()> {
                     super::preview_line(
                         &format!("create label {name}"),
                         &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("repo", &repo.to_string()),
                             ("color", &color),
                         ],
                     )
