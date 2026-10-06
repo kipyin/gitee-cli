@@ -1,9 +1,16 @@
 use crate::error::{GiteeError, Result};
+use std::fmt;
 
 #[derive(Clone, Debug)]
 pub struct Repo {
     pub owner: String,
     pub name: String,
+}
+
+impl fmt::Display for Repo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{}", self.owner, self.name)
+    }
 }
 
 impl Repo {
@@ -113,5 +120,14 @@ mod tests {
         };
         assert_eq!(r.api_path("milestones"), "/repos/oschina/git/milestones");
         assert_eq!(r.api_path("/hooks/3"), "/repos/oschina/git/hooks/3");
+    }
+
+    #[test]
+    fn display_is_owner_slash_name() {
+        let r = Repo {
+            owner: "oschina".into(),
+            name: "git".into(),
+        };
+        assert_eq!(r.to_string(), "oschina/git");
     }
 }

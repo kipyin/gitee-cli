@@ -140,7 +140,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     .unwrap_or_else(|| repo.name.clone() + " default branch");
                 let title = title.clone().unwrap_or_default();
                 let body = body.clone().unwrap_or_default();
-                let repo_str = format!("{}/{}", repo.owner, repo.name);
+                let repo_str = repo.to_string();
                 let mut details: Vec<(&str, &str)> = vec![
                     ("repo", &repo_str),
                     ("title", &title),
@@ -241,10 +241,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
             if ctx.preview {
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -269,7 +266,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     super::preview_line(
                         &format!("merge pull request !{number} ({})", method.as_str()),
                         &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
+                            ("repo", &repo.to_string()),
                             (
                                 "close_related_issue",
                                 if no_close_issue { "false" } else { "true" }
@@ -302,7 +299,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
         }) => {
             let repo = ctx.repo()?;
             if ctx.preview {
-                let repo_str = format!("{}/{}", repo.owner, repo.name);
+                let repo_str = repo.to_string();
                 let pos_str = position.map(|p| p.to_string());
                 let mut details: Vec<(&str, &str)> =
                     vec![("repo", &repo_str), ("body", &body.body)];
@@ -373,10 +370,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -420,10 +414,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -465,10 +456,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add labels on pull request !{number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
@@ -492,10 +480,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove labels on pull request !{number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
@@ -525,10 +510,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add assignees on pull request !{number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("assignees", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("assignees", &joined),],
                     )
                 );
                 return Ok(());
@@ -553,10 +535,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove assignees on pull request !{number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("assignees", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("assignees", &joined),],
                     )
                 );
                 return Ok(());
@@ -589,10 +568,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add testers on pull request !{number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("testers", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("testers", &joined),],
                     )
                 );
                 return Ok(());
@@ -617,10 +593,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove testers on pull request !{number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("testers", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("testers", &joined),],
                     )
                 );
                 return Ok(());
@@ -664,7 +637,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("close pull request !{number}"),
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                        &[("repo", &repo.to_string())],
                     )
                 );
                 return Ok(());
@@ -682,7 +655,7 @@ pub fn execute(ctx: &Ctx, cmd: PrCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("reopen pull request !{number}"),
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                        &[("repo", &repo.to_string())],
                     )
                 );
                 return Ok(());

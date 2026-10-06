@@ -81,7 +81,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 let a = assignee.clone().unwrap_or_default();
                 let l = labels.clone().unwrap_or_default();
                 let m = milestone.clone().unwrap_or_default();
-                let repo_str = format!("{}/{}", repo.owner, repo.name);
+                let repo_str = repo.to_string();
                 let sh = if security_hole { "true" } else { "false" };
                 let details: Vec<(&str, &str)> = vec![
                     ("repo", &repo_str),
@@ -170,7 +170,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("close issue {number}"),
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                        &[("repo", &repo.to_string())],
                     )
                 );
                 return Ok(());
@@ -188,7 +188,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("reopen issue {number}"),
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
+                        &[("repo", &repo.to_string())],
                     )
                 );
                 return Ok(());
@@ -217,10 +217,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("create comment on issue {number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("body", &body.body),
-                        ],
+                        &[("repo", &repo.to_string()), ("body", &body.body),],
                     )
                 );
                 return Ok(());
@@ -249,10 +246,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -298,10 +292,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                 };
                 println!(
                     "{}",
-                    super::preview_line(
-                        &action,
-                        &[("repo", &format!("{}/{}", repo.owner, repo.name))],
-                    )
+                    super::preview_line(&action, &[("repo", &repo.to_string())],)
                 );
                 return Ok(());
             }
@@ -346,10 +337,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("add labels on issue {number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
@@ -374,10 +362,7 @@ pub fn execute(ctx: &Ctx, cmd: IssueCmd) -> Result<()> {
                     "{}",
                     super::preview_line(
                         &format!("remove labels on issue {number}"),
-                        &[
-                            ("repo", &format!("{}/{}", repo.owner, repo.name)),
-                            ("labels", &joined),
-                        ],
+                        &[("repo", &repo.to_string()), ("labels", &joined),],
                     )
                 );
                 return Ok(());
