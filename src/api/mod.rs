@@ -30,23 +30,21 @@ pub trait AuthoredComment {
     fn created_at_str(&self) -> Option<&str>;
 }
 
-impl AuthoredComment for Comment {
-    fn author_login(&self) -> Option<&str> {
-        self.user.as_ref().map(|u| u.login.as_str())
-    }
-    fn created_at_str(&self) -> Option<&str> {
-        self.created_at.as_deref()
-    }
+macro_rules! impl_authored_comment {
+    ($ty:ty) => {
+        impl AuthoredComment for $ty {
+            fn author_login(&self) -> Option<&str> {
+                self.user.as_ref().map(|u| u.login.as_str())
+            }
+            fn created_at_str(&self) -> Option<&str> {
+                self.created_at.as_deref()
+            }
+        }
+    };
 }
 
-impl AuthoredComment for PrComment {
-    fn author_login(&self) -> Option<&str> {
-        self.user.as_ref().map(|u| u.login.as_str())
-    }
-    fn created_at_str(&self) -> Option<&str> {
-        self.created_at.as_deref()
-    }
-}
+impl_authored_comment!(Comment);
+impl_authored_comment!(PrComment);
 
 /// Pick the comment by `login` with the greatest `created_at` string.
 /// ISO-8601 timestamps from Gitee sort lexicographically.
