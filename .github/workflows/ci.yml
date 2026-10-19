@@ -32,3 +32,18 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
+
+      # Reuses the test/clippy build. --help/--version exit in clap before any
+      # API work. Point config at an empty dir instead of overriding HOME:
+      # rustup resolves its toolchain from $HOME/.rustup.
+      - name: Smoke --help and --version
+        run: |
+          set -euo pipefail
+          export GITEE_CONFIG_DIR="$(mktemp -d)"
+          unset GITEE_TOKEN
+          cargo run --quiet --locked -- --help >/dev/null
+          version_out="$(cargo run --quiet --locked -- --version)"
+          printf '%s\n' "$version_out"
+          crate_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          test -n "$crate_version"
+          grep -F -q -- "$crate_version" <<<"$version_out"
