@@ -32,3 +32,21 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
+
+      # Reuses the test/clippy build. --help/--version exit in clap before any
+      # API work; an empty HOME keeps startup off the runner's config and token.
+      - name: Smoke --help and --version
+        run: |
+          set -euo pipefail
+          smoke_home="$(mktemp -d)"
+          export HOME="$smoke_home"
+          export XDG_CONFIG_HOME="$smoke_home/.config"
+          export XDG_DATA_HOME="$smoke_home/.local/share"
+          mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+          unset GITEE_TOKEN GITEE_CONFIG_DIR
+          cargo run --quiet --locked -- --help >/dev/null
+          version_out="$(cargo run --quiet --locked -- --version)"
+          printf '%s\n' "$version_out"
+          crate_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          test -n "$crate_version"
+          grep -F -q -- "$crate_version" <<<"$version_out"
